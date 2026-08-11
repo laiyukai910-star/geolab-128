@@ -1,43 +1,43 @@
 # GeoLab 128
 
-![GeoLab 128 预览](outputs/geo-sim/preview.png)
+![GeoLab 128 preview](outputs/geo-sim/preview.png)
 
-GeoLab 128 是一个可本地运行、支持 GPU 加速的三维地理演算沙盘。它将地形、气候、风、水文、植被、生态区块、人造设施和动物群落组织到同一个可交互场景中，用于区域尺度的情景探索与可视化推演。
+GeoLab 128 is a local, GPU-accelerated 3D geographic simulation sandbox. It brings terrain, climate, wind, hydrology, vegetation, ecological blocks, built infrastructure, and wildlife communities into one interactive scene for regional scenario exploration and visualization.
 
-默认场景为 `128 km × 128 km`，也可切换为更小的局部沙盘或 `256 km × 256 km` 区域。程序内置数据导入、地表编辑、生态投放和导出工具，所有核心渲染与模型逻辑均可离线运行。
+The default scene covers `128 km × 128 km`. You can switch to a smaller local sandbox or a `256 km × 256 km` regional extent. Core rendering and modeling run offline, while the application provides data import, surface editing, ecology releases, diagnostics, and exports.
 
 > [!IMPORTANT]
-> GeoLab 128 是面向教学、方案比选和情景探索的本地模型。若用于研究或工程决策，请导入经过质量审查的 DEM、河网、土地覆盖、土壤与气象资料，并完成独立校准和专业复核；程序化地形不应被视为实测成果。
+> GeoLab 128 is intended for teaching, option comparison, and exploratory scenarios. For research or engineering decisions, import quality-controlled DEM, river-network, land-cover, soil, and meteorological data, then perform independent calibration and professional review. Procedural terrain is not a measured dataset.
 
-## 功能一览
+## Capabilities
 
-| 模块 | 能力 |
+| Area | What it provides |
 | --- | --- |
-| 地形与地下 | 8、16、32、64、128、256 km 方形区域；最高 10,000 m 高程；最高 4096 × 4096 局部细化网格；地表、剖面、地底实体和体积账本。 |
-| 气候与风 | 温度、湿度、纬度、直减率、风向、风速和地形暴露联动；地形抬升与雨影近似。 |
-| 水文与地貌 | Priority-Flood 洼地处理、D8/MFD/D∞ 汇流、河网提取、径流、侵蚀、淤积、洪水、干旱和滑坡风险层。 |
-| 人造设施 | 在选定区块或地图位置添加高层、居民楼、洋房、工业、公共建筑、地标、交通和水利设施；自动计算环境适应性与下垫面反馈。 |
-| 生态系统 | 36 类区域动物、7 个生态功能群、承载力、栖息地适宜度、迁徙廊道、食物网与批量释放生物。 |
-| 三维资产 | 109 类内部语义程序化资产，覆盖岩体、植被、建筑立面、水利、能源、交通和动物解剖部件；不依赖在线模型服务。 |
-| 模板与数据 | 15 套全球及区域模板，联动地貌、气候、风、水文、植被和区域物种；支持外部 DEM、土壤、土地覆盖、植被、气象和河网数据。 |
-| 输出与审计 | 导出 GeoJSON、CSV、参数、质量报告、敏感性分析与区块/设施/地下诊断结果。 |
+| Terrain and subsurface | Square areas from 8 to 256 km; elevations up to 10,000 m; local refinement up to 4096 × 4096 cells; surface, transect, subsurface-solid, and volume-ledger views. |
+| Climate and wind | Temperature, humidity, latitude, lapse rate, wind direction, wind speed, and terrain exposure are coupled through orographic and rain-shadow approximations. |
+| Hydrology and landforms | Priority-Flood depression handling, D8/MFD/D∞ flow routing, river extraction, runoff, erosion, deposition, flood, drought, and landslide-risk layers. |
+| Built infrastructure | Add high-rises, apartments, villas, industry, civic buildings, landmarks, transport, and water infrastructure at selected blocks or map positions. Environmental suitability and land-surface feedback are evaluated automatically. |
+| Ecosystems | 36 regional wildlife species, 7 ecological functional guilds, carrying capacity, habitat suitability, migration corridors, food webs, and batch wildlife release scenarios. |
+| 3D assets | 109 internal semantic procedural asset types for rock, vegetation, building facades, water infrastructure, energy, transport, and animal anatomy. No online model service is required. |
+| Templates and source data | 15 global and regional templates couple terrain, climate, wind, hydrology, vegetation, and regional fauna. External DEM, soil, land-cover, vegetation, weather, and river-network data are supported. |
+| Export and audit | Export GeoJSON, CSV, parameters, quality reports, sensitivity analysis, and block, infrastructure, or subsurface diagnostics. |
 
-## 快速开始
+## Quick Start
 
-### 运行网页端
+### Run the web application
 
-前置条件：Python 3 或任意静态 HTTP 服务。
+Prerequisite: Python 3 or any static HTTP server.
 
 ```powershell
 cd outputs/geo-sim
 python -m http.server 4174
 ```
 
-打开 <http://127.0.0.1:4174/>。首次加载会生成默认场景；推荐使用支持 WebGL2 的桌面浏览器与独立显卡。
+Open <http://127.0.0.1:4174/>. The first load generates the default scene. A desktop browser with WebGL2 and a discrete GPU is recommended.
 
-### 运行桌面端
+### Run the desktop application
 
-前置条件：Node.js 20+ 与 npm。
+Prerequisite: Node.js 20+ and npm.
 
 ```powershell
 cd outputs/geo-sim-desktop
@@ -45,74 +45,76 @@ npm install
 npm run start
 ```
 
-Electron 版本会启动本地服务，并优先使用高性能 GPU、硬件 WebGL、GPU 光栅化和本地离线资源。
+The Electron build starts a local server and prefers a high-performance GPU, hardware WebGL, GPU rasterization, and local offline resources.
 
-## 第一次演算：5 步完成一个区域情景
+## Your First Scenario in Five Steps
 
-### 1. 建立区域尺度与地形基底
+The current in-app interface is localized in Simplified Chinese. English names below include the visible Chinese labels so global users can follow the workflow without guesswork.
 
-1. 打开右侧“地形”抽屉。
-2. 在“地图面积”选择 8 至 256 km 的区域尺度；默认 128 km 适合流域或都市圈级情景。
-3. 选择 DEM 分辨率。初次探索建议使用 256²；需要局部观察时，再在局部细化功能中提高网格密度。
-4. 选择地貌预设、景观预设或大洲模板，然后应用模板重建场景。
-5. 使用地形笔刷添加山脊、谷地或工程扰动。笔刷半径和强度保留为滑块，其余参数均为直接输入的数值字段。
+### 1. Set the study extent and terrain baseline
 
-### 2. 配置自然条件
+1. Open the **Terrain** drawer (`地形`) on the right rail.
+2. Select an extent from 8 to 256 km. The default 128 km extent is useful for watershed- or metropolitan-scale scenarios.
+3. Choose a DEM resolution. Start with 256² for exploration, then use local refinement when a smaller area needs closer inspection.
+4. Select a geomorphology preset, scenic preset, or continental template, then apply it to rebuild the scene.
+5. Use the terrain brush to add ridges, valleys, or engineered disturbance. Brush radius and strength use sliders; all other model conditions are direct numeric fields.
 
-在“气象”和“水文”抽屉中直接输入温度、湿度、风速、风向、降水、渗透率和水文阈值。重新演算后，模型会更新：
+### 2. Configure natural conditions
 
-- 地形迎风坡与背风坡的降水差异；
-- 局地风场、地形暴露和冠层粗糙度；
-- 径流、汇流、河道、湿润度与侵蚀风险；
-- 洪水、干旱、野火、滑坡等时序风险层。
+Enter temperature, humidity, wind direction, wind speed, precipitation, permeability, and hydrologic thresholds in the **Weather** (`气象`) and **Hydrology** (`水文`) drawers. A rerun updates:
 
-15 套模板适合用作起点，例如东亚季风、欧洲高山、安第斯-亚马孙、非洲裂谷草原、澳大利亚内陆海岸和南极高原。模板是参数组合，并非真实世界的现成数据集。
+- windward and leeward precipitation differences;
+- local wind fields, terrain exposure, and canopy roughness;
+- runoff, accumulation, channels, wetness, and erosion risk;
+- time-dependent flood, drought, wildfire, and landslide layers.
 
-### 3. 添加设施并让它适应环境
+The 15 templates are useful starting points, including East Asian monsoon, Alpine Europe, Andes-Amazon, African Rift savanna, Australian interior/coast, and Antarctic plateau. A template is a parameter set, not a ready-made real-world dataset.
 
-1. 打开“数据”抽屉中的“手工人造设施”。
-2. 先选择地图区域或填写位置、影响半径和设施类型。
-3. 设置建筑高度、层数、密度和地标高度，再添加至场景。
-4. 观察设施对不透水率、粗糙度、滞留、热岛、用水、植被和风险层的反馈。
+### 3. Add infrastructure and assess its fit
 
-设施不会只以单一色块显示。高层、居民楼、洋房、工业、公共设施和地标分别使用不同的程序化构件，包括裙房、屋顶、立面横带、窗格、阳台、栏杆、机电、服务院落与适应性防洪/边坡/排水部件。
+1. Open the **Data** drawer (`数据`) and locate **Manual infrastructure** (`手工人造设施`).
+2. Select a map area or enter a location, influence radius, and facility type.
+3. Set building height, floors, density, and landmark height, then add the feature.
+4. Inspect feedback to imperviousness, roughness, retention, urban heat, water demand, vegetation, and hazard layers.
 
-### 4. 构建生态情景与批量投放
+Facilities are not rendered as a single colored block. High-rises, apartment buildings, villas, industry, civic facilities, and landmarks use distinct procedural components such as podiums, roofs, facade bands, window grids, balconies, railings, mechanical equipment, service yards, and flood-, slope-, or drainage-adaptation details.
 
-1. 打开“图层”抽屉，启用生态与动物 3D 层。
-2. 选择物种、单批数量和目标栖息地，也可指定区块编号。
-3. 点击“加入投放批次”，编排多个批次后使用“执行全部批次”。
-4. 检查存活率、活跃物种数、食物网、营养平衡和限制环节。
+### 4. Build an ecological scenario and release wildlife
 
-动物显示按解剖部件合批渲染：躯干、头部、颈部、四肢、翼、角、獠牙、尾部等会共享实例网格。这样可以在保留动物差异的同时，避免每个个体都创建一整套重复网格。
+1. Open the **Layers** drawer (`图层`) and enable the ecology and wildlife 3D layers.
+2. Choose a species, batch size, and target habitat. You may also target a specific block ID.
+3. Use **Add release batch** (`加入投放批次`) to queue multiple batches, then choose **Execute all batches** (`执行全部批次`).
+4. Review survival rate, active species, food-web links, trophic balance, and limiting ecological functions.
 
-### 5. 查看、对比与导出
+Wildlife is rendered in anatomy-part batches: torso, head, neck, legs, wings, horns, tusks, tails, and related parts share instanced meshes. This preserves visible species differences without duplicating a complete mesh set for every individual.
 
-在“图层”中切换高程、坡度、水文、河网、风场、生态连通性、设施影响与风险视图。完成推演后可在“导出”抽屉输出：
+### 5. Inspect, compare, and export
 
-- GeoJSON 河网、流域边界与设施几何；
-- 格网、地下体积、时序、设施适宜度和生态诊断 CSV；
-- 当前参数、质量门控、数据审计和不确定性报告。
+Use the **Layers** drawer to switch between elevation, slope, hydrology, rivers, wind, ecological connectivity, infrastructure impact, and hazard views. The **Export** drawer (`导出`) can produce:
 
-建议每次改变一个关键条件后先导出参数与报告，再进行下一轮比较，便于追踪情景之间的差异。
+- GeoJSON river networks, watershed boundaries, and infrastructure geometry;
+- CSV grids, subsurface volumes, time series, infrastructure suitability, and ecological diagnostics;
+- current parameters, quality gates, source-data audits, and uncertainty reports.
 
-## 数据导入与可信度
+For clean scenario comparison, change one major condition at a time and export the parameters and report before beginning the next run.
 
-程序支持 DEM、土壤 HSG、土地覆盖、植被覆盖/冠层高度、气象边界场、真实河网、设施 GeoJSON 和校准 CSV/JSON。导入数据后，优先使用真实资料约束对应计算层。
+## Data Import and Model Confidence
 
-对于没有 DEM、土壤、气象、河网或校准数据的运行，程序会将其标记为演示级情景。这一限制是有意保留的：它避免将程序化结果误称为经过验证的科研或工程结论。
+The application accepts DEM, soil HSG, land cover, vegetation cover/canopy height, weather boundary fields, observed river networks, infrastructure GeoJSON, and calibration CSV/JSON. Imported data takes priority as a constraint for the corresponding model layer.
 
-更完整的数据格式、算法和质量门控说明见 [网页端技术文档](outputs/geo-sim/README.md)。
+Runs without DEM, soil, weather, river-network, or calibration data are explicitly treated as demonstration-grade scenarios. This is intentional: it prevents procedural output from being presented as a validated research or engineering result.
 
-## 性能与显示建议
+See the [web application technical documentation](outputs/geo-sim/README.md) for detailed formats, algorithms, and quality gates.
 
-- 常规探索：128 km、256² DEM、默认三维细节。
-- 需要查看设施外观：切换为 16 或 32 km 区域，再缩放镜头。
-- 需要高精度局部观察：使用局部细化，而不是一开始就将整张地图设为最大网格。
-- 动物 3D 层按需开启。生态计算可先于动物网格完成，适合先调整规则再查看外观。
-- 桌面端测试环境中，完整场景在 NVIDIA RTX GPU 的 WebGL2/D3D11 路径下运行；实际帧率取决于地图分辨率、可见实例数和显卡。
+## Performance and Display Guidance
 
-## 构建离线程序
+- For general exploration, use a 128 km extent, 256² DEM, and the default 3D detail level.
+- To inspect building appearance, switch to a 16 or 32 km extent and move the camera closer.
+- For high-detail inspection, use local refinement instead of starting with the largest grid across the entire map.
+- The wildlife 3D layer is on demand. You can tune ecological rules first, then enable animal meshes when you want to inspect the visual result.
+- The desktop build was validated on an NVIDIA RTX GPU through WebGL2/D3D11. Actual frame rate depends on extent, resolution, visible instances, and available graphics hardware.
+
+## Build Offline Applications
 
 ```powershell
 cd outputs/geo-sim-desktop
@@ -120,26 +122,26 @@ npm run package:win
 npm run package:portable
 ```
 
-目录版与便携版会生成在 `outputs/GeoLab-128-Local` 和 `outputs/GeoLab-128-Portable`。这两个目录是本地构建产物，因此默认不会提交到 Git。
+Directory and portable builds are written to `outputs/GeoLab-128-Local` and `outputs/GeoLab-128-Portable`. They are local build artifacts and are intentionally excluded from Git.
 
-## 项目结构
+## Repository Layout
 
-| 路径 | 用途 |
+| Path | Purpose |
 | --- | --- |
-| `outputs/geo-sim` | Three.js 网页端、离线资源与技术说明 |
-| `outputs/geo-sim/src/geoEngine.js` | 地形、水文、气候、风险、导出和数据质量逻辑 |
-| `outputs/geo-sim/src/terrainRenderer.js` | Three.js 场景、实例化渲染、三维图层与 GPU 诊断 |
-| `outputs/geo-sim/src/proceduralAssets.js` | 109 类语义程序化资产工厂 |
-| `outputs/geo-sim/src/landscapeEcology.js` | 物种、生态区块、食物网、迁徙与投放演算 |
-| `outputs/geo-sim/src/continentTemplates.js` | 大洲与区域参数模板 |
-| `outputs/geo-sim-desktop` | Electron 本地桌面包装器和打包脚本 |
-| `outputs/本地运行说明.txt` | Windows 本地运行说明 |
+| `outputs/geo-sim` | Three.js web application, offline resources, and technical documentation |
+| `outputs/geo-sim/src/geoEngine.js` | Terrain, hydrology, climate, hazards, export, and source-data quality logic |
+| `outputs/geo-sim/src/terrainRenderer.js` | Three.js scene, instanced rendering, 3D layers, and GPU diagnostics |
+| `outputs/geo-sim/src/proceduralAssets.js` | Factory for 109 semantic procedural asset types |
+| `outputs/geo-sim/src/landscapeEcology.js` | Wildlife, ecological blocks, food webs, migration, and release simulation |
+| `outputs/geo-sim/src/continentTemplates.js` | Continental and regional parameter templates |
+| `outputs/geo-sim-desktop` | Electron desktop wrapper and packaging scripts |
+| `outputs/本地运行说明.txt` | Windows local-run notes in Simplified Chinese |
 
-## 验证状态
+## Validation Status
 
-当前版本已完成以下回归验证：
+The current version has passed the following checks:
 
-- 程序化资产工厂 `109/109` 构建成功；
-- 桌面和移动端浏览器回归无脚本错误，移动端无横向溢出；
-- 批量投放、区域物种过滤、动物合批渲染和大洲模板联动通过交互测试；
-- 目录版与单文件便携版均通过离线烟雾测试，无外部资源请求。
+- all `109/109` procedural asset factories build successfully;
+- desktop and mobile browser regression checks report no script errors or mobile horizontal overflow;
+- batch release, regional species filtering, instanced wildlife rendering, and continental-template coupling passed interaction tests;
+- both directory and single-file portable desktop builds passed offline smoke tests with no external resource requests.
