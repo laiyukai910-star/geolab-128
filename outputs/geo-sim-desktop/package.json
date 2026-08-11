@@ -1,0 +1,55 @@
+{
+  "name": "geolab-128-local",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GeoLab 128 offline GPU desktop runtime",
+  "main": "main.cjs",
+  "scripts": {
+    "vendor": "node build-local.mjs --vendor-only",
+    "start": "electron .",
+    "package:win": "node build-local.mjs",
+    "package:portable": "node build-local.mjs --vendor-only && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "@electron/packager": "latest",
+    "electron": "latest",
+    "electron-builder": "latest",
+    "esbuild": "latest",
+    "geotiff": "2.1.3",
+    "three": "0.164.1"
+  },
+  "build": {
+    "appId": "cn.geolab128.local",
+    "productName": "GeoLab 128",
+    "asar": true,
+    "compression": "normal",
+    "directories": {
+      "output": "../GeoLab-128-Portable"
+    },
+    "files": [
+      "main.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../geo-sim",
+        "to": "geo-sim",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "GeoLab-128-Local-GPU-${version}.${ext}",
+      "signAndEditExecutable": false
+    }
+  }
+}

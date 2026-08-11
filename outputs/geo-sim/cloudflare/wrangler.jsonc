@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "geolab-128-data-proxy",
+  "main": "./worker.js",
+  "compatibility_date": "2026-05-31",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

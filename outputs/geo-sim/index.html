@@ -1,0 +1,1084 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GeoLab 128 | 地理演算程序</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./src/styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three/three.module.js",
+          "three/addons/": "./vendor/three/addons/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="app-shell" id="appShell" data-active-drawer="terrain">
+      <section class="viewport" aria-label="三维地形视图">
+        <div id="scene" class="scene"></div>
+        <div class="topbar">
+          <div>
+            <h1>GeoLab 128</h1>
+            <p id="modelSubtitle">128 km × 128 km · 16,384 km² · DEM 演算中</p>
+          </div>
+          <div class="status-pill" id="status">初始化</div>
+        </div>
+        <div class="metric-strip" id="metricStrip">
+          <span>最高点 -- m</span>
+          <span>主河道 -- km</span>
+          <span>降水 -- mm/yr</span>
+          <span>气候带 --</span>
+        </div>
+      </section>
+
+      <button class="drawer-scrim" id="drawerScrim" type="button" aria-label="关闭参数抽屉" hidden></button>
+      <nav class="tool-rail" aria-label="演算工具" role="tablist" aria-orientation="vertical">
+        <button class="rail-tab" type="button" role="tab" data-drawer-target="terrain" aria-controls="drawer-terrain" aria-selected="false"><span>地形</span></button>
+        <button class="rail-tab" type="button" role="tab" data-drawer-target="data" aria-controls="drawer-data" aria-selected="false"><span>数据</span></button>
+        <button class="rail-tab" type="button" role="tab" data-drawer-target="weather" aria-controls="drawer-weather" aria-selected="false"><span>气象</span></button>
+        <button class="rail-tab" type="button" role="tab" data-drawer-target="hydrology" aria-controls="drawer-hydrology" aria-selected="false"><span>水文</span></button>
+        <button class="rail-tab" type="button" role="tab" data-drawer-target="hazards" aria-controls="drawer-hazards" aria-selected="false"><span>时灾</span></button>
+        <button class="rail-tab" type="button" role="tab" data-drawer-target="analysis" aria-controls="drawer-analysis" aria-selected="false"><span>图层</span></button>
+        <button class="rail-tab" type="button" role="tab" data-drawer-target="export" aria-controls="drawer-export" aria-selected="false"><span>导出</span></button>
+      </nav>
+
+      <aside class="control-panel" id="controlDrawer" aria-hidden="true">
+        <header class="drawer-header">
+          <div>
+            <span class="drawer-kicker">参数工作区</span>
+            <h2 id="drawerTitle">地形</h2>
+          </div>
+          <button class="icon-button drawer-close" id="closeControlDrawer" type="button" title="关闭抽屉" aria-label="关闭抽屉">×</button>
+        </header>
+        <section class="panel-section is-active" id="drawer-terrain" data-drawer="terrain" role="tabpanel">
+          <div class="section-title">
+            <h2>地形</h2>
+            <button class="icon-button" id="randomSeedButton" title="随机种子" aria-label="随机种子">↻</button>
+          </div>
+          <div class="field-grid">
+            <label>
+              种子
+              <input id="seed" type="number" value="142857" />
+            </label>
+            <label>
+              沙盘边长
+              <select id="mapSizeKm">
+                <option value="4">4 km × 4 km</option>
+                <option value="8">8 km × 8 km</option>
+                <option value="12">12 km × 12 km</option>
+                <option value="16">16 km × 16 km</option>
+                <option value="24">24 km × 24 km</option>
+                <option value="32">32 km × 32 km</option>
+                <option value="48">48 km × 48 km</option>
+                <option value="64">64 km × 64 km</option>
+                <option value="96">96 km × 96 km</option>
+                <option value="128" selected>128 km × 128 km</option>
+                <option value="192">192 km × 192 km</option>
+                <option value="256">256 km × 256 km</option>
+                <option value="384">384 km × 384 km</option>
+                <option value="512">512 km × 512 km</option>
+              </select>
+            </label>
+            <label class="wide-field">
+              大洲与区域环境模板
+              <select id="continentTemplate"></select>
+            </label>
+            <label class="wide-field continent-template-strip">
+              <span id="continentTemplateStatus">全球自定义 · 保留当前自然条件</span>
+            </label>
+            <label>
+              地貌预设
+              <select id="geomorphologyPreset"></select>
+            </label>
+            <label>
+              经典景区
+              <select id="scenicPreset"></select>
+            </label>
+            <label class="wide-field terrain-preset-strip">
+              <span id="terrainPresetStatus">地貌：自定义地形</span>
+            </label>
+            <label>
+              网格
+              <select id="resolution">
+                <option value="128">128² · 1008 m</option>
+                <option value="192">192² · 670 m</option>
+                <option value="256" selected>256² · 502 m</option>
+                <option value="384">384² · 334 m</option>
+                <option value="512">512² · 250 m</option>
+                <option value="768">768² · 167 m</option>
+                <option value="1024">1024² · 125 m</option>
+                <option value="1536">1536² · 83 m</option>
+                <option value="2048">2048² · 63 m</option>
+                <option value="3072">3072² · 42 m</option>
+                <option value="4096">4096² · 31 m</option>
+              </select>
+            </label>
+            <label>
+              GPU细节质量
+              <select id="renderDetailQuality">
+                <option value="high" selected>高精</option>
+                <option value="ultra">极精</option>
+                <option value="exhaustive">全量细节</option>
+              </select>
+            </label>
+            <label>
+              起伏
+              <input id="relief" type="number" min="300" max="10000" step="25" value="1450" />
+            </label>
+            <label>
+              山脊
+              <input id="ridgeWeight" type="number" min="0" max="1" step="0.01" value="0.56" />
+            </label>
+            <label>
+              构造抬升
+              <input id="tectonics" type="number" min="0" max="1" step="0.01" value="0.58" />
+            </label>
+            <label>
+              海平面
+              <input id="seaLevel" type="number" min="0" max="900" step="5" value="90" />
+            </label>
+            <label>
+              亚格细节
+              <input id="microRelief" type="number" min="0" max="60" step="1" value="18" />
+            </label>
+            <label>
+              地形复杂度
+              <input id="terrainComplexity" type="number" min="0" max="1" step="0.01" value="0.58" />
+            </label>
+            <label>
+              地貌丰富度
+              <input id="terrainDiversity" type="number" min="0" max="1" step="0.01" value="0.64" />
+            </label>
+            <label>
+              生态区块网格
+              <select id="landscapeBlockGrid">
+                <option value="8">8 × 8</option>
+                <option value="12">12 × 12</option>
+                <option value="16">16 × 16</option>
+                <option value="24" selected>24 × 24</option>
+                <option value="32">32 × 32</option>
+                <option value="48">48 × 48</option>
+              </select>
+            </label>
+            <label>
+              真实数据权重
+              <input id="externalDataWeight" type="number" min="0" max="1" step="0.01" value="1" />
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="applyContinentTemplate">应用大洲模板</button>
+            <button id="applyTerrainPreset">应用地貌预设</button>
+            <button id="buildTerrain">重建地形</button>
+            <button id="applyErosion">应用侵蚀</button>
+          </div>
+        </section>
+
+        <section class="panel-section data-section" id="drawer-data" data-drawer="data" role="tabpanel">
+          <div class="section-title">
+            <h2>真实数据</h2>
+            <span id="dataStatus">程序生成数据</span>
+          </div>
+          <div class="field-grid aoi-grid">
+            <label>
+              中心纬度
+              <input id="aoiLat" type="number" step="0.0001" value="37.8651" />
+            </label>
+            <label>
+              中心经度
+              <input id="aoiLon" type="number" step="0.0001" value="-119.5383" />
+            </label>
+            <label>
+              边长 km
+              <input id="aoiSizeKm" type="number" min="1" max="256" step="1" value="128" />
+            </label>
+            <label>
+              起始年
+              <input id="aoiStartYear" type="number" min="1980" max="2026" step="1" value="2020" />
+            </label>
+            <label>
+              结束年
+              <input id="aoiEndYear" type="number" min="1980" max="2026" step="1" value="2024" />
+            </label>
+            <label>
+              USGS 站号
+              <input id="aoiGageSite" type="text" placeholder="可选" />
+            </label>
+            <label>
+              数据代理 URL
+              <input id="dataProxyBase" type="text" placeholder="可选 Cloudflare Worker" />
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="buildAcquisitionPlan">生成采集计划</button>
+            <button id="exportAcquisitionPlan">导出采集计划</button>
+          </div>
+          <div class="button-row">
+            <button id="checkAcquisitionSources">在线检查源</button>
+            <button id="exportSourceManifest">导出源清单</button>
+          </div>
+          <div class="readout compact-readout" id="planStatus">尚未生成真实样区采集计划</div>
+          <div class="button-row">
+            <button id="findDemProducts">查找 DEM 产品</button>
+            <button id="fetchDaymetMeteorology">加载 Daymet 气象</button>
+            <button id="fetchOsmInfrastructure">加载 OSM 设施</button>
+            <button id="findProxyGages">查找 USGS 水文站</button>
+          </div>
+          <div class="file-grid">
+            <label>
+              DEM GeoTIFF/CSV/JSON，可多选
+              <input id="demFile" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
+            </label>
+            <label>
+              土壤 HSG/属性，可多选
+              <input id="soilFile" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
+            </label>
+            <label>
+              钻孔/地下水位/岩性，可多选
+              <input id="subsurfaceFile" type="file" accept=".csv,.json,.geojson" multiple />
+            </label>
+            <label>
+              土地覆盖/植被，可多选
+              <input id="landCoverFile" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
+            </label>
+            <label>
+              地表/气候情景 GeoJSON
+              <input id="surfacePatchFile" type="file" accept=".json,.geojson" multiple />
+            </label>
+            <label>
+              气象边界场，可多选
+              <input id="metFile" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
+            </label>
+            <label>
+              河网 Flowlines，可多选
+              <input id="flowlineFile" type="file" accept=".json,.geojson" multiple />
+            </label>
+            <label>
+              城镇/乡村/水利设施，可多选
+              <input id="infrastructureFile" type="file" accept=".json,.geojson" multiple />
+            </label>
+            <label>
+              校准数据，可多选
+              <input id="calibrationFile" type="file" accept=".csv,.json" multiple />
+            </label>
+            <label>
+              校准强度
+              <input id="calibrationStrength" type="number" min="0" max="1" step="0.01" value="0.75" />
+            </label>
+          </div>
+          <div class="readout compact-readout" id="calibrationAdvisorStatus">校准顾问等待观测流量。</div>
+          <div class="button-row">
+            <button id="fetchProxyCalibration">获取 USGS 校准</button>
+            <button id="applyCalibrationDischarge">应用流量尺度建议</button>
+            <button id="applyCalibrationSplit">应用分摊尺度建议</button>
+          </div>
+          <div class="section-title sub-title">
+            <h3>手工地表/气候情景</h3>
+            <span id="manualSurfaceReadout">未添加手工地表情景</span>
+          </div>
+          <div class="field-grid compact-grid">
+            <label>
+              情景类型
+              <select id="surfacePatchType">
+                <option value="forest" selected>森林</option>
+                <option value="wetland">湿地</option>
+                <option value="grassland">草地</option>
+                <option value="cropland">耕地</option>
+                <option value="shrubland">灌丛</option>
+                <option value="bare">裸地/暴露地表</option>
+                <option value="burned">火烧迹地</option>
+                <option value="drought">干旱区</option>
+                <option value="heatwave">热浪区</option>
+                <option value="urban_green">城市绿地</option>
+                <option value="open_water">开放水面</option>
+                <option value="custom">自定义</option>
+              </select>
+            </label>
+            <label>
+              几何
+              <select id="surfacePatchGeometry">
+                <option value="Point">点</option>
+                <option value="LineString">线</option>
+                <option value="Polygon" selected>面</option>
+              </select>
+            </label>
+            <label>
+              X km
+              <input id="surfacePatchX" type="number" min="0" max="128" step="0.1" value="64" />
+            </label>
+            <label>
+              Y km
+              <input id="surfacePatchY" type="number" min="0" max="128" step="0.1" value="64" />
+            </label>
+            <label class="wide-field">
+              坐标
+              <textarea id="surfacePatchCoordinates" rows="3" spellcheck="false">52,52; 76,52; 76,76; 52,76</textarea>
+            </label>
+            <label>
+              半径 km
+              <input id="surfacePatchRadius" type="number" min="0.05" max="48" step="0.1" value="3" />
+            </label>
+            <label>
+              NLCD 编码
+              <input id="surfacePatchLandCover" type="number" min="0" max="100" step="1" value="43" />
+            </label>
+            <label>
+              HSG
+              <input id="surfacePatchSoilGroup" type="number" min="0" max="4" step="1" value="2" />
+            </label>
+            <label>
+              植被覆盖
+              <input id="surfacePatchVegetation" type="number" min="0" max="1" step="0.01" value="0.86" />
+            </label>
+            <label>
+              植被增量
+              <input id="surfacePatchVegetationDelta" type="number" min="-1" max="1" step="0.01" value="0" />
+            </label>
+            <label>
+              LAI
+              <input id="surfacePatchLai" type="number" min="0" max="8.5" step="0.1" value="5.1" />
+            </label>
+            <label>
+              冠层 m
+              <input id="surfacePatchCanopy" type="number" min="0" max="80" step="0.5" value="22" />
+            </label>
+            <label>
+              根深 m
+              <input id="surfacePatchRootDepth" type="number" min="0" max="5" step="0.05" value="2.2" />
+            </label>
+            <label>
+              Ksat mm/hr
+              <input id="surfacePatchKsat" type="number" min="0" max="260" step="0.1" value="36" />
+            </label>
+            <label>
+              AWC mm
+              <input id="surfacePatchAwc" type="number" min="0" max="560" step="1" value="180" />
+            </label>
+            <label>
+              不透水率
+              <input id="surfacePatchImpervious" type="number" min="0" max="0.98" step="0.01" value="0.01" />
+            </label>
+            <label>
+              不透水增量
+              <input id="surfacePatchImperviousDelta" type="number" min="-0.98" max="0.98" step="0.01" value="0" />
+            </label>
+            <label>
+              降水增量 mm
+              <input id="surfacePatchPrecipDelta" type="number" min="-2200" max="2200" step="10" value="0" />
+            </label>
+            <label>
+              降水倍率
+              <input id="surfacePatchPrecipScale" type="number" min="0.2" max="3" step="0.01" value="1.04" />
+            </label>
+            <label>
+              温度增量 °C
+              <input id="surfacePatchTempDelta" type="number" min="-8" max="8" step="0.1" value="-0.35" />
+            </label>
+            <label>
+              风速增量 m/s
+              <input id="surfacePatchWindDelta" type="number" min="-18" max="24" step="0.1" value="-0.8" />
+            </label>
+            <label>
+              风向
+              <input id="surfacePatchWindDirection" type="number" min="0" max="359" step="1" />
+            </label>
+            <label>
+              粗糙增量
+              <input id="surfacePatchRoughnessDelta" type="number" min="-0.25" max="0.45" step="0.01" value="0.06" />
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="addSurfacePatchFeature">添加地表情景</button>
+            <button id="clearSurfacePatchFeatures">清除地表情景</button>
+          </div>
+          <div class="button-row">
+            <button id="exportSurfacePatchFeatures">导出地表 GeoJSON</button>
+          </div>
+          <div class="section-title sub-title">
+            <h3>手工人造设施</h3>
+            <span id="manualInfrastructureReadout">未添加手工设施</span>
+          </div>
+          <div class="field-grid compact-grid">
+            <label>
+              类型
+              <select id="infraType">
+                <option value="urban" selected>城镇基底</option>
+                <option value="highrise">高层/塔楼</option>
+                <option value="apartment">居民楼/公寓组团</option>
+                <option value="residential">住宅片区</option>
+                <option value="villa">小洋房/联排</option>
+                <option value="commercial">商业/办公</option>
+                <option value="civic">公共建筑</option>
+                <option value="landmark">地标</option>
+                <option value="hospital">医院</option>
+                <option value="clinic">&#x8bca;&#x6240;/&#x6025;&#x8bca;&#x70b9;</option>
+                <option value="school">学校/园区</option>
+                <option value="library">&#x56fe;&#x4e66;&#x9986;</option>
+                <option value="community_center">&#x793e;&#x533a;&#x4e2d;&#x5fc3;</option>
+                <option value="stadium">体育场</option>
+                <option value="airport">机场</option>
+                <option value="rail">铁路</option>
+                <option value="bridge">桥梁</option>
+                <option value="port">港口</option>
+                <option value="powerplant">电厂</option>
+                <option value="wastewater">污水处理厂</option>
+                <option value="water_tower">&#x6c34;&#x5854;/&#x9ad8;&#x4f4d;&#x6c34;&#x6c60;</option>
+                <option value="hydropower_plant">&#x6c34;&#x7535;&#x7ad9;</option>
+                <option value="geothermal_plant">&#x5730;&#x70ed;&#x7535;&#x7ad9;</option>
+                <option value="water_treatment_plant">&#x51c0;&#x6c34;&#x5382;</option>
+                <option value="ferry_terminal">&#x6e21;&#x8f6e;&#x7801;&#x5934;</option>
+                <option value="mountain_refuge">&#x5c71;&#x5730;&#x907f;&#x96be;&#x6240;</option>
+                <option value="fire_watch_tower">&#x68ee;&#x6797;&#x706b;&#x60c5;&#x77ad;&#x671b;&#x5854;</option>
+                <option value="flood_pump_station">排涝泵站</option>
+                <option value="desalination_plant">海水淡化厂</option>
+                <option value="visitor_center">&#x6e38;&#x5ba2;&#x4e2d;&#x5fc3;</option>
+                <option value="scenic_overlook">&#x89c2;&#x666f;&#x53f0;/&#x77ad;&#x671b;&#x70b9;</option>
+                <option value="trailhead">&#x767b;&#x5c71;&#x53e3;/&#x6b65;&#x9053;&#x5165;&#x53e3;</option>
+                <option value="ranger_station">&#x62a4;&#x6797;/&#x666f;&#x533a;&#x7ba1;&#x7406;&#x7ad9;</option>
+                <option value="gauging_station">&#x6c34;&#x6587;&#x6d4b;&#x7ad9;</option>
+                <option value="solar_farm">光伏场</option>
+                <option value="wind_farm">风电场</option>
+                <option value="park">公园/绿地</option>
+                <option value="logistics">物流园</option>
+                <option value="greenhouse">温室</option>
+                <option value="quarry">采石场/矿区</option>
+                <option value="office_tower">办公塔楼</option>
+                <option value="hotel">酒店/旅馆</option>
+                <option value="market">市场/商贸</option>
+                <option value="fire_station">消防站</option>
+                <option value="police_station">警署</option>
+                <option value="data_center">数据中心</option>
+                <option value="substation">变电站</option>
+                <option value="metro_station">地铁站</option>
+                <option value="bus_terminal">&#x516c;&#x4ea4;&#x67a2;&#x7ebd;</option>
+                <option value="cable_car_station">索道站/缆车站</option>
+                <option value="tunnel_portal">隧道口</option>
+                <option value="observatory">天文台/观测站</option>
+                <option value="research_station">科研站</option>
+                <option value="farmstead">农庄</option>
+                <option value="terrace_farm">梯田农业</option>
+                <option value="village">乡村</option>
+                <option value="transport">道路/交通</option>
+                <option value="industrial">工业</option>
+                <option value="reservoir">水库</option>
+                <option value="dam">大坝/闸</option>
+                <option value="canal">渠道/灌溉</option>
+                <option value="levee">堤防</option>
+                <option value="custom">自定义</option>
+              </select>
+            </label>
+            <label>
+              几何
+              <select id="infraGeometry">
+                <option value="Point">点</option>
+                <option value="LineString">线</option>
+                <option value="Polygon">面</option>
+              </select>
+            </label>
+            <label>
+              X km
+              <input id="infraX" type="number" min="0" max="128" step="0.1" value="64" />
+            </label>
+            <label>
+              Y km
+              <input id="infraY" type="number" min="0" max="128" step="0.1" value="64" />
+            </label>
+            <label class="wide-field">
+              坐标
+              <textarea id="infraCoordinates" rows="3" spellcheck="false">48,64; 80,64</textarea>
+            </label>
+            <label>
+              半径 km
+              <input id="infraRadius" type="number" min="0.1" max="32" step="0.1" value="3" />
+            </label>
+            <label>
+              硬化率
+              <input id="infraImpervious" type="number" min="0" max="0.98" step="0.01" value="0.35" />
+            </label>
+            <label>
+              径流变化
+              <input id="infraRunoffDelta" type="number" min="-0.45" max="0.45" step="0.01" value="0.08" />
+            </label>
+            <label>
+              粗糙变化
+              <input id="infraRoughnessDelta" type="number" min="-0.2" max="0.55" step="0.01" value="0.04" />
+            </label>
+            <label>
+              热岛 °C
+              <input id="infraTempDelta" type="number" min="-4" max="7" step="0.1" value="0.8" />
+            </label>
+            <label>
+              调蓄 mm
+              <input id="infraStorage" type="number" min="0" max="800" step="5" value="0" />
+            </label>
+            <label>
+              滞留率
+              <input id="infraRetention" type="number" min="0" max="0.95" step="0.01" value="0" />
+            </label>
+            <label>
+              灌溉 mm
+              <input id="infraIrrigation" type="number" min="0" max="900" step="5" value="0" />
+            </label>
+            <label>
+              植被变化
+              <input id="infraVegetationDelta" type="number" min="-0.8" max="0.8" step="0.01" value="-0.1" />
+            </label>
+            <label>
+              用水 mm
+              <input id="infraDemand" type="number" min="0" max="1000" step="5" value="40" />
+            </label>
+            <label>
+              建筑密度
+              <input id="infraBuildingDensity" type="number" min="0" max="1" step="0.01" value="0.35" />
+            </label>
+            <label>
+              平均高度 m
+              <input id="infraBuildingHeight" type="number" min="0" max="700" step="1" value="28" />
+            </label>
+            <label>
+              层数
+              <input id="infraFloors" type="number" min="0" max="180" step="1" value="8" />
+            </label>
+            <label>
+              地标高度 m
+              <input id="infraLandmarkHeight" type="number" min="0" max="900" step="1" value="0" />
+            </label>
+            <label class="wide-field infrastructure-placement-strip">
+              <span id="infrastructureSelectionReadout">设施位置：未选区</span>
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="selectInfrastructureRegion" aria-pressed="false">设施选区</button>
+            <button id="addInfrastructureFeature">添加设施</button>
+            <button id="applyAdaptiveInfrastructurePlan">&#x9002;&#x914d;&#x751f;&#x6210;&#x8bbe;&#x65bd;</button>
+            <button id="clearInfrastructureFeatures">清除手工设施</button>
+          </div>
+          <div class="button-row">
+            <button id="exportInfrastructureFeatures">导出设施 GeoJSON</button>
+            <button id="exportAdaptiveInfrastructurePlan">&#x5bfc;&#x51fa;&#x9002;&#x914d;&#x8bbe;&#x65bd; JSON</button>
+            <button id="exportAdaptiveInfrastructurePlanCSV">&#x9002;&#x914d;&#x8bbe;&#x65bd; CSV</button>
+          </div>
+          <div class="button-row">
+            <button id="loadDataLayers">加载数据层</button>
+            <button id="clearDataLayers">清除数据层</button>
+          </div>
+        </section>
+
+        <section class="panel-section" id="drawer-weather" data-drawer="weather" role="tabpanel">
+          <div class="section-title">
+            <h2>气象</h2>
+            <span id="windLabel">风来自 270°</span>
+          </div>
+          <div class="field-grid">
+            <label>
+              风向
+              <input id="windDirection" type="number" min="0" max="359" step="1" value="270" />
+            </label>
+            <label>
+              风速
+              <input id="windSpeed" type="number" min="0" max="32" step="0.5" value="12" />
+            </label>
+            <label>
+              海平面温度
+              <input id="baseTemperature" type="number" min="-12" max="34" step="0.2" value="17.5" />
+            </label>
+            <label>
+              湿度
+              <input id="humidity" type="number" min="0.15" max="1.8" step="0.01" value="0.92" />
+            </label>
+            <label>
+              纬度
+              <input id="latitude" type="number" min="-60" max="70" step="1" value="32" />
+            </label>
+            <label>
+              递减率 °C/km
+              <input id="lapseRate" type="number" min="3" max="9.8" step="0.1" value="6.2" />
+            </label>
+          </div>
+        </section>
+
+        <section class="panel-section" id="drawer-hydrology" data-drawer="hydrology" role="tabpanel">
+          <div class="section-title">
+            <h2>水文</h2>
+            <span id="riverLabel">成河阈值 72 km²</span>
+          </div>
+          <div class="field-grid">
+            <label>
+              渗透率
+              <input id="permeability" type="number" min="0.05" max="0.75" step="0.01" value="0.28" />
+            </label>
+            <label>
+              地下层数
+              <input id="subsurfaceLayers" type="number" min="4" max="16" step="1" value="8" />
+            </label>
+            <label>
+              地下深度
+              <input id="subsurfaceDepthM" type="number" min="20" max="1200" step="10" value="240" />
+            </label>
+            <label>
+              地质复杂度
+              <input id="geologyComplexity" type="number" min="0" max="1" step="0.01" value="0.55" />
+            </label>
+            <label>
+              含水补给
+              <input id="aquiferRechargeScale" type="number" min="0.15" max="3" step="0.01" value="1" />
+            </label>
+            <label>
+              汇流模式
+              <select id="flowRouting">
+                <option value="dinf">D∞ 连续流向</option>
+                <option value="d8">D8 单流向</option>
+                <option value="mfd">MFD 多流向</option>
+              </select>
+            </label>
+            <label>
+              成河阈值
+              <input id="riverThreshold" type="number" min="1" max="600" step="1" value="72" />
+            </label>
+            <label>
+              侵蚀强度
+              <input id="erosionStrength" type="number" min="0" max="1.4" step="0.02" value="0.62" />
+            </label>
+            <label>
+              垂直夸张
+              <input id="verticalScale" type="number" min="0.6" max="3.2" step="0.05" value="1.55" />
+            </label>
+            <label>
+              植被反馈
+              <input id="vegetationFeedback" type="number" min="0" max="1" step="0.01" value="0.55" />
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="runModel">重新演算</button>
+            <button id="resetCamera">重置视角</button>
+          </div>
+        </section>
+
+        <section class="panel-section" id="drawer-hazards" data-drawer="hazards" role="tabpanel">
+          <div class="section-title">
+            <h2>时间与灾害</h2>
+            <span id="hazardLabel">25/25 年 · 无 · x0.50</span>
+          </div>
+          <div class="field-grid">
+            <label>
+              模拟年限
+              <input id="simulationYears" type="number" min="0" max="120" step="1" value="25" />
+            </label>
+            <label>
+              当前年份
+              <input id="currentYear" type="number" min="0" max="120" step="1" value="25" />
+            </label>
+            <label>
+              日序
+              <input id="dayOfYear" type="number" min="1" max="365" step="1" value="183" />
+            </label>
+            <label>
+              灾害模式
+              <select id="disasterMode">
+                <option value="none" selected>无</option>
+                <option value="storm_flood">暴雨洪水</option>
+                <option value="drought">干旱</option>
+                <option value="wildfire">野火</option>
+                <option value="earthquake_landslide">地震/滑坡</option>
+                <option value="compound">复合灾害</option>
+              </select>
+            </label>
+            <label>
+              强度
+              <input id="disasterIntensity" type="number" min="0" max="2" step="0.01" value="0.5" />
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="playTime">播放</button>
+          </div>
+        </section>
+
+        <section class="panel-section analysis-section" id="drawer-analysis" data-drawer="analysis" role="tabpanel">
+          <div class="section-title">
+            <h2>分析图层</h2>
+            <select id="viewMode">
+              <option value="builtDamage">建筑灾害损伤</option>
+              <option value="elevation" selected>高程</option>
+              <option value="climate">气候</option>
+              <option value="precipitation">降水</option>
+              <option value="temperature">温度</option>
+              <option value="flow">汇流</option>
+              <option value="velocity">流速</option>
+              <option value="shear">剪切应力</option>
+              <option value="sediment">输沙能力</option>
+              <option value="erosion">侵蚀风险</option>
+              <option value="deposition">淤积风险</option>
+              <option value="hazard">综合灾害</option>
+              <option value="flood">洪水风险</option>
+              <option value="drought">干旱胁迫</option>
+              <option value="wildfire">野火风险</option>
+              <option value="landslide">滑坡风险</option>
+              <option value="timechange">时间植被变化</option>
+              <option value="slope">坡度</option>
+              <option value="vegetation">植被覆盖</option>
+              <option value="vegtype">植被功能型</option>
+              <option value="biomass">植被碳储量</option>
+              <option value="canopy">冠层高度</option>
+              <option value="lai">叶面积指数</option>
+              <option value="wind">局地风场</option>
+              <option value="evapotranspiration">实际蒸散</option>
+              <option value="waterbalance">水量平衡</option>
+              <option value="landcover">土地覆盖</option>
+              <option value="soil">土壤</option>
+              <option value="subsurface">地下岩性</option>
+              <option value="aquifer">地下含水层</option>
+              <option value="geostress">地应力/液化</option>
+              <option value="subsurfaceConfidence">地下可信度</option>
+              <option value="undergroundRisk">地下工程风险</option>
+              <option value="confidence">数据可信度</option>
+              <option value="runoff">径流系数</option>
+              <option value="wetness">湿润指数</option>
+              <option value="infiltration">入渗能力</option>
+              <option value="soilwater">土壤水</option>
+              <option value="rootdepth">根系深度</option>
+              <option value="impervious">不透水面</option>
+              <option value="curvature">曲率</option>
+              <option value="tpi">TPI</option>
+              <option value="roughness">地表粗糙度</option>
+              <option value="landscapeConnectivity">生态连通度</option>
+              <option value="wildlife">动物丰富度</option>
+            </select>
+          </div>
+          <div class="field-grid compact-grid scene-layer-grid" aria-label="三维场景显示">
+            <label>
+              地表构件
+              <input id="terrainDetail3DEnabled" type="checkbox" />
+            </label>
+            <label>
+              地下剖切
+              <input id="subsurface3DEnabled" type="checkbox" />
+            </label>
+            <label>
+              风场箭头
+              <input id="wind3DEnabled" type="checkbox" />
+            </label>
+            <label>
+              空间网格
+              <input id="grid3DEnabled" type="checkbox" />
+            </label>
+          </div>
+          <div class="analysis-canvas-wrap">
+            <canvas id="analysisCanvas" width="320" height="320"></canvas>
+            <div id="infrastructureSelectionOverlay" class="infrastructure-selection-overlay" hidden></div>
+          </div>
+          <div class="field-grid compact-grid wildlife-3d-grid">
+            <label>
+              动物生态
+              <input id="wildlifeEnabled" type="checkbox" checked />
+            </label>
+            <label>
+              动物丰度
+              <input id="wildlifeAbundance" type="number" min="0" max="3" step="0.05" value="1" />
+            </label>
+            <label>
+              迁徙联动
+              <input id="wildlifeMigrationStrength" type="number" min="0" max="1" step="0.01" value="0.68" />
+            </label>
+            <label>
+              栖息地敏感度
+              <input id="wildlifeHabitatSensitivity" type="number" min="0" max="1" step="0.01" value="0.72" />
+            </label>
+            <label>
+              可见动物上限
+              <select id="wildlifeMaxAgents">
+                <option value="160">160</option>
+                <option value="320" selected>320</option>
+                <option value="480">480</option>
+                <option value="800">800</option>
+                <option value="1200">1200</option>
+              </select>
+            </label>
+            <label>
+              动物3D层
+              <input id="wildlife3DEnabled" type="checkbox" />
+            </label>
+            <label>
+              动物显示尺度
+              <input id="wildlife3DScale" type="number" min="0.4" max="3" step="0.1" value="1" />
+            </label>
+          </div>
+          <div class="sub-title ecosystem-release-title">
+            <h3>批量释放生物</h3>
+          </div>
+          <div class="field-grid compact-grid wildlife-release-grid">
+            <label>
+              生物种类
+              <select id="wildlifeReleaseSpecies"></select>
+            </label>
+            <label>
+              单批数量
+              <input id="wildlifeReleaseCount" type="number" min="1" max="100000" step="1" value="24" />
+            </label>
+            <label>
+              目标生境
+              <select id="wildlifeReleaseHabitat">
+                <option value="best" selected>自动选择最适区块</option>
+                <option value="forest">森林</option>
+                <option value="wetland">湿地与滨岸</option>
+                <option value="mountain">山地</option>
+                <option value="grassland">草原</option>
+                <option value="coast">海岸</option>
+                <option value="urban-edge">城镇边缘</option>
+              </select>
+            </label>
+            <label>
+              指定区块编号
+              <input id="wildlifeReleaseBlockId" type="number" min="0" step="1" placeholder="留空则自动" />
+            </label>
+          </div>
+          <div class="button-row wildlife-release-actions">
+            <button id="queueWildlifeRelease">加入投放批次</button>
+            <button id="executeWildlifeReleases">执行全部批次</button>
+            <button id="clearWildlifeReleases">清空批次</button>
+          </div>
+          <div id="wildlifeReleaseQueue" class="compact-readout release-queue-readout">尚未加入投放批次</div>
+          <div id="ecosystemFunctionReadout" class="compact-readout ecosystem-function-readout">生态功能将在演算后汇总</div>
+          <div class="field-grid compact-grid ecosystem-3d-grid">
+            <label>
+              &#x751f;&#x6001;3D&#x5c42;
+              <input id="ecosystem3DEnabled" type="checkbox" />
+            </label>
+            <label>
+              &#x89d2;&#x8272;&#x805a;&#x7126;
+              <select id="ecosystem3DRoleFocus">
+                <option value="all" selected>&#x5168;&#x90e8;&#x89d2;&#x8272;</option>
+                <option value="visitor-access-hub">&#x8bbf;&#x5ba2;&#x67a2;&#x7ebd;</option>
+                <option value="scenic-viewpoint">&#x666f;&#x89c2;&#x70b9;</option>
+                <option value="trail-access">&#x6b65;&#x9053;&#x5165;&#x53e3;</option>
+                <option value="conservation-management">&#x4fdd;&#x80b2;&#x7ba1;&#x7406;</option>
+                <option value="hydrometric-monitoring">&#x6c34;&#x6587;&#x76d1;&#x6d4b;</option>
+              </select>
+            </label>
+            <label>
+              &#x8fde;&#x7ebf;&#x6a21;&#x5f0f;
+              <select id="ecosystem3DLinkMode">
+                <option value="all" selected>&#x5168;&#x90e8;&#x8fde;&#x7ebf;</option>
+                <option value="professional">&#x4e13;&#x4e1a;&#x94fe;&#x8def;</option>
+                <option value="local">&#x8fd1;&#x90bb;&#x8f85;&#x52a9;</option>
+                <option value="off">&#x5173;&#x95ed;&#x8fde;&#x7ebf;</option>
+              </select>
+            </label>
+            <label>
+              &#x8282;&#x70b9;&#x5c3a;&#x5ea6;
+              <input id="ecosystem3DNodeScale" type="number" min="0.5" max="3" step="0.1" value="1" />
+            </label>
+          </div>
+          <div class="field-grid compact-grid block-3d-grid">
+            <label>
+              &#x533a;&#x5757;3D&#x5c42;
+              <input id="block3DEnabled" type="checkbox" />
+            </label>
+            <label>
+              &#x533a;&#x5757;&#x6a21;&#x5f0f;
+              <select id="block3DMode">
+                <option value="microzones" selected>&#x5fae;&#x5206;&#x533a;</option>
+                <option value="service">&#x670d;&#x52a1;&#x7f3a;&#x53e3;</option>
+                <option value="environment">&#x73af;&#x5883;&#x5206;&#x533a;</option>
+                <option value="linkage">&#x8054;&#x52a8;&#x72b6;&#x6001;</option>
+                <option value="recommendation">&#x63a8;&#x8350;&#x9884;&#x89c8;</option>
+                <option value="adaptive-plan">&#x65b9;&#x6848;&#x843d;&#x4f4d;</option>
+              </select>
+            </label>
+            <label>
+              &#x805a;&#x7126;&#x7c7b;&#x578b;
+              <select id="block3DFocus">
+                <option value="all" selected>&#x5168;&#x90e8;</option>
+                <option value="service-gap">&#x670d;&#x52a1;&#x7f3a;&#x53e3;</option>
+                <option value="phase-1-critical-network">&#x4e00;&#x671f;&#x5173;&#x952e;&#x7f51;&#x7edc;</option>
+                <option value="phase-2-service-completion">&#x4e8c;&#x671f;&#x670d;&#x52a1;&#x8865;&#x9f50;</option>
+                <option value="phase-3-adaptation-buffer">&#x4e09;&#x671f;&#x9002;&#x5e94;&#x7f13;&#x51b2;</option>
+                <option value="phase-4-monitoring-fill">&#x56db;&#x671f;&#x76d1;&#x6d4b;&#x8865;&#x70b9;</option>
+                <option value="network-backbone-dependency">&#x7f51;&#x7edc;&#x9aa8;&#x67b6;&#x4f9d;&#x8d56;</option>
+                <option value="service-gap-dependency">&#x670d;&#x52a1;&#x7f3a;&#x53e3;&#x4f9d;&#x8d56;</option>
+                <option value="engineering-adaptation-dependency">&#x5de5;&#x7a0b;&#x9002;&#x5e94;&#x4f9d;&#x8d56;</option>
+                <option value="monitoring-feedback-dependency">&#x76d1;&#x6d4b;&#x53cd;&#x9988;&#x4f9d;&#x8d56;</option>
+                <option value="blue-corridor-zone">&#x84dd;&#x7eff;&#x5eca;&#x9053;</option>
+                <option value="ecological-buffer-zone">&#x751f;&#x6001;&#x7f13;&#x51b2;</option>
+                <option value="buildable-shelf-microzone">&#x7a33;&#x5b9a;&#x53f0;&#x5730;</option>
+                <option value="blue-corridor-microzone">&#x84dd;&#x5eca;&#x5fae;&#x533a;</option>
+                <option value="ridge-crest-microzone">&#x5c71;&#x810a;&#x5fae;&#x533a;</option>
+                <option value="hazard-buffer-microzone">&#x98ce;&#x9669;&#x7f13;&#x51b2;</option>
+                <option value="high-adaptation-required">&#x9ad8;&#x9002;&#x5e94;&#x9700;&#x6c42;</option>
+                <option value="candidate-rejected">&#x5019;&#x9009;&#x53d7;&#x9650;</option>
+                <option value="transport-access">&#x4ea4;&#x901a;&#x8fbe;&#x6027;</option>
+                <option value="green-blue-service">&#x84dd;&#x7eff;&#x670d;&#x52a1;</option>
+                <option value="hydraulic-control">&#x6c34;&#x5229;&#x63a7;&#x5236;</option>
+                <option value="civic-institution">&#x516c;&#x5171;&#x673a;&#x6784;</option>
+                <option value="emergency-service">&#x5e94;&#x6025;&#x670d;&#x52a1;</option>
+                <option value="research-monitoring">&#x7814;&#x7a76;&#x76d1;&#x6d4b;</option>
+                <option value="renewable-energy">&#x53ef;&#x518d;&#x751f;&#x80fd;&#x6e90;</option>
+                <option value="housing">&#x5c45;&#x4f4f;&#x8bbe;&#x65bd;</option>
+                <option value="commercial-service">&#x5546;&#x4e1a;&#x670d;&#x52a1;</option>
+              </select>
+            </label>
+            <label>
+              &#x533a;&#x5757;&#x5c3a;&#x5ea6;
+              <input id="block3DScale" type="number" min="0.5" max="3" step="0.1" value="1" />
+            </label>
+            <label>
+              &#x63a8;&#x8350;&#x9636;&#x6570;
+              <select id="block3DRecommendationRanks">
+                <option value="1" selected>Top 1</option>
+                <option value="2">Top 2</option>
+                <option value="3">Top 3</option>
+              </select>
+            </label>
+            <label>
+              &#x6700;&#x4f4e;&#x9002;&#x914d;
+              <input id="block3DRecommendationMinScore" type="number" min="0.4" max="0.95" step="0.05" value="0.5" />
+            </label>
+            <label>
+              &#x65b9;&#x6848;&#x5bb9;&#x91cf;
+              <select id="block3DAdaptivePlanLimit">
+                <option value="24">24</option>
+                <option value="48" selected>48</option>
+                <option value="96">96</option>
+              </select>
+            </label>
+            <label>
+              &#x65f6;&#x5e8f;&#x9636;&#x6bb5;
+              <select id="block3DAdaptivePlanPhaseStep">
+                <option value="all" selected>&#x5168;&#x90e8;</option>
+                <option value="phase-1-critical-network">&#x4e00;&#x671f;</option>
+                <option value="phase-2-service-completion">&#x4e8c;&#x671f;</option>
+                <option value="phase-3-adaptation-buffer">&#x4e09;&#x671f;</option>
+                <option value="phase-4-monitoring-fill">&#x56db;&#x671f;</option>
+              </select>
+            </label>
+            <label>
+              &#x65f6;&#x5e8f;&#x6a21;&#x5f0f;
+              <select id="block3DAdaptivePlanPhaseMode">
+                <option value="current" selected>&#x5355;&#x671f;</option>
+                <option value="cumulative">&#x7d2f;&#x8ba1;&#x5efa;&#x6210;</option>
+              </select>
+            </label>
+          </div>
+          <div class="magnifier-wrap">
+            <canvas id="magnifierCanvas" width="180" height="180"></canvas>
+            <strong id="magnifierLabel">局部放大</strong>
+          </div>
+          <div class="brush-bar">
+            <select id="brushMode" aria-label="地形编辑模式">
+              <option value="raise">抬升</option>
+              <option value="lower">削低</option>
+              <option value="smooth">平滑</option>
+              <option value="roughen">粗糙化</option>
+            </select>
+            <label>
+              半径
+              <input id="brushRadius" type="range" min="2" max="28" step="1" value="10" />
+            </label>
+            <label>
+              强度
+              <input id="brushPower" type="range" min="1" max="80" step="1" value="24" />
+            </label>
+          </div>
+          <div class="readout" id="cellReadout">指针悬停后显示单元格数据</div>
+        </section>
+
+        <section class="panel-section" id="drawer-export" data-drawer="export" role="tabpanel">
+          <div class="section-title">
+            <h2>导出</h2>
+            <span id="runtimeLabel">-- ms</span>
+          </div>
+          <div class="button-row">
+            <button id="exportInfrastructureSuitabilityMatrix">&#x8bbe;&#x65bd;&#x9002;&#x914d; JSON</button>
+            <button id="exportInfrastructureSuitabilityMatrixCSV">&#x8bbe;&#x65bd;&#x9002;&#x914d; CSV</button>
+          </div>
+          <div class="field-grid">
+            <label>
+              精细窗口
+              <select id="localWindowCells">
+                <option value="17" selected>17 × 17 源格</option>
+                <option value="33">33 × 33 源格</option>
+                <option value="65">65 × 65 源格</option>
+              </select>
+            </label>
+            <label>
+              亚格倍率
+              <select id="localRefinementFactor">
+                <option value="8">8×</option>
+                <option value="16" selected>16×</option>
+                <option value="32">32×</option>
+                <option value="64">64×</option>
+              </select>
+            </label>
+            <label>
+              地下剖面
+              <select id="subsurfaceTransectMode">
+                <option value="west-east" selected>西东中心线</option>
+                <option value="north-south">南北中心线</option>
+                <option value="northwest-southeast">西北-东南</option>
+                <option value="southwest-northeast">西南-东北</option>
+              </select>
+            </label>
+            <label>
+              剖面采样
+              <select id="subsurfaceTransectSamples">
+                <option value="17">17 列</option>
+                <option value="33" selected>33 列</option>
+                <option value="65">65 列</option>
+                <option value="129">129 列</option>
+              </select>
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="exportGeoJSON">河网 GeoJSON</button>
+            <button id="exportCSV">格网 CSV</button>
+            <button id="exportSubsurfaceVoxels">地下体素 CSV</button>
+            <button id="exportSubsurfaceCubeLedger">地下立方账本 CSV</button>
+            <button id="exportSubsurfaceColumnReasoning">地下柱体推理 CSV</button>
+            <button id="exportSubsurfaceTransect">地下剖面 CSV</button>
+            <button id="exportLocalRefinement">局部精细 CSV</button>
+            <button id="exportWatershed">流域圈定 JSON</button>
+            <button id="exportWatershedCSV">流域格网 CSV</button>
+            <button id="exportResearchAudit">科研审计 JSON</button>
+            <button id="exportResearchAuditCSV">科研审计 CSV</button>
+            <button id="exportSpatialAlignment">空间对齐 CSV</button>
+            <button id="exportTerrainProcessAudit">地貌过程 JSON</button>
+            <button id="exportTerrainProcessAuditCSV">地貌过程 CSV</button>
+            <button id="exportResearchValidation">科研门控 JSON</button>
+            <button id="exportResearchValidationCSV">科研门控 CSV</button>
+            <button id="exportInfrastructureAtlas">设施影响 JSON</button>
+            <button id="exportInfrastructureAtlasCSV">设施影响 CSV</button>
+            <button id="exportInfrastructureBlockState">设施区块 JSON</button>
+            <button id="exportInfrastructureBlockStateCSV">设施区块 CSV</button>
+            <button id="exportInfrastructureCellPlacement">&#x8bbe;&#x65bd;&#x5355;&#x5143; JSON</button>
+            <button id="exportInfrastructureCellPlacementCSV">&#x8bbe;&#x65bd;&#x5355;&#x5143; CSV</button>
+            <button id="exportBlockDetailAtlas">&#x533a;&#x5757;&#x7ec6;&#x8282; JSON</button>
+            <button id="exportBlockDetailAtlasCSV">&#x533a;&#x5757;&#x7ec6;&#x8282; CSV</button>
+            <button id="exportBuiltResilience">建筑韧性 JSON</button>
+            <button id="exportBuiltResilienceCSV">建筑韧性 CSV</button>
+            <button id="exportBuiltRecovery">建筑恢复 JSON</button>
+            <button id="exportBuiltRecoveryCSV">建筑恢复 CSV</button>
+          </div>
+          <div class="button-row">
+            <button id="exportSettings">参数 JSON</button>
+            <button id="exportQualityReport">质量报告</button>
+          </div>
+          <div class="button-row">
+            <button id="toggleRivers" aria-pressed="true">河流显示</button>
+            <button id="toggleVegetation" aria-pressed="true">植被显示</button>
+          </div>
+          <div class="button-row">
+            <button id="exportDataSchema">数据模板</button>
+            <button id="exportHazardEvent">灾害事件 JSON</button>
+            <button id="exportTimeSeries">时间序列 CSV</button>
+            <button id="exportPhysicalTimeSeries">物理时间 JSON</button>
+            <button id="exportPhysicalTimeSeriesCSV">物理时间 CSV</button>
+            <button id="exportUncertaintyReport">不确定性集合</button>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
