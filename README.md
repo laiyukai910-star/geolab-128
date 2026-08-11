@@ -49,7 +49,7 @@ The Electron build starts a local server and prefers a high-performance GPU, har
 
 ## Your First Scenario in Five Steps
 
-The current in-app interface is localized in Simplified Chinese. English names below include the visible Chinese labels so global users can follow the workflow without guesswork.
+The interface defaults to English and includes an English / Simplified Chinese selector at the top of the right-side drawer. The Chinese labels below remain as a cross-reference for existing local users.
 
 ### 1. Set the study extent and terrain baseline
 

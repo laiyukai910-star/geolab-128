@@ -314,6 +314,28 @@ input[type="range"] {
   font-size: 20px;
 }
 
+.drawer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.language-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.language-control select {
+  width: 84px;
+  height: 30px;
+  padding: 0 6px;
+  color: var(--text);
+  font-size: 11px;
+}
+
 .panel-section {
   display: none;
   min-height: calc(100vh - 64px);
