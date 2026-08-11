@@ -1,6 +1,6 @@
 {
   "name": "geolab-128-local",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "GeoLab 128 offline GPU desktop runtime",
   "main": "main.cjs",
