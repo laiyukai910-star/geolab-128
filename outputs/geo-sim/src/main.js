@@ -76,6 +76,9 @@ import {
   CONTINENT_TEMPLATES,
   getContinentTemplate
 } from "./continentTemplates.js";
+import { setupLocalization } from "./localization.js";
+
+setupLocalization();
 
 const APP_BOOT_STARTED_AT = performance.now();
 let lastWorkerTransferDiagnostics = null;

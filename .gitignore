@@ -3,6 +3,7 @@ work/
 
 outputs/GeoLab-128-Local/
 outputs/GeoLab-128-Portable/
+outputs/GeoLab-128-Portable-Rebuilt/
 outputs/geo-sim-desktop/node_modules/
 
 .DS_Store
