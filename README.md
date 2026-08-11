@@ -2,146 +2,132 @@
 
 ![GeoLab 128 preview](outputs/geo-sim/preview.png)
 
-GeoLab 128 is a local, GPU-accelerated 3D geographic simulation sandbox. It brings terrain, climate, wind, hydrology, vegetation, ecological blocks, built infrastructure, and wildlife communities into one interactive scene for regional scenario exploration and visualization.
+> A local, GPU-accelerated 3D geographic simulation prototype for teaching, exploration, and transparent scenario discussion.
 
-The default scene covers `128 km × 128 km`. You can switch to a smaller local sandbox or a `256 km × 256 km` regional extent. Core rendering and modeling run offline, while the application provides data import, surface editing, ecology releases, diagnostics, and exports.
+[![CI](https://github.com/laiyukai910-star/geolab-128/actions/workflows/ci.yml/badge.svg)](https://github.com/laiyukai910-star/geolab-128/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/github/v/tag/laiyukai910-star/geolab-128?label=version)](https://github.com/laiyukai910-star/geolab-128/tags)
 
-> [!IMPORTANT]
-> GeoLab 128 is intended for teaching, option comparison, and exploratory scenarios. For research or engineering decisions, import quality-controlled DEM, river-network, land-cover, soil, and meteorological data, then perform independent calibration and professional review. Procedural terrain is not a measured dataset.
+GeoLab 128 combines terrain, climate, wind, hydrology, vegetation, ecological blocks, built infrastructure, and wildlife communities in an offline interactive scene. It is designed to help learners and practitioners ask better geographic questions, compare assumptions, and inspect scenario consequences.
 
-## Capabilities
+## Project Position
 
-| Area | What it provides |
+**GeoLab 128 is a teaching and exploratory prototype, not a validated prediction system.** Procedural terrain and model outputs are useful for visualization, hypothesis formation, and workflow demonstration. They are not measured observations, engineering designs, hazard forecasts, or a substitute for professional judgment.
+
+The project is deliberately evolving toward a stronger validation framework. That work will proceed incrementally through documented input provenance, reproducible benchmark cases, calibration workflows, uncertainty reporting, regression tests, and independent review. Until a module is explicitly validated for a stated use case, it should be treated as exploratory.
+
+For research, planning, or engineering use, import quality-controlled DEM, hydrography, land cover, soil, meteorological, and observed-flow data; calibrate against an appropriate reference period; assess uncertainty; and obtain domain review.
+
+## What It Can Do Today
+
+| Area | Current capability |
 | --- | --- |
-| Terrain and subsurface | Square areas from 8 to 256 km; elevations up to 10,000 m; local refinement up to 4096 × 4096 cells; surface, transect, subsurface-solid, and volume-ledger views. |
-| Climate and wind | Temperature, humidity, latitude, lapse rate, wind direction, wind speed, and terrain exposure are coupled through orographic and rain-shadow approximations. |
-| Hydrology and landforms | Priority-Flood depression handling, D8/MFD/D∞ flow routing, river extraction, runoff, erosion, deposition, flood, drought, and landslide-risk layers. |
-| Built infrastructure | Add high-rises, apartments, villas, industry, civic buildings, landmarks, transport, and water infrastructure at selected blocks or map positions. Environmental suitability and land-surface feedback are evaluated automatically. |
-| Ecosystems | 36 regional wildlife species, 7 ecological functional guilds, carrying capacity, habitat suitability, migration corridors, food webs, and batch wildlife release scenarios. |
-| 3D assets | 109 internal semantic procedural asset types for rock, vegetation, building facades, water infrastructure, energy, transport, and animal anatomy. No online model service is required. |
-| Templates and source data | 15 global and regional templates couple terrain, climate, wind, hydrology, vegetation, and regional fauna. External DEM, soil, land-cover, vegetation, weather, and river-network data are supported. |
-| Export and audit | Export GeoJSON, CSV, parameters, quality reports, sensitivity analysis, and block, infrastructure, or subsurface diagnostics. |
+| Terrain and subsurface | Square study areas from 8 to 256 km, elevations to 10,000 m, local refinement to 4096 × 4096 cells, surface and subsurface inspection views. |
+| Climate and wind | Interactive temperature, humidity, latitude, lapse-rate, wind, and terrain-exposure parameters with orographic and rain-shadow approximations. |
+| Hydrology and landforms | Priority-Flood handling, D8/MFD/D∞ routing, river extraction, runoff, erosion, deposition, and screening-level hazard layers. |
+| Built environment | Place infrastructure in selected areas; inspect suitability, imperviousness, drainage, vegetation, heat, and hazard feedback. |
+| Ecosystems | Regional wildlife sets, functional guilds, habitat suitability, carrying-capacity proxies, migration corridors, food webs, and batch releases. |
+| Data and exports | Import selected data layers and export GeoJSON, CSV, parameters, quality reports, and diagnostics. |
+
+## Validation Status
+
+### Demonstrated
+
+- Offline Three.js scene and Electron desktop runtime load without an online model service.
+- `109/109` internal procedural-asset factories build successfully.
+- Browser checks cover script loading, language switching, and desktop/mobile horizontal overflow.
+- Source-data audit and quality-gate exports can record when required inputs are absent.
+
+### Not Yet Validated
+
+- Procedural DEMs do not represent a surveyed landscape.
+- Hydrology, erosion, climate, ecology, and hazard outputs are not calibrated forecasts.
+- D∞ flow routing is a continuous-slope approximation, not a complete two-dimensional hydraulic solver.
+- Facility suitability and wildlife dynamics are scenario heuristics, not planning approvals or population assessments.
+
+See the [technical documentation](outputs/geo-sim/README.md) for algorithms, supported inputs, and quality gates.
 
 ## Quick Start
 
-### Run the web application
+### Web application
 
-Prerequisite: Python 3 or any static HTTP server.
+Prerequisite: Python 3 or another static HTTP server.
 
 ```powershell
 cd outputs/geo-sim
 python -m http.server 4174
 ```
 
-Open <http://127.0.0.1:4174/>. The first load generates the default scene. A desktop browser with WebGL2 and a discrete GPU is recommended.
+Open <http://127.0.0.1:4174/>. The interface defaults to English; use the language selector at the top of the right-side drawer for Simplified Chinese.
 
-### Run the desktop application
+### Desktop application
 
 Prerequisite: Node.js 20+ and npm.
 
 ```powershell
 cd outputs/geo-sim-desktop
-npm install
+npm ci
 npm run start
 ```
 
-The Electron build starts a local server and prefers a high-performance GPU, hardware WebGL, GPU rasterization, and local offline resources.
+The Electron runtime prefers a high-performance GPU, hardware WebGL, GPU rasterization, and local resources.
 
-## Your First Scenario in Five Steps
+## Typical Workflow
 
-The interface defaults to English and includes an English / Simplified Chinese selector at the top of the right-side drawer. The Chinese labels below remain as a cross-reference for existing local users.
+1. Set study extent, seed, continental template, and terrain baseline in **Terrain**.
+2. Adjust natural conditions in **Weather** and **Hydrology**, then rerun the scenario.
+3. Add or import surface and infrastructure data in **Data**.
+4. Inspect ecological, hydrological, infrastructure, and hazard layers in **Layers**.
+5. Export parameters, source audit, diagnostics, and results together so another person can understand the scenario assumptions.
 
-### 1. Set the study extent and terrain baseline
+Change one major assumption at a time when comparing scenarios. Record input origin and use the quality report before presenting any result.
 
-1. Open the **Terrain** drawer (`地形`) on the right rail.
-2. Select an extent from 8 to 256 km. The default 128 km extent is useful for watershed- or metropolitan-scale scenarios.
-3. Choose a DEM resolution. Start with 256² for exploration, then use local refinement when a smaller area needs closer inspection.
-4. Select a geomorphology preset, scenic preset, or continental template, then apply it to rebuild the scene.
-5. Use the terrain brush to add ridges, valleys, or engineered disturbance. Brush radius and strength use sliders; all other model conditions are direct numeric fields.
+## Data and Responsible Use
 
-### 2. Configure natural conditions
+Imported data constrains the corresponding model layer. Runs without DEM, soil, weather, river-network, or calibration data are explicitly demonstration-grade. This distinction is intentional and should remain visible in downstream work.
 
-Enter temperature, humidity, wind direction, wind speed, precipitation, permeability, and hydrologic thresholds in the **Weather** (`气象`) and **Hydrology** (`水文`) drawers. A rerun updates:
+Do not use GeoLab 128 outputs as the sole basis for emergency response, safety-critical design, land-use approval, investment, legal determination, or wildlife-management decisions.
 
-- windward and leeward precipitation differences;
-- local wind fields, terrain exposure, and canopy roughness;
-- runoff, accumulation, channels, wetness, and erosion risk;
-- time-dependent flood, drought, wildfire, and landslide layers.
+## Roadmap Toward Validation
 
-The 15 templates are useful starting points, including East Asian monsoon, Alpine Europe, Andes-Amazon, African Rift savanna, Australian interior/coast, and Antarctic plateau. A template is a parameter set, not a ready-made real-world dataset.
+The continuing goal is not to claim certainty early; it is to make every claim inspectable.
 
-### 3. Add infrastructure and assess its fit
+1. Define benchmark study cases and expected diagnostic ranges for each module.
+2. Add reproducible input manifests, spatial-reference checks, and data-quality assertions.
+3. Publish calibration and holdout-validation workflows for hydrology and climate-dependent layers.
+4. Report uncertainty and sensitivity alongside each exported scenario.
+5. Expand automated regression, performance, and visual tests.
+6. Invite domain review and document the domain, data, and validity range for each validated feature.
 
-1. Open the **Data** drawer (`数据`) and locate **Manual infrastructure** (`手工人造设施`).
-2. Select a map area or enter a location, influence radius, and facility type.
-3. Set building height, floors, density, and landmark height, then add the feature.
-4. Inspect feedback to imperviousness, roughness, retention, urban heat, water demand, vegetation, and hazard layers.
+Current detailed handoff priorities are in [NEXT_STEPS.md](outputs/geo-sim/NEXT_STEPS.md).
 
-Facilities are not rendered as a single colored block. High-rises, apartment buildings, villas, industry, civic facilities, and landmarks use distinct procedural components such as podiums, roofs, facade bands, window grids, balconies, railings, mechanical equipment, service yards, and flood-, slope-, or drainage-adaptation details.
-
-### 4. Build an ecological scenario and release wildlife
-
-1. Open the **Layers** drawer (`图层`) and enable the ecology and wildlife 3D layers.
-2. Choose a species, batch size, and target habitat. You may also target a specific block ID.
-3. Use **Add release batch** (`加入投放批次`) to queue multiple batches, then choose **Execute all batches** (`执行全部批次`).
-4. Review survival rate, active species, food-web links, trophic balance, and limiting ecological functions.
-
-Wildlife is rendered in anatomy-part batches: torso, head, neck, legs, wings, horns, tusks, tails, and related parts share instanced meshes. This preserves visible species differences without duplicating a complete mesh set for every individual.
-
-### 5. Inspect, compare, and export
-
-Use the **Layers** drawer to switch between elevation, slope, hydrology, rivers, wind, ecological connectivity, infrastructure impact, and hazard views. The **Export** drawer (`导出`) can produce:
-
-- GeoJSON river networks, watershed boundaries, and infrastructure geometry;
-- CSV grids, subsurface volumes, time series, infrastructure suitability, and ecological diagnostics;
-- current parameters, quality gates, source-data audits, and uncertainty reports.
-
-For clean scenario comparison, change one major condition at a time and export the parameters and report before beginning the next run.
-
-## Data Import and Model Confidence
-
-The application accepts DEM, soil HSG, land cover, vegetation cover/canopy height, weather boundary fields, observed river networks, infrastructure GeoJSON, and calibration CSV/JSON. Imported data takes priority as a constraint for the corresponding model layer.
-
-Runs without DEM, soil, weather, river-network, or calibration data are explicitly treated as demonstration-grade scenarios. This is intentional: it prevents procedural output from being presented as a validated research or engineering result.
-
-See the [web application technical documentation](outputs/geo-sim/README.md) for detailed formats, algorithms, and quality gates.
-
-## Performance and Display Guidance
-
-- For general exploration, use a 128 km extent, 256² DEM, and the default 3D detail level.
-- To inspect building appearance, switch to a 16 or 32 km extent and move the camera closer.
-- For high-detail inspection, use local refinement instead of starting with the largest grid across the entire map.
-- The wildlife 3D layer is on demand. You can tune ecological rules first, then enable animal meshes when you want to inspect the visual result.
-- The desktop build was validated on an NVIDIA RTX GPU through WebGL2/D3D11. Actual frame rate depends on extent, resolution, visible instances, and available graphics hardware.
-
-## Build Offline Applications
+## Development
 
 ```powershell
 cd outputs/geo-sim-desktop
+npm ci
+npm run vendor
+```
+
+The basic CI workflow performs JavaScript syntax checks and verifies the local application entry points. Packaging is intentionally not run on every pull request because it is platform-specific and significantly heavier.
+
+For offline packages:
+
+```powershell
 npm run package:win
 npm run package:portable
 ```
 
-Directory and portable builds are written to `outputs/GeoLab-128-Local` and `outputs/GeoLab-128-Portable`. They are local build artifacts and are intentionally excluded from Git.
+Artifacts are written beneath `outputs/GeoLab-128-Local` and `outputs/GeoLab-128-Portable` and are intentionally excluded from Git.
 
-## Repository Layout
+## Contributing
 
-| Path | Purpose |
-| --- | --- |
-| `outputs/geo-sim` | Three.js web application, offline resources, and technical documentation |
-| `outputs/geo-sim/src/geoEngine.js` | Terrain, hydrology, climate, hazards, export, and source-data quality logic |
-| `outputs/geo-sim/src/terrainRenderer.js` | Three.js scene, instanced rendering, 3D layers, and GPU diagnostics |
-| `outputs/geo-sim/src/proceduralAssets.js` | Factory for 109 semantic procedural asset types |
-| `outputs/geo-sim/src/landscapeEcology.js` | Wildlife, ecological blocks, food webs, migration, and release simulation |
-| `outputs/geo-sim/src/continentTemplates.js` | Continental and regional parameter templates |
-| `outputs/geo-sim-desktop` | Electron desktop wrapper and packaging scripts |
-| `outputs/本地运行说明.txt` | Windows local-run notes in Simplified Chinese |
+Contributions are welcome, especially improvements that make assumptions, data provenance, validation limits, or accessibility clearer. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull request.
 
-## Validation Status
+## Versioning and Releases
 
-The current version has passed the following checks:
+GeoLab 128 follows semantic versioning while it is pre-1.0: minor releases may add or materially change exploratory behavior; patch releases fix documented behavior. `v0.1.0` establishes the public teaching-prototype baseline. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-- all `109/109` procedural asset factories build successfully;
-- desktop and mobile browser regression checks report no script errors or mobile horizontal overflow;
-- batch release, regional species filtering, instanced wildlife rendering, and continental-template coupling passed interaction tests;
-- both directory and single-file portable desktop builds passed offline smoke tests with no external resource requests.
+## License
+
+GeoLab 128 is released under the [MIT License](LICENSE).
