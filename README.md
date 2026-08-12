@@ -2,50 +2,62 @@
 
 ![GeoLab 128 preview](outputs/geo-sim/preview.png)
 
-> A local, GPU-accelerated 3D geographic simulation prototype for teaching, exploration, and transparent scenario discussion.
+> An interactive geographic systems laboratory for authoring, running, inspecting, and documenting coupled regional scenarios.
 
 [![CI](https://github.com/laiyukai910-star/geolab-128/actions/workflows/ci.yml/badge.svg)](https://github.com/laiyukai910-star/geolab-128/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/github/v/tag/laiyukai910-star/geolab-128?label=version)](https://github.com/laiyukai910-star/geolab-128/tags)
 
-GeoLab 128 combines terrain, climate, wind, hydrology, vegetation, ecological blocks, built infrastructure, and wildlife communities in an offline interactive scene. It is designed to help learners and practitioners ask better geographic questions, compare assumptions, and inspect scenario consequences.
+GeoLab 128 is built around a simple question: **when terrain, weather, water, ecosystems, the subsurface, and human interventions are changed together, how should their spatial relationships be explored and made legible?**
 
-## Project Position
+The project provides a local, editable regional sandbox in which a user can construct a scenario, alter its conditions, trace coupled effects across multiple spatial representations, and export the assumptions and diagnostics with the result. Real-time 3D rendering and GPU acceleration support that experience; they are implementation details, not the purpose of the project.
 
-**GeoLab 128 is a teaching and exploratory prototype, not a validated prediction system.** Procedural terrain and model outputs are useful for visualization, hypothesis formation, and workflow demonstration. They are not measured observations, engineering designs, hazard forecasts, or a substitute for professional judgment.
+## Core Idea
 
-The project is deliberately evolving toward a stronger validation framework. That work will proceed incrementally through documented input provenance, reproducible benchmark cases, calibration workflows, uncertainty reporting, regression tests, and independent review. Until a module is explicitly validated for a stated use case, it should be treated as exploratory.
+GeoLab 128 treats a study area as a connected geographic system rather than a display of separate layers.
 
-For research, planning, or engineering use, import quality-controlled DEM, hydrography, land cover, soil, meteorological, and observed-flow data; calibrate against an appropriate reference period; assess uncertainty; and obtain domain review.
+- **Author a state:** define extent, terrain, climate boundary conditions, soils, water-routing rules, vegetation, subsurface structure, facilities, and species.
+- **Run coupled rules:** let terrain exposure, runoff, routing, erosion, inundation proxies, habitat conditions, infrastructure effects, and time-dependent pressures respond together.
+- **Inspect at several representations:** move between raster terrain, ecological blocks, facility footprints, 3D scene elements, cross-sections, and subsurface volumes.
+- **Keep the scenario accountable:** preserve parameters, imported-data provenance, quality gates, diagnostics, and exports alongside the visualization.
 
-## What It Can Do Today
+This makes GeoLab 128 a geographic reasoning environment: useful for teaching systems thinking, comparing design options, communicating hypotheses, and exposing which assumptions drive a result.
 
-| Area | Current capability |
+## Scope and Professional Boundary
+
+**GeoLab 128 is currently a teaching and exploratory prototype. It is not a validated predictive system.** Its procedural surfaces and model responses may support visualization, hypothesis formation, and workflow design; they are not observations, site surveys, engineering designs, hazard forecasts, ecological assessments, or professional advice.
+
+The project is intentionally moving toward a stronger validation framework. That work will be explicit and incremental: documented input provenance, reproducible benchmarks, calibration workflows, holdout tests, uncertainty reporting, regression coverage, and domain review. A component should be considered exploratory until it is documented as validated for a specific domain, scale, data regime, and decision context.
+
+For research, planning, or engineering work, use quality-controlled source data, calibrate against an appropriate reference period, assess uncertainty, and obtain qualified domain review. GeoLab 128 must not be the sole basis for emergency response, safety-critical design, land-use approval, investment, legal determination, or wildlife-management decisions.
+
+## System Capabilities
+
+| System | Current exploratory capability |
 | --- | --- |
-| Terrain and subsurface | Square study areas from 8 to 256 km, elevations to 10,000 m, local refinement to 4096 × 4096 cells, surface and subsurface inspection views. |
-| Climate and wind | Interactive temperature, humidity, latitude, lapse-rate, wind, and terrain-exposure parameters with orographic and rain-shadow approximations. |
-| Hydrology and landforms | Priority-Flood handling, D8/MFD/D∞ routing, river extraction, runoff, erosion, deposition, and screening-level hazard layers. |
-| Built environment | Place infrastructure in selected areas; inspect suitability, imperviousness, drainage, vegetation, heat, and hazard feedback. |
-| Ecosystems | Regional wildlife sets, functional guilds, habitat suitability, carrying-capacity proxies, migration corridors, food webs, and batch releases. |
-| Data and exports | Import selected data layers and export GeoJSON, CSV, parameters, quality reports, and diagnostics. |
+| Spatial domain | Square study areas from 8 to 256 km; terrain refinement to 4096 × 4096 cells; surface, transect, solid-subsurface, and volume-ledger representations. |
+| Terrain and geomorphology | Procedural terrain, editable landform operations, continental templates, elevation up to 10,000 m, and terrain-derived exposure and roughness. |
+| Climate and wind | Editable temperature, humidity, latitude, lapse rate, wind direction, wind speed, and terrain-exposure conditions with orographic and rain-shadow approximations. |
+| Water and landform response | Priority-Flood handling, D8/MFD/D∞ routing, river extraction, runoff, erosion, deposition, and screening-level flood, drought, wildfire, and slope-risk indicators. |
+| Ecology | Habitat and block conditions, functional guilds, carrying-capacity proxies, movement corridors, food-web relationships, and batch wildlife-release scenarios. |
+| Built environment | Area-aware placement of buildings, transport, utilities, water infrastructure, civic facilities, and landmarks with environmental-suitability and land-surface feedback. |
+| Evidence and interchange | Selected data imports plus GeoJSON, CSV, parameters, source audits, quality gates, diagnostics, and scenario exports. |
 
-## Validation Status
+## What Has Been Demonstrated
 
-### Demonstrated
-
-- Offline Three.js scene and Electron desktop runtime load without an online model service.
+- The offline Three.js scene and Electron desktop runtime operate without an online model service.
 - `109/109` internal procedural-asset factories build successfully.
-- Browser checks cover script loading, language switching, and desktop/mobile horizontal overflow.
-- Source-data audit and quality-gate exports can record when required inputs are absent.
+- Browser checks cover source loading, language switching, and desktop/mobile horizontal overflow.
+- Source audits and quality gates record when important data constraints or calibration inputs are absent.
 
-### Not Yet Validated
+## What Remains Unvalidated
 
-- Procedural DEMs do not represent a surveyed landscape.
-- Hydrology, erosion, climate, ecology, and hazard outputs are not calibrated forecasts.
-- D∞ flow routing is a continuous-slope approximation, not a complete two-dimensional hydraulic solver.
-- Facility suitability and wildlife dynamics are scenario heuristics, not planning approvals or population assessments.
+- A procedural DEM is not a surveyed landscape.
+- Climate, hydrology, erosion, ecology, and hazard responses are not calibrated forecasts.
+- D∞ routing is a continuous-slope approximation, not a complete two-dimensional hydraulic model.
+- Facility suitability and wildlife dynamics are scenario heuristics, not approvals, population assessments, or management recommendations.
 
-See the [technical documentation](outputs/geo-sim/README.md) for algorithms, supported inputs, and quality gates.
+Detailed algorithms, input formats, and quality-gate behavior are documented in the [technical guide](outputs/geo-sim/README.md).
 
 ## Quick Start
 
@@ -58,7 +70,7 @@ cd outputs/geo-sim
 python -m http.server 4174
 ```
 
-Open <http://127.0.0.1:4174/>. The interface defaults to English; use the language selector at the top of the right-side drawer for Simplified Chinese.
+Open <http://127.0.0.1:4174/>. The interface defaults to English; the top of the right-side drawer includes a Simplified Chinese language switch.
 
 ### Desktop application
 
@@ -70,36 +82,30 @@ npm ci
 npm run start
 ```
 
-The Electron runtime prefers a high-performance GPU, hardware WebGL, GPU rasterization, and local resources.
+The desktop runtime is local-first and can use hardware-accelerated WebGL where the host system provides it.
 
-## Typical Workflow
+## Working With a Scenario
 
-1. Set study extent, seed, continental template, and terrain baseline in **Terrain**.
-2. Adjust natural conditions in **Weather** and **Hydrology**, then rerun the scenario.
-3. Add or import surface and infrastructure data in **Data**.
-4. Inspect ecological, hydrological, infrastructure, and hazard layers in **Layers**.
-5. Export parameters, source audit, diagnostics, and results together so another person can understand the scenario assumptions.
+1. Establish the spatial domain, terrain baseline, and regional template in **Terrain**.
+2. Define weather, climate, hydrogeologic, and routing conditions in **Weather** and **Hydrology**.
+3. Add, import, or remove surface and built-environment interventions in **Data**.
+4. Inspect terrain, water, ecosystem, infrastructure, and hazard representations in **Layers**.
+5. Export the result with its parameters, input provenance, diagnostics, and quality report.
 
-Change one major assumption at a time when comparing scenarios. Record input origin and use the quality report before presenting any result.
+For comparisons, change one major condition at a time. A visually compelling result is not enough: record what was assumed, what data constrained it, and what remained unconstrained.
 
-## Data and Responsible Use
+## Validation Roadmap
 
-Imported data constrains the corresponding model layer. Runs without DEM, soil, weather, river-network, or calibration data are explicitly demonstration-grade. This distinction is intentional and should remain visible in downstream work.
+The long-term aim is not to imply certainty before it exists. It is to make model behavior inspectable, testable, and progressively more defensible.
 
-Do not use GeoLab 128 outputs as the sole basis for emergency response, safety-critical design, land-use approval, investment, legal determination, or wildlife-management decisions.
+1. Establish benchmark study cases and expected diagnostic ranges for each system.
+2. Add reproducible input manifests, spatial-reference checks, unit validation, and data-quality assertions.
+3. Publish calibration and holdout-validation workflows for hydrology and climate-dependent components.
+4. Report sensitivity and uncertainty with every scenario export.
+5. Expand automated numerical, visual, interaction, and performance regression coverage.
+6. Document the domain, evidence, and validity range of each feature that reaches a validated state.
 
-## Roadmap Toward Validation
-
-The continuing goal is not to claim certainty early; it is to make every claim inspectable.
-
-1. Define benchmark study cases and expected diagnostic ranges for each module.
-2. Add reproducible input manifests, spatial-reference checks, and data-quality assertions.
-3. Publish calibration and holdout-validation workflows for hydrology and climate-dependent layers.
-4. Report uncertainty and sensitivity alongside each exported scenario.
-5. Expand automated regression, performance, and visual tests.
-6. Invite domain review and document the domain, data, and validity range for each validated feature.
-
-Current detailed handoff priorities are in [NEXT_STEPS.md](outputs/geo-sim/NEXT_STEPS.md).
+The current technical handoff list is in [NEXT_STEPS.md](outputs/geo-sim/NEXT_STEPS.md).
 
 ## Development
 
@@ -109,25 +115,21 @@ npm ci
 npm run vendor
 ```
 
-The basic CI workflow performs JavaScript syntax checks and verifies the local application entry points. Packaging is intentionally not run on every pull request because it is platform-specific and significantly heavier.
+The base CI workflow installs the desktop dependencies, checks JavaScript syntax, and verifies application entry points. It intentionally does not package every pull request because desktop packaging is platform-specific and substantially heavier.
 
-For offline packages:
+For local offline packages:
 
 ```powershell
 npm run package:win
 npm run package:portable
 ```
 
-Artifacts are written beneath `outputs/GeoLab-128-Local` and `outputs/GeoLab-128-Portable` and are intentionally excluded from Git.
+Artifacts are written beneath `outputs/GeoLab-128-Local` and `outputs/GeoLab-128-Portable`; they are excluded from Git.
 
 ## Contributing
 
-Contributions are welcome, especially improvements that make assumptions, data provenance, validation limits, or accessibility clearer. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull request.
+Contributions that improve geographic reasoning, reproducibility, validation, accessibility, performance, or documentation are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull request.
 
-## Versioning and Releases
+## Versioning and License
 
-GeoLab 128 follows semantic versioning while it is pre-1.0: minor releases may add or materially change exploratory behavior; patch releases fix documented behavior. `v0.1.0` establishes the public teaching-prototype baseline. See [CHANGELOG.md](CHANGELOG.md) for release notes.
-
-## License
-
-GeoLab 128 is released under the [MIT License](LICENSE).
+GeoLab 128 follows semantic versioning while pre-1.0. `v0.1.0` establishes the public exploratory-prototype baseline; see [CHANGELOG.md](CHANGELOG.md) for release notes. The project is released under the [MIT License](LICENSE).
