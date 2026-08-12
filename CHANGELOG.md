@@ -4,6 +4,10 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 
 ## [Unreleased]
 
+### Changed
+
+- Reframed the project documentation around GeoLab 128 as an interactive geographic systems laboratory; GPU acceleration is now described as a runtime capability rather than the project's defining value.
+
 ### Planned
 
 - Reproducible benchmark cases, calibration workflows, uncertainty reporting, and broader regression coverage.
