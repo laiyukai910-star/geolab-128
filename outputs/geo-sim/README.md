@@ -1,6 +1,6 @@
 # GeoLab 128 Browser Application
 
-This directory contains the English-first browser authoring environment, the exploratory JavaScript simulation engine, the Three.js renderer, local data adapters, and export workflows. The interface also includes a Simplified Chinese locale.
+This directory contains the English-first browser authoring environment, the exploratory simulation engine, the Three.js renderer, local data adapters, export workflows, and the typed bridge to the shared Rust kernel. The interface also includes a Simplified Chinese locale.
 
 For the public project overview, start with the repository [README](../../README.md). The independent computation contract is documented in the [Rust engine guide](../../engine/README.md).
 
@@ -14,7 +14,7 @@ npm ci
 npm start
 ```
 
-`npm start` compiles the Rust sidecar and launches Electron. The application, Three.js runtime, GeoTIFF reader, and computation service are local. Network access is only used by source-planning or source-checking workflows that the user explicitly starts.
+`npm start` type-checks and builds the browser bridge, compiles native and WASM Rust kernels, refreshes local dependencies, and launches Electron. The application, Three.js runtime, GeoTIFF reader, and computation paths are local. Network access is only used by source-planning or source-checking workflows that the user explicitly starts.
 
 For browser-only development:
 
@@ -23,7 +23,7 @@ cd outputs/geo-sim
 python -m http.server 5179 --bind 127.0.0.1
 ```
 
-Open <http://127.0.0.1:5179/>. To attach a manually started Rust service, append `?backend=http://127.0.0.1:48129`.
+Open <http://127.0.0.1:5179/>. The bundled Rust WASM Worker is used automatically. To override it with a manually started native Rust service, append `?backend=http://127.0.0.1:48129`.
 
 ## Application Structure
 
@@ -33,7 +33,10 @@ Open <http://127.0.0.1:5179/>. To attach a manually started Rust service, append
 | `src/main.js` | UI state, simulation lifecycle, inspection, reporting, and export commands. |
 | `src/geoEngine.js` | Browser terrain, climate, hydrology, subsurface, ecology, infrastructure, time, and hazard model. |
 | `src/terrainRenderer.js` | Three.js terrain, water, vegetation, wildlife, infrastructure, wind, hazard, and subsurface rendering. |
-| `src/backendClient.js` | Loopback-only Rust service discovery, bounded resampling, verification request, and independent comparison report. |
+| `src-ts/backendClient.ts` | Strict scenario types, bounded resampling, native/WASM selection, request control, and comparison reporting. |
+| `src-ts/wasmAbi.ts` | Validated Rust WASM memory ABI and JSON envelope decoding. |
+| `src-ts/rustKernelWorker.ts` | Off-main-thread Rust kernel loading and execution. |
+| `src/backendClient.js`, `src/wasmAbi.js`, `src/rustKernelWorker.js` | Generated browser modules; edit the TypeScript sources instead. |
 | `src/dataAdapters.js` | GeoTIFF, CSV, JSON, and GeoJSON parsing, unit normalization, bounds interpretation, and provenance. |
 | `src/physicalCoupling.js` | Cross-system conservation gates and directional coupling ledger. |
 | `src/landscapeEcology.js` | Habitat blocks, ecological connectivity, biodiversity, carrying capacity, and release screening. |
@@ -54,7 +57,7 @@ The browser engine supports:
 - multi-year vegetation, water, erosion, compound hazard, damage, and recovery scenarios;
 - source coverage, provenance, calibration, uncertainty, process gates, and interpretation boundaries.
 
-The Rust verification core independently resamples the current scenario to a bounded audit grid and recomputes terrain routing, period water balance, time-stepped groundwater storage and baseflow, transport-limited sediment accounting, and resistance-weighted habitat connectivity. The UI exposes gate counts and separate water, groundwater, and sediment residuals; the complete request and report can be exported as JSON.
+The Rust verification core independently resamples the current scenario to a bounded audit grid and recomputes terrain routing, period water balance, time-stepped groundwater storage and baseflow, transport-limited sediment accounting, and resistance-weighted habitat connectivity. Electron uses a native Rust process; the static application executes the same crate as WASM in a Worker. The UI exposes gate counts and separate water, groundwater, and sediment residuals; the complete request and report can be exported as JSON.
 
 ## Data Inputs
 

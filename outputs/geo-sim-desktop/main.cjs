@@ -7,6 +7,7 @@ const path = require("node:path");
 
 const smokeTestArgument = process.argv.find((argument) => argument.startsWith("--smoke-test="));
 const smokeTestPath = smokeTestArgument ? path.resolve(smokeTestArgument.slice("--smoke-test=".length)) : null;
+const disableNativeBackend = process.argv.includes("--disable-native-backend");
 const PREFERRED_LOCAL_PORT = 48128;
 const LOCAL_CACHE_MODE = "etag-revalidate";
 
@@ -34,6 +35,7 @@ const MIME_TYPES = {
   ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".wasm": "application/wasm",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -140,6 +142,9 @@ function computeBackendExecutable() {
 }
 
 function startComputeBackend() {
+  if (disableNativeBackend) {
+    return Promise.resolve({ status: "disabled", process: null, url: null, executable: null });
+  }
   const executable = computeBackendExecutable();
   if (!executable) return Promise.resolve({ status: "unavailable", process: null, url: null, executable: null });
   return new Promise((resolve, reject) => {
@@ -298,6 +303,7 @@ async function runSmokeTest(window, localUrl, externalRequests) {
       gpuPipelineWarmup: globalThis.__geoLabGpuPipelineWarmupStats || null,
       systemPriority: globalThis.__geoLabSystemPriorityStats || null,
       rustBackend: globalThis.__geoLabRustBackend ? {
+        transport: globalThis.__geoLabRustBackend.transport || null,
         requestId: globalThis.__geoLabRustBackend.requestId || null,
         engine: globalThis.__geoLabRustBackend.report?.engine || null,
         processIntegrityIndex: globalThis.__geoLabRustBackend.report?.summary?.processIntegrityIndex ?? null,
@@ -319,7 +325,7 @@ async function runSmokeTest(window, localUrl, externalRequests) {
       wildlife: globalThis.__geoLabWildlife3DStats || null,
       title: document.title
     }))()`);
-    const rustReady = computeBackend?.status !== "ready" || (
+    const rustReady = (
       pageState?.rustBackend?.engine === "geolab-core-rust" &&
       pageState?.rustBackend?.routingMethod === "multiple-flow-direction" &&
       pageState?.rustBackend?.failedGateCount === 0
@@ -336,11 +342,11 @@ async function runSmokeTest(window, localUrl, externalRequests) {
       pageState?.ready &&
       pageState?.render?.completed &&
       pageState?.gpuPipelineWarmup?.status === "ready" &&
-      (computeBackend?.status !== "ready" || (
+      (
         pageState?.rustBackend?.engine === "geolab-core-rust" &&
         pageState?.rustBackend?.routingMethod === "multiple-flow-direction" &&
         pageState?.rustBackend?.failedGateCount === 0
-      )) &&
+      ) &&
       priorityReady &&
       externalRequests.length === 0
     ),

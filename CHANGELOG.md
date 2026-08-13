@@ -6,6 +6,31 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-13
+
+### Added
+
+- Added `geolab-wasm`, a browser WebAssembly transport that executes the existing Rust terrain, routing, water, groundwater, sediment, ecology, and process-gate core without duplicating formulas.
+- Added an explicit allocation/simulation/capabilities/deallocation ABI with structured Rust validation errors and shared capability metadata for native and WASM transports.
+- Added a dedicated module Worker so static-browser Rust verification runs off the Three.js/UI thread.
+- Added strict TypeScript sources for scenario construction, transport selection, request lifecycle, WASM memory handling, and Worker messages, with generated ES modules kept as browser artifacts.
+- Added a cross-runtime test that instantiates the compiled WASM binary, transfers a real scenario, runs MFD and coupled process gates, and validates the resulting Rust report.
+
+### Changed
+
+- Static-browser mode now loads the bundled Rust kernel automatically; Electron continues to prefer its managed native Rust sidecar.
+- Desktop runtime preparation now builds TypeScript browser modules, Rust WASM, the native Rust service, and local vendor dependencies in one reproducible command.
+- Centralized routing, process, and output-layer capability declarations in `geolab-core` so native and browser transports cannot silently advertise different models.
+- Expanded CI to type-check TypeScript, compile the pinned WASM target, execute ABI tests, and verify both reviewed sources and generated runtime assets.
+- Documented a capability-driven migration policy: numerical kernels move to Rust, browser contracts move to TypeScript, and stable rendering/UI modules migrate only after their boundaries are isolated and tested.
+
+### Fixed
+
+- Removed the static-mode gap where Rust verification controls were disabled whenever no native HTTP endpoint was configured.
+- Corrected the verification comparison description to identify the active MFD routing path instead of the legacy D8-only wording.
+- Added the WebAssembly MIME type to the local Electron server so the kernel loads consistently without external hosting.
+- Preserved the project's null-safe Three.js shader diagnostics during local vendor refreshes so runtime preparation cannot reintroduce driver-dependent startup failures.
+
 ## [0.3.0] - 2026-08-13
 
 ### Added
@@ -105,7 +130,8 @@ This section is the preserved release history for the `v0.1.0` tag. It is not a 
 - This release establishes the public **teaching and exploratory prototype** baseline.
 - It does not claim calibrated or validated predictive performance.
 
-[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/laiyukai910-star/geolab-128/releases/tag/v0.1.0

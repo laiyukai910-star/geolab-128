@@ -20,7 +20,9 @@ jobs:
 
       - name: Set up Rust
         shell: bash
-        run: rustup toolchain install 1.96.0 --profile minimal --component clippy,rustfmt --no-self-update
+        run: |
+          rustup toolchain install 1.96.0 --profile minimal --component clippy,rustfmt --no-self-update
+          rustup target add wasm32-unknown-unknown --toolchain 1.96.0
 
       - name: Validate Rust computation core
         run: |
@@ -38,6 +40,12 @@ jobs:
       - name: Install desktop dependencies
         run: npm ci --ignore-scripts --prefix outputs/geo-sim-desktop
 
+      - name: Build typed browser bridge and Rust WebAssembly core
+        run: |
+          npm run typecheck --prefix outputs/geo-sim-desktop
+          npm run browser:build --prefix outputs/geo-sim-desktop
+          npm run wasm:build --prefix outputs/geo-sim-desktop
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -51,6 +59,7 @@ jobs:
           node outputs/geo-sim/tests/landscapeEcology.test.mjs
           node outputs/geo-sim/tests/physicalCouplingInterop.test.mjs
           node outputs/geo-sim/tests/backendClient.test.mjs
+          node outputs/geo-sim/tests/wasmKernel.test.mjs
 
       - name: Verify local entry points
         run: |
@@ -61,10 +70,17 @@ jobs:
           test -f outputs/geo-sim/src/physicalCoupling.js
           test -f outputs/geo-sim/src/engineInterop.js
           test -f outputs/geo-sim/src/backendClient.js
+          test -f outputs/geo-sim/src/rustKernelWorker.js
+          test -f outputs/geo-sim/src/wasmAbi.js
+          test -f outputs/geo-sim/src-ts/backendClient.ts
+          test -f outputs/geo-sim/src-ts/rustKernelWorker.ts
+          test -f outputs/geo-sim/src-ts/wasmAbi.ts
+          test -f outputs/geo-sim/vendor/geolab/geolab_core.wasm
           test -f outputs/geo-sim/tests/scenarioSynthesis.test.mjs
           test -f outputs/geo-sim/tests/landscapeEcology.test.mjs
           test -f outputs/geo-sim/tests/physicalCouplingInterop.test.mjs
           test -f outputs/geo-sim/tests/backendClient.test.mjs
+          test -f outputs/geo-sim/tests/wasmKernel.test.mjs
           test -f outputs/geo-sim-desktop/package.json
           test -f engine/Cargo.toml
           test -f engine/Cargo.lock
@@ -75,6 +91,7 @@ jobs:
           test -f engine/geolab-core/src/ecology.rs
           test -f engine/geolab-server/src/lib.rs
           test -f engine/geolab-server/src/main.rs
+          test -f engine/geolab-wasm/src/lib.rs
           test -f LICENSE
 
       - name: Verify canonical changelog

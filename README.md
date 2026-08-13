@@ -10,7 +10,7 @@
 
 GeoLab 128 is an interactive geographic systems laboratory for exploring how a region behaves as a connected whole. Raise a ridge and the wind exposure changes. Change rainfall or vegetation and the water partition shifts. Add roads, housing, reservoirs, or utilities and the model updates runoff, heat, habitat, service demand, and local suitability together.
 
-The application combines a fast browser simulation engine with an independent Rust computation core. The browser engine supports the full authoring and 3D workflow; the Rust core re-runs a bounded terrain, hydroclimate, groundwater, sediment, and habitat model with typed inputs, strict validation, deterministic graph routing, and its own conservation gates.
+The application combines an interactive browser authoring engine with one Rust computation core delivered through two transports. Electron uses a native loopback sidecar; static-browser mode loads the same `geolab-core` algorithms as bundled WebAssembly in a dedicated Worker. Strict TypeScript contracts now govern this boundary while Three.js remains focused on visualization and interaction.
 
 ## What You Can Explore
 
@@ -37,19 +37,24 @@ Study areas range from 4 km to 512 km per side. Interactive terrain options exte
 
 The aim is not a single opaque score. GeoLab keeps weak links visible through separate process gates, coupling scores, evidence coverage, source records, and uncertainty notes.
 
-## Two Computation Cores
+## Coupled Computation Architecture
 
 ```mermaid
 flowchart LR
     A["Scenario authoring"] --> B["Browser simulation engine"]
     B --> C["3D scene and analytical layers"]
     B --> D["Rust verification request"]
-    D --> E["Typed validation"]
-    E --> F["Priority-Flood and D8 or MFD routing"]
-    F --> G["Water, groundwater, sediment and habitat"]
-    G --> H["Independent process gates"]
-    H --> C
-    C --> I["Reports, data and engine exports"]
+    D --> E{"Local runtime"}
+    E -->|"Electron"| F["Native Rust sidecar"]
+    E -->|"Static browser"| G["Rust WASM Worker"]
+    F --> H["Shared geolab-core"]
+    G --> H
+    H --> I["Typed validation"]
+    I --> J["Priority-Flood and D8 or MFD routing"]
+    J --> K["Water, groundwater, sediment and habitat"]
+    K --> L["Independent process gates"]
+    L --> C
+    C --> M["Reports, data and engine exports"]
 ```
 
 The Rust workspace provides:
@@ -63,9 +68,14 @@ The Rust workspace provides:
 - RUSLE-structured gross detachment followed by transport-capacity-limited deposition and export with a separate sediment ledger;
 - climate, moisture, slope, vegetation, imperviousness, and barrier-constrained habitat patches with resistance-weighted connectivity and bottleneck diagnostics;
 - twelve independent gates covering water, routing fractions, outlet area, groundwater, sediment, habitat accounting, bounded ecology, and finite numerics;
-- a loopback-only Axum API with bounded payloads, bounded concurrency, execution timeout, versioned endpoints, and deterministic reports.
+- a loopback-only Axum API with bounded payloads, bounded concurrency, execution timeout, versioned endpoints, and deterministic reports;
+- a dependency-free WebAssembly ABI, off-main-thread Worker transport, and an end-to-end ABI test that executes a real scenario in Node.
 
-The desktop application starts and stops this service automatically. Static-browser mode remains available without it.
+The desktop application starts and stops the native service automatically. Static-browser mode loads the bundled Rust WASM core automatically; a manually started native service remains an optional override.
+
+### Language boundary
+
+Migration is capability-driven rather than a file-extension exercise. Numerically sensitive, deterministic, and conservation-checked work moves to Rust first. Browser-to-core schemas and asynchronous orchestration move to strict TypeScript. Three.js rendering and stable UI modules remain JavaScript until their contracts are isolated and covered, then migrate incrementally. Generated files under `outputs/geo-sim/src/` are browser artifacts; their reviewed sources live under `outputs/geo-sim/src-ts/`.
 
 ## 3D And Engine Workflows
 
@@ -92,7 +102,7 @@ npm ci
 npm start
 ```
 
-`npm start` builds the Rust service and launches Electron. The application itself, computation service, Three.js runtime, and GeoTIFF reader remain local.
+`npm start` type-builds the browser bridge, compiles Rust to both native and WebAssembly targets, refreshes local vendor assets, and launches Electron. The application, both Rust transports, Three.js runtime, and GeoTIFF reader remain local.
 
 ### Static browser mode
 
@@ -101,7 +111,7 @@ cd outputs/geo-sim
 python -m http.server 4174
 ```
 
-Open <http://127.0.0.1:4174/>. The interface defaults to English and includes a Simplified Chinese switch.
+Open <http://127.0.0.1:4174/>. The interface defaults to English, includes a Simplified Chinese switch, and runs Rust verification through the bundled WASM Worker.
 
 ### Rust service
 
@@ -132,9 +142,10 @@ GeoLab 128 is a teaching and exploratory prototype under active validation devel
 | --- | --- |
 | `engine/geolab-core/` | Rust terrain, hydroclimate, routing, conservation, and gate library. |
 | `engine/geolab-server/` | Bounded local Axum service used by the desktop application. |
-| `outputs/geo-sim/` | Browser application, JavaScript simulation engine, Three.js renderer, adapters, and exports. |
-| `outputs/geo-sim-desktop/` | Electron runtime, Rust sidecar lifecycle, and local packaging. |
+| `engine/geolab-wasm/` | Minimal browser ABI for the shared Rust core. |
+| `outputs/geo-sim/` | Browser application, strict TypeScript kernel bridge, exploratory authoring engine, Three.js renderer, adapters, and exports. |
+| `outputs/geo-sim-desktop/` | Electron runtime, native/WASM build orchestration, Rust sidecar lifecycle, and local packaging. |
 | `outputs/geo-sim/tests/` | Deterministic client, model, ecology, reporting, and interchange tests. |
-| `.github/workflows/ci.yml` | Rust and JavaScript integrity pipeline. |
+| `.github/workflows/ci.yml` | Rust, WebAssembly, TypeScript, JavaScript, and cross-runtime integrity pipeline. |
 
 Contributions are welcome through [CONTRIBUTING.md](CONTRIBUTING.md). Release history is maintained in the single root [CHANGELOG.md](CHANGELOG.md). GeoLab 128 is available under the [MIT License](LICENSE).

@@ -4,7 +4,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use geolab_core::{
-    API_VERSION, ENGINE_NAME, MAX_CORE_CELLS, ModelError, ScenarioInput, SimulationReport,
+    API_VERSION, ENGINE_NAME, EngineCapabilities, ModelError, ScenarioInput, SimulationReport,
+    engine_capabilities,
 };
 use serde::Serialize;
 use std::sync::Arc;
@@ -39,18 +40,6 @@ struct HealthResponse {
     status: &'static str,
     engine: &'static str,
     api_version: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CapabilitiesResponse {
-    api_version: &'static str,
-    engine: &'static str,
-    max_api_cells: usize,
-    max_core_cells: usize,
-    routing: [&'static str; 2],
-    processes: [&'static str; 10],
-    output_layers: [&'static str; 25],
 }
 
 #[derive(Debug, Serialize)]
@@ -164,53 +153,8 @@ async fn health() -> Json<HealthResponse> {
     })
 }
 
-async fn capabilities() -> Json<CapabilitiesResponse> {
-    Json(CapabilitiesResponse {
-        api_version: API_VERSION,
-        engine: ENGINE_NAME,
-        max_api_cells: MAX_API_CELLS,
-        max_core_cells: MAX_CORE_CELLS,
-        routing: ["priority-flood-d8", "priority-flood-freeman-mfd"],
-        processes: [
-            "input-validation",
-            "terrain-derivatives",
-            "depression-resolution",
-            "fractional-topological-flow-accumulation",
-            "hydroclimate-water-partition",
-            "time-stepped-groundwater-reservoir",
-            "baseflow-routing",
-            "transport-limited-sediment-budget",
-            "resistance-weighted-habitat-connectivity",
-            "independent-process-gates",
-        ],
-        output_layers: [
-            "filled-elevation",
-            "fill-depth",
-            "slope",
-            "dominant-flow-receiver",
-            "fractional-flow-targets",
-            "contributing-area",
-            "period-discharge",
-            "annualized-discharge",
-            "reference-et",
-            "actual-et",
-            "runoff",
-            "groundwater-recharge",
-            "soil-storage-change",
-            "groundwater-storage",
-            "groundwater-saturation",
-            "groundwater-baseflow",
-            "groundwater-residual",
-            "water-table-depth",
-            "gross-sediment-detachment",
-            "sediment-deposition",
-            "sediment-outflow",
-            "sediment-transport-capacity",
-            "habitat-suitability",
-            "habitat-connectivity",
-            "habitat-patch-id",
-        ],
-    })
+async fn capabilities() -> Json<EngineCapabilities> {
+    Json(engine_capabilities(MAX_API_CELLS))
 }
 
 async fn validate(Json(input): Json<ScenarioInput>) -> Result<Json<ValidationResponse>, ApiError> {

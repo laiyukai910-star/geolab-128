@@ -373,8 +373,9 @@ let modelJobSerial = 0;
 const workerRequests = new Map();
 const rustBackendEndpoint = configuredBackendUrl();
 let rustBackendState = {
-  status: rustBackendEndpoint ? "connecting" : "unavailable",
+  status: "connecting",
   endpoint: rustBackendEndpoint,
+  transport: rustBackendEndpoint ? "native-sidecar" : "browser-wasm",
   health: null,
   capabilities: null,
   error: null
@@ -3035,11 +3036,6 @@ function exportPhysicalCouplingCSV() {
 }
 
 async function refreshRustBackendConnection() {
-  if (!rustBackendEndpoint) {
-    rustBackendState = { ...rustBackendState, status: "unavailable" };
-    updateRustBackendReadout();
-    return;
-  }
   rustBackendState = { ...rustBackendState, status: "connecting", error: null };
   updateRustBackendReadout();
   try {
@@ -3104,14 +3100,8 @@ function updateRustBackendReadout() {
   rustBackendReadout.replaceChildren();
   const state = rustBackendState.status;
   rustBackendReadout.dataset.state = rustBackendAudit && state === "ready" ? "verified" : state;
-  runRustBackendAuditButton.disabled = state === "connecting" || state === "running" || !rustBackendEndpoint;
+  runRustBackendAuditButton.disabled = state === "connecting" || state === "running";
   exportRustBackendAuditButton.disabled = !rustBackendAudit;
-  if (!rustBackendEndpoint) {
-    rustBackendReadout.textContent = locale === "zh"
-      ? "当前为纯静态模式；桌面运行时会自动附加 Rust 演算核心。"
-      : "Static mode is active; the desktop runtime attaches the Rust computation core automatically.";
-    return;
-  }
   if (state === "connecting" || state === "running") {
     rustBackendReadout.textContent = locale === "zh"
       ? state === "running" ? "Rust 正在独立复算当前情景。" : "正在连接 Rust 演算核心。"
@@ -3125,9 +3115,10 @@ function updateRustBackendReadout() {
     return;
   }
   if (!rustBackendAudit) {
+    const wasm = rustBackendState.transport === "browser-wasm";
     rustBackendReadout.textContent = locale === "zh"
-      ? `Rust 核心已连接 · API ${rustBackendState.health?.apiVersion || "1.0"}`
-      : `Rust core connected · API ${rustBackendState.health?.apiVersion || "1.0"}`;
+      ? `${wasm ? "Rust WASM 核心已加载" : "Rust 原生核心已连接"} · API ${rustBackendState.health?.apiVersion || "1.0"}`
+      : `${wasm ? "Rust WASM core loaded" : "Rust native core connected"} · API ${rustBackendState.health?.apiVersion || "1.0"}`;
     return;
   }
   const report = rustBackendAudit.report;

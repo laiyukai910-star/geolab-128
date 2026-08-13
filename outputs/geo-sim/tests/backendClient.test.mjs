@@ -32,7 +32,11 @@ const model = {
     columnBedrockDepthM: Float32Array.from([22, 24, 26, 28]),
     columnWaterTableDepthM: Float32Array.from([4, 6, 8, 10])
   },
-  stats: { waterBudget: { residualPctOfInput: 0 }, meanPotentialEvapotranspiration: 900 },
+  stats: {
+    waterBudget: { residualPctOfInput: 0 },
+    meanPotentialEvapotranspiration: 900,
+    landscapeNetwork: { meanConnectivity: 0.81 }
+  },
   physicalCoupling: { summary: { processIntegrityIndex: 0.99 } }
 };
 const params = { seed: 42, currentYear: 5, humidity: 0.7, windSpeed: 4, latitude: 32, dayOfYear: 183 };
@@ -89,9 +93,47 @@ const verification = await runBackendVerification(model, params, "http://127.0.0
 assert.equal(verification.report.engine, "geolab-core-rust");
 assert.equal(verification.comparison.rustProcessIntegrityIndex, 1);
 assert.equal(verification.comparison.rustHabitatConnectivity, 0.73);
+assert.equal(verification.comparison.browserHabitatConnectivity, 0.81);
 assert.equal(verification.sample.auditResolution, 4);
 
-console.log("Rust backend client tests passed");
+const kernelTransport = {
+  capabilities: async () => ({
+    apiVersion: "1.0",
+    engine: "geolab-core-rust",
+    maxApiCells: 1048576
+  }),
+  simulate: async (scenario) => ({
+    requestId: "wasm-test-1",
+    report: {
+      apiVersion: "1.0",
+      engine: "geolab-core-rust",
+      summary: {
+        processIntegrityIndex: 1,
+        meanReferenceEvapotranspirationMm: 875,
+        failedGateCount: 0,
+        passedGateCount: 12,
+        reviewGateCount: 0
+      },
+      waterBudget: { residualPercentOfInput: 0 },
+      subsurfaceBudget: { residualPercentOfInput: 0, meanWaterTableDepthM: 11 },
+      sedimentBudget: { residualPercentOfDetachment: 0 },
+      ecology: { meanResistanceConnectivity: 0.76 },
+      grid: { width: scenario.grid.width, height: scenario.grid.height }
+    }
+  })
+};
+const wasmStatus = await inspectBackend(null, fetchImpl, { kernelTransport });
+assert.equal(wasmStatus.status, "ready");
+assert.equal(wasmStatus.transport, "browser-wasm");
+const wasmVerification = await runBackendVerification(model, params, null, {
+  resolution: 4,
+  kernelTransport
+});
+assert.equal(wasmVerification.transport, "browser-wasm");
+assert.equal(wasmVerification.requestId, "wasm-test-1");
+assert.equal(wasmVerification.report.summary.passedGateCount, 12);
+
+console.log("Rust native/WASM kernel client tests passed");
 
 function jsonResponse(value, status = 200) {
   return {

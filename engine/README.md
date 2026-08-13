@@ -8,6 +8,7 @@ The Rust workspace is GeoLab 128's independent computation and verification path
 | --- | --- |
 | `geolab-core` | Typed contracts, validation, terrain processing, process models, conservation ledgers, output layers, and deterministic tests. |
 | `geolab-server` | Loopback-only Axum API with bounded concurrency, a 64 MiB body limit, a 30-second timeout, structured errors, and a 512 x 512 request limit. |
+| `geolab-wasm` | Minimal 32-bit memory ABI that executes the same core in a browser Worker without duplicating process formulas. |
 
 Embedded callers may use up to 1,048,576 cells. API requests are limited to 262,144 cells so one desktop audit cannot monopolize the host.
 
@@ -141,5 +142,8 @@ Method structure follows [FAO-56](https://www.fao.org/4/X0490E/x0490e00.htm), th
 cargo fmt --manifest-path engine/Cargo.toml --all -- --check
 cargo clippy --manifest-path engine/Cargo.toml --workspace --all-targets -- -D warnings
 cargo test --manifest-path engine/Cargo.toml --workspace
+cargo build --release --target wasm32-unknown-unknown --manifest-path engine/Cargo.toml --package geolab-wasm
 cargo run --release --manifest-path engine/Cargo.toml --package geolab-server -- --port 48129
 ```
+
+The WebAssembly boundary exchanges UTF-8 JSON through explicit allocation, simulation, capability, and deallocation exports. `outputs/geo-sim/src-ts/wasmAbi.ts` owns memory validation and decoding; `rustKernelWorker.ts` keeps numerical execution off the rendering thread. CI instantiates the produced module and runs a complete scenario through this ABI.

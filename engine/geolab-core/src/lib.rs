@@ -18,6 +18,70 @@ use subsurface::simulate_subsurface;
 pub const API_VERSION: &str = "1.0";
 pub const ENGINE_NAME: &str = "geolab-core-rust";
 pub const MAX_CORE_CELLS: usize = 1_048_576;
+pub const ROUTING_CAPABILITIES: &[&str] = &["priority-flood-d8", "priority-flood-freeman-mfd"];
+pub const PROCESS_CAPABILITIES: &[&str] = &[
+    "input-validation",
+    "terrain-derivatives",
+    "depression-resolution",
+    "fractional-topological-flow-accumulation",
+    "hydroclimate-water-partition",
+    "time-stepped-groundwater-reservoir",
+    "baseflow-routing",
+    "transport-limited-sediment-budget",
+    "resistance-weighted-habitat-connectivity",
+    "independent-process-gates",
+];
+pub const OUTPUT_LAYER_CAPABILITIES: &[&str] = &[
+    "filled-elevation",
+    "fill-depth",
+    "slope",
+    "dominant-flow-receiver",
+    "fractional-flow-targets",
+    "contributing-area",
+    "period-discharge",
+    "annualized-discharge",
+    "reference-et",
+    "actual-et",
+    "runoff",
+    "groundwater-recharge",
+    "soil-storage-change",
+    "groundwater-storage",
+    "groundwater-saturation",
+    "groundwater-baseflow",
+    "groundwater-residual",
+    "water-table-depth",
+    "gross-sediment-detachment",
+    "sediment-deposition",
+    "sediment-outflow",
+    "sediment-transport-capacity",
+    "habitat-suitability",
+    "habitat-connectivity",
+    "habitat-patch-id",
+];
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineCapabilities {
+    pub api_version: &'static str,
+    pub engine: &'static str,
+    pub max_api_cells: usize,
+    pub max_core_cells: usize,
+    pub routing: &'static [&'static str],
+    pub processes: &'static [&'static str],
+    pub output_layers: &'static [&'static str],
+}
+
+pub fn engine_capabilities(max_api_cells: usize) -> EngineCapabilities {
+    EngineCapabilities {
+        api_version: API_VERSION,
+        engine: ENGINE_NAME,
+        max_api_cells,
+        max_core_cells: MAX_CORE_CELLS,
+        routing: ROUTING_CAPABILITIES,
+        processes: PROCESS_CAPABILITIES,
+        output_layers: OUTPUT_LAYER_CAPABILITIES,
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
