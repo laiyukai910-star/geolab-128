@@ -88,6 +88,9 @@ The API contract remains `1.0`; the new process groups are optional and therefor
     "durationDays": 365,
     "timestepDays": 30
   },
+  "output": {
+    "authoritativeSurfaceLayers": true
+  },
   "includeLayers": false
 }
 ```
@@ -103,11 +106,15 @@ The API contract remains `1.0`; the new process groups are optional and therefor
 7. Route surface runoff and baseflow separately, then combine them for period discharge and annualized discharge layers.
 8. Estimate RUSLE-structured gross detachment and route sediment subject to a runoff, slope, cover, and roughness-sensitive transport capacity. Deposition plus outlet export closes to detachment.
 9. Build climate, moisture, slope, vegetation, imperviousness, and barrier-constrained habitat suitability; label patches; and calculate resistance-weighted local connectivity and bottlenecks.
-10. Recompute twelve independent gates. The report does not hide a failed process inside a single average score.
+10. Recompute thirteen independent gates, including generated-minus-retained surface-runoff routing closure. The report does not hide a failed process inside a single average score.
 
 ## Ledgers And Layers
 
-The response contains separate `waterBudget`, `subsurfaceBudget`, and `sedimentBudget` objects plus an `ecology` outcome summary. With `includeLayers: true`, the response adds:
+The response contains separate `waterBudget`, `subsurfaceBudget`, and `sedimentBudget` objects plus an `ecology` outcome summary. `waterBudget` separates generated runoff, explicitly retained runoff, routed surface outlet flow, and groundwater baseflow.
+
+With `output.authoritativeSurfaceLayers: true`, the response returns only the bounded working-layer profile used by the phase-two atomic commit: filled elevation, slope, dominant and fractional MFD routing, contributing area, annual discharge, reference/actual ET, runoff, managed retention, recharge, soil storage, and cell residual. This avoids serializing unrelated volumetric, sediment, and habitat rasters during live-model reconciliation.
+
+With `includeLayers: true`, the response instead adds the complete diagnostic layer set:
 
 - depression-resolved elevation, fill depth, and slope;
 - a dominant receiver plus sparse MFD offsets, target indices, and fractions;
@@ -147,3 +154,5 @@ cargo run --release --manifest-path engine/Cargo.toml --package geolab-server --
 ```
 
 The WebAssembly boundary exchanges UTF-8 JSON through explicit allocation, simulation, capability, and deallocation exports. `outputs/geo-sim/src-ts/wasmAbi.ts` owns memory validation and decoding; `rustKernelWorker.ts` keeps numerical execution off the rendering thread. CI instantiates the produced module and runs a complete scenario through this ABI.
+
+The live model path uses `modelWorker.ts` and `modelKernel.ts`. It validates every returned array, physical range, MFD offset, local target, fraction, dominant receiver, downhill edge, acyclic topology, conservation residual, process gate, engine version, and grid dimension before mutating the model. The validated topological order also drives river reconstruction through filled flats. A failed condition preserves the original browser arrays. The atomic profile is currently limited to 512 x 512 so native HTTP and browser WASM transports share the same commit envelope.

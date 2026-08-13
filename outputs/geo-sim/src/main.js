@@ -2378,7 +2378,7 @@ async function executeModelTask(op, payload, fallback) {
     const promise = new Promise((resolve, reject) => {
       workerRequests.set(id, { resolve, reject });
     });
-    modelWorker.postMessage({ id, op, ...payload });
+    modelWorker.postMessage({ id, op, ...payload, rustBackendEndpoint });
     return await promise;
   } catch (error) {
     console.warn("后台线程不可用，回退到主线程执行", error);
@@ -2889,7 +2889,7 @@ function updateMetrics() {
   runtimeLabel.textContent =
     model.lastUpdateMode === "temporal"
       ? `时间快算 ${format(model.temporalRuntimeMs ?? model.runtimeMs, 1)} ms · 静态层复用`
-      : `${Math.round(model.runtimeMs)} ms${modelWorker ? " · 后台线程" : ""}`;
+      : `${Math.round(model.runtimeMs)} ms${modelWorker ? " · 后台线程" : ""}${model.rustAuthoritative?.status === "applied" ? " · Rust 工作层" : ""}`;
   updateTerrainPresetStatus();
   updateDataStatus();
   updateScenarioSynthesis();
@@ -3099,7 +3099,9 @@ function updateRustBackendReadout() {
   const locale = globalThis.__geoLabLocale?.locale === "zh-CN" ? "zh" : "en";
   rustBackendReadout.replaceChildren();
   const state = rustBackendState.status;
+  const authority = model?.rustAuthoritative || null;
   rustBackendReadout.dataset.state = rustBackendAudit && state === "ready" ? "verified" : state;
+  rustBackendReadout.dataset.authority = authority?.status || "none";
   runRustBackendAuditButton.disabled = state === "connecting" || state === "running";
   exportRustBackendAuditButton.disabled = !rustBackendAudit;
   if (state === "connecting" || state === "running") {
@@ -3116,17 +3118,25 @@ function updateRustBackendReadout() {
   }
   if (!rustBackendAudit) {
     const wasm = rustBackendState.transport === "browser-wasm";
+    const authorityText = authority?.status === "applied"
+      ? locale === "zh" ? ` · ${authority.resolution}² 工作层已接管` : ` · ${authority.resolution}² working layers committed`
+      : authority?.status === "rejected"
+        ? locale === "zh" ? " · 工作层提交被拒绝" : " · working-layer commit rejected"
+        : "";
     rustBackendReadout.textContent = locale === "zh"
-      ? `${wasm ? "Rust WASM 核心已加载" : "Rust 原生核心已连接"} · API ${rustBackendState.health?.apiVersion || "1.0"}`
-      : `${wasm ? "Rust WASM core loaded" : "Rust native core connected"} · API ${rustBackendState.health?.apiVersion || "1.0"}`;
+      ? `${wasm ? "Rust WASM 核心已加载" : "Rust 原生核心已连接"} · API ${rustBackendState.health?.apiVersion || "1.0"}${authorityText}`
+      : `${wasm ? "Rust WASM core loaded" : "Rust native core connected"} · API ${rustBackendState.health?.apiVersion || "1.0"}${authorityText}`;
     return;
   }
   const report = rustBackendAudit.report;
   const summary = report.summary;
   const heading = document.createElement("strong");
+  const authorityText = authority?.status === "applied"
+    ? locale === "zh" ? ` · 工作层 ${authority.resolution}²` : ` · working layers ${authority.resolution}²`
+    : "";
   heading.textContent = locale === "zh"
-    ? `Rust 独立门控 ${Math.round(summary.processIntegrityIndex * 100)}% · ${rustBackendAudit.sample.auditResolution}² 复核格网`
-    : `Rust independent gates ${Math.round(summary.processIntegrityIndex * 100)}% · ${rustBackendAudit.sample.auditResolution}² audit grid`;
+    ? `Rust 独立门控 ${Math.round(summary.processIntegrityIndex * 100)}% · ${rustBackendAudit.sample.auditResolution}² 复核格网${authorityText}`
+    : `Rust independent gates ${Math.round(summary.processIntegrityIndex * 100)}% · ${rustBackendAudit.sample.auditResolution}² audit grid${authorityText}`;
   const gates = document.createElement("div");
   gates.textContent = locale === "zh"
     ? `通过 ${summary.passedGateCount} · 复核 ${summary.reviewGateCount} · 失败 ${summary.failedGateCount}`
@@ -3141,9 +3151,17 @@ function updateRustBackendReadout() {
     : `${report.terrain.routingMethod === "multiple-flow-direction" ? "MFD routing" : "D8 routing"} · groundwater residual ${format(report.subsurfaceBudget.residualPercentOfInput, 6)}% · sediment residual ${format(report.sedimentBudget.residualPercentOfDetachment, 6)}% · habitat connectivity ${format(report.ecology.meanResistanceConnectivity * 100, 1)}%`;
   const boundary = document.createElement("small");
   boundary.textContent = locale === "zh"
-    ? "Rust 使用独立水文、地下水、泥沙和生境内核复核约束；数值吻合不能替代现场校准。"
-    : "Rust independently audits hydrology, groundwater, sediment, and habitat constraints; numerical agreement does not replace field calibration.";
-  rustBackendReadout.append(heading, gates, water, processes, boundary);
+    ? "Rust 工作层采用原子门控提交，并继续独立复核地下水、泥沙和生境约束；数值闭合不能替代现场校准。"
+    : "Rust working layers use an atomic gated commit while groundwater, sediment, and habitat remain independently audited; closure does not replace field calibration.";
+  const commit = document.createElement("div");
+  commit.textContent = authority?.status === "applied"
+    ? locale === "zh"
+      ? `原子提交 ${authority.appliedLayers?.length || 0} 层 · 原生/JS 主汇流一致 ${format((authority.comparison?.dominantReceiverAgreement ?? 0) * 100, 1)}%`
+      : `Atomic commit ${authority.appliedLayers?.length || 0} layers · native/JS dominant routing agreement ${format((authority.comparison?.dominantReceiverAgreement ?? 0) * 100, 1)}%`
+    : locale === "zh"
+      ? `工作层未提交${authority?.reason ? `：${authority.reason}` : ""}`
+      : `Working layers not committed${authority?.reason ? `: ${authority.reason}` : ""}`;
+  rustBackendReadout.append(heading, gates, water, processes, commit, boundary);
 }
 
 function exportRustBackendAudit() {

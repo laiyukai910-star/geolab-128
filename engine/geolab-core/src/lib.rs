@@ -43,6 +43,7 @@ pub const OUTPUT_LAYER_CAPABILITIES: &[&str] = &[
     "reference-et",
     "actual-et",
     "runoff",
+    "retained-runoff",
     "groundwater-recharge",
     "soil-storage-change",
     "groundwater-storage",
@@ -104,6 +105,8 @@ pub struct ScenarioInput {
     #[serde(default)]
     pub control: SimulationControl,
     #[serde(default)]
+    pub output: OutputControl,
+    #[serde(default)]
     pub include_layers: bool,
 }
 
@@ -145,6 +148,8 @@ pub struct ManagementInput {
     pub irrigation_mm: Vec<f64>,
     #[serde(default)]
     pub requested_demand_mm: Vec<f64>,
+    #[serde(default)]
+    pub runoff_retention_fraction: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -328,6 +333,13 @@ fn default_timestep_days() -> u16 {
     30
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputControl {
+    #[serde(default)]
+    pub authoritative_surface_layers: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SimulationReport {
@@ -342,6 +354,7 @@ pub struct SimulationReport {
     pub ecology: EcologySummary,
     pub gates: Vec<ProcessGate>,
     pub summary: SimulationSummary,
+    pub authoritative_surface_layers: Option<AuthoritativeSurfaceLayers>,
     pub layers: Option<SimulationLayers>,
     pub methods: Vec<MethodReference>,
     pub limitations: Vec<String>,
@@ -381,6 +394,7 @@ pub struct WaterBudget {
     pub unmet_demand_m3: f64,
     pub actual_evapotranspiration_m3: f64,
     pub generated_runoff_m3: f64,
+    pub retained_runoff_m3: f64,
     pub groundwater_recharge_m3: f64,
     pub soil_storage_change_m3: f64,
     pub unresolved_residual_m3: f64,
@@ -483,6 +497,7 @@ pub struct SimulationLayers {
     pub reference_evapotranspiration_mm: Vec<f64>,
     pub actual_evapotranspiration_mm: Vec<f64>,
     pub runoff_depth_mm: Vec<f64>,
+    pub retained_runoff_depth_mm: Vec<f64>,
     pub groundwater_recharge_mm: Vec<f64>,
     pub soil_storage_change_mm: Vec<f64>,
     pub groundwater_storage_mm: Vec<f64>,
@@ -497,6 +512,26 @@ pub struct SimulationLayers {
     pub habitat_suitability: Vec<f64>,
     pub habitat_connectivity: Vec<f64>,
     pub habitat_patch_id: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthoritativeSurfaceLayers {
+    pub filled_elevation_m: Vec<f64>,
+    pub slope_degrees: Vec<f64>,
+    pub dominant_flow_receiver: Vec<i64>,
+    pub flow_target_offsets: Vec<usize>,
+    pub flow_target_indices: Vec<usize>,
+    pub flow_target_fractions: Vec<f64>,
+    pub contributing_area_m2: Vec<f64>,
+    pub annual_discharge_m3: Vec<f64>,
+    pub reference_evapotranspiration_mm: Vec<f64>,
+    pub actual_evapotranspiration_mm: Vec<f64>,
+    pub runoff_depth_mm: Vec<f64>,
+    pub retained_runoff_depth_mm: Vec<f64>,
+    pub groundwater_recharge_mm: Vec<f64>,
+    pub soil_storage_change_mm: Vec<f64>,
+    pub water_balance_residual_mm: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -666,6 +701,13 @@ pub fn validate_scenario(input: &ScenarioInput) -> Result<(), ModelError> {
         0.0,
         10_000.0,
     )?;
+    validate_optional_layer(
+        "management.runoffRetentionFraction",
+        &input.management.runoff_retention_fraction,
+        cell_count,
+        0.0,
+        0.95,
+    )?;
     validate_scalar("routing.mfdExponent", input.routing.mfd_exponent, 0.1, 10.0)?;
     validate_optional_layer(
         "subsurface.soilDepthM",
@@ -818,6 +860,7 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
     let mut reference_et = vec![0.0; cell_count];
     let mut actual_et = vec![0.0; cell_count];
     let mut runoff = vec![0.0; cell_count];
+    let mut retained_runoff = vec![0.0; cell_count];
     let mut recharge = vec![0.0; cell_count];
     let mut storage = vec![0.0; cell_count];
     let mut residual = vec![0.0; cell_count];
@@ -866,6 +909,9 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
                 - conductivity_factor * 0.12)
                 .clamp(0.01, 0.95);
         let runoff_depth = partitionable * runoff_coefficient;
+        let retained_runoff_depth =
+            runoff_depth * optional_value(&input.management.runoff_retention_fraction, index);
+        let routed_runoff_depth = (runoff_depth - retained_runoff_depth).max(0.0);
         let post_runoff = (partitionable - runoff_depth).max(0.0);
         let recharge_fraction = (0.05
             + conductivity_factor * 0.45
@@ -882,12 +928,13 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
         reference_et[index] = et0;
         actual_et[index] = aet;
         runoff[index] = runoff_depth;
+        retained_runoff[index] = retained_runoff_depth;
         recharge[index] = recharge_depth;
         storage[index] = storage_depth;
         residual[index] = cell_residual;
         allocated_demand[index] = demand;
         unmet_demand[index] = (requested_demand - demand).max(0.0);
-        local_runoff_m3[index] = runoff_depth / 1_000.0 * cell_area_m2;
+        local_runoff_m3[index] = routed_runoff_depth / 1_000.0 * cell_area_m2;
     }
 
     let subsurface = simulate_subsurface(input, &recharge, cell_area_m2);
@@ -912,6 +959,7 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
         &unmet_demand,
         &actual_et,
         &runoff,
+        &retained_runoff,
         &recharge,
         &storage,
         &residual,
@@ -934,6 +982,9 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
         contributing_area: &contributing_area,
         reference_et: &reference_et,
         actual_et: &actual_et,
+        runoff: &runoff,
+        retained_runoff: &retained_runoff,
+        surface_discharge: &surface_discharge,
         residual: &residual,
         subsurface: &subsurface,
         sediment: &sediment,
@@ -989,27 +1040,51 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
     };
     let (flow_target_offsets, flow_target_indices, flow_target_fractions) =
         network.flattened_targets();
+    let dominant_flow_receiver: Vec<i64> = network
+        .dominant_receivers
+        .iter()
+        .map(|receiver| *receiver as i64)
+        .collect();
+    let annual_discharge_m3: Vec<f64> = discharge
+        .iter()
+        .map(|value| value / period_fraction.max(f64::EPSILON))
+        .collect();
+    let authoritative_surface_layers =
+        input
+            .output
+            .authoritative_surface_layers
+            .then(|| AuthoritativeSurfaceLayers {
+                filled_elevation_m: filled.clone(),
+                slope_degrees: slopes.clone(),
+                dominant_flow_receiver: dominant_flow_receiver.clone(),
+                flow_target_offsets: flow_target_offsets.clone(),
+                flow_target_indices: flow_target_indices.clone(),
+                flow_target_fractions: flow_target_fractions.clone(),
+                contributing_area_m2: contributing_area.clone(),
+                annual_discharge_m3: annual_discharge_m3.clone(),
+                reference_evapotranspiration_mm: reference_et.clone(),
+                actual_evapotranspiration_mm: actual_et.clone(),
+                runoff_depth_mm: runoff.clone(),
+                retained_runoff_depth_mm: retained_runoff.clone(),
+                groundwater_recharge_mm: recharge.clone(),
+                soil_storage_change_mm: storage.clone(),
+                water_balance_residual_mm: residual.clone(),
+            });
     let layers = input.include_layers.then(|| SimulationLayers {
         filled_elevation_m: filled,
         fill_depth_m: fill_depth,
         slope_degrees: slopes,
-        flow_receiver: network
-            .dominant_receivers
-            .iter()
-            .map(|receiver| *receiver as i64)
-            .collect(),
+        flow_receiver: dominant_flow_receiver,
         flow_target_offsets,
         flow_target_indices,
         flow_target_fractions,
         contributing_area_m2: contributing_area,
         discharge_m3_period: discharge.clone(),
-        discharge_m3_year: discharge
-            .iter()
-            .map(|value| value / period_fraction.max(f64::EPSILON))
-            .collect(),
+        discharge_m3_year: annual_discharge_m3,
         reference_evapotranspiration_mm: reference_et,
         actual_evapotranspiration_mm: actual_et,
         runoff_depth_mm: runoff,
+        retained_runoff_depth_mm: retained_runoff,
         groundwater_recharge_mm: recharge,
         soil_storage_change_mm: storage,
         groundwater_storage_mm: subsurface.storage_mm,
@@ -1045,6 +1120,7 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
         ecology: ecology.summary,
         gates,
         summary,
+        authoritative_surface_layers,
         layers,
         methods: method_references(),
         limitations: vec![
@@ -1288,6 +1364,7 @@ fn summarize_water(
     unmet_demand: &[f64],
     actual_et: &[f64],
     runoff: &[f64],
+    retained_runoff: &[f64],
     recharge: &[f64],
     storage: &[f64],
     residual: &[f64],
@@ -1313,6 +1390,7 @@ fn summarize_water(
         unmet_demand_m3: depth_to_volume(unmet_demand),
         actual_evapotranspiration_m3: depth_to_volume(actual_et),
         generated_runoff_m3: depth_to_volume(runoff),
+        retained_runoff_m3: depth_to_volume(retained_runoff),
         groundwater_recharge_m3: depth_to_volume(recharge),
         soil_storage_change_m3: depth_to_volume(storage),
         unresolved_residual_m3,
@@ -1334,6 +1412,9 @@ struct GateContext<'a> {
     contributing_area: &'a [f64],
     reference_et: &'a [f64],
     actual_et: &'a [f64],
+    runoff: &'a [f64],
+    retained_runoff: &'a [f64],
+    surface_discharge: &'a [f64],
     residual: &'a [f64],
     subsurface: &'a subsurface::SubsurfaceResult,
     sediment: &'a sediment::SedimentResult,
@@ -1348,6 +1429,9 @@ fn build_gates(context: GateContext<'_>) -> Vec<ProcessGate> {
         contributing_area,
         reference_et,
         actual_et,
+        runoff,
+        retained_runoff,
+        surface_discharge,
         residual,
         subsurface,
         sediment,
@@ -1417,6 +1501,16 @@ fn build_gates(context: GateContext<'_>) -> Vec<ProcessGate> {
     let outlet_area: f64 = network.outlet_sum(contributing_area);
     let accumulation_score =
         (1.0 - (outlet_area - expected_area).abs() / expected_area.max(1.0) * 1e9).clamp(0.0, 1.0);
+    let gross_runoff_m3 = runoff.iter().sum::<f64>() / 1_000.0 * input.grid.cell_support_area_m2;
+    let retained_runoff_m3 =
+        retained_runoff.iter().sum::<f64>() / 1_000.0 * input.grid.cell_support_area_m2;
+    let expected_surface_outlet_m3 = (gross_runoff_m3 - retained_runoff_m3).max(0.0);
+    let actual_surface_outlet_m3 = network.outlet_sum(surface_discharge);
+    let runoff_routing_score = (1.0
+        - (actual_surface_outlet_m3 - expected_surface_outlet_m3).abs()
+            / expected_surface_outlet_m3.max(1.0)
+            * 1e9)
+        .clamp(0.0, 1.0);
     let finite_score = [
         filled,
         reference_et,
@@ -1471,6 +1565,12 @@ fn build_gates(context: GateContext<'_>) -> Vec<ProcessGate> {
             "Outlet contributing area closes to map support area",
             accumulation_score,
             "The sum of fractional contributing area at all outlets equals the represented map area",
+        ),
+        gate(
+            "retained-runoff-routing-closure",
+            "Routed surface runoff closes after managed retention",
+            runoff_routing_score,
+            "Outlet surface runoff equals generated runoff minus explicitly retained runoff",
         ),
         gate(
             "subsurface-mass-closure",
@@ -1667,6 +1767,7 @@ mod tests {
             geomorphology: GeomorphologyInput::default(),
             ecology: EcologyInput::default(),
             control: SimulationControl::default(),
+            output: OutputControl::default(),
             include_layers: true,
         }
     }
@@ -1801,6 +1902,53 @@ mod tests {
         assert_eq!(
             first.terrain.maximum_contributing_area_km2,
             second.terrain.maximum_contributing_area_km2
+        );
+    }
+
+    #[test]
+    fn authoritative_surface_profile_is_bounded_and_complete() {
+        let mut input = scenario();
+        input.include_layers = false;
+        input.output.authoritative_surface_layers = true;
+        let cell_count = input.grid.width * input.grid.height;
+        let report = simulate(&input).expect("authoritative profile should simulate");
+        assert!(report.layers.is_none());
+        let layers = report
+            .authoritative_surface_layers
+            .expect("authoritative layers");
+        assert_eq!(layers.filled_elevation_m.len(), cell_count);
+        assert_eq!(layers.slope_degrees.len(), cell_count);
+        assert_eq!(layers.dominant_flow_receiver.len(), cell_count);
+        assert_eq!(layers.flow_target_offsets.len(), cell_count + 1);
+        assert_eq!(layers.contributing_area_m2.len(), cell_count);
+        assert_eq!(layers.annual_discharge_m3.len(), cell_count);
+        assert_eq!(layers.actual_evapotranspiration_mm.len(), cell_count);
+        assert_eq!(layers.retained_runoff_depth_mm.len(), cell_count);
+        assert_eq!(layers.water_balance_residual_mm.len(), cell_count);
+    }
+
+    #[test]
+    fn managed_runoff_retention_closes_before_routing() {
+        let mut input = scenario();
+        let cell_count = input.grid.width * input.grid.height;
+        input.management.runoff_retention_fraction = vec![0.35; cell_count];
+        let report = simulate(&input).expect("retained runoff scenario");
+        assert!(report.water_budget.retained_runoff_m3 > 0.0);
+        assert!(
+            (report.water_budget.surface_runoff_outlet_m3
+                - (report.water_budget.generated_runoff_m3
+                    - report.water_budget.retained_runoff_m3))
+                .abs()
+                < 1e-6
+        );
+        assert_eq!(
+            report
+                .gates
+                .iter()
+                .find(|gate| gate.id == "retained-runoff-routing-closure")
+                .expect("retention gate")
+                .status,
+            GateStatus::Pass
         );
     }
 }

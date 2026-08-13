@@ -6,7 +6,7 @@ type NumericLayer = ArrayLike<number> | null | undefined;
 type FetchResponse = { ok: boolean; status: number; json(): Promise<unknown> };
 type FetchLike = (url: string, init?: RequestInit) => Promise<FetchResponse>;
 
-interface GeoModel {
+export interface GeoModel {
   n: number;
   sizeKm?: number;
   height: ArrayLike<number>;
@@ -24,6 +24,7 @@ interface GeoModel {
     irrigationMm?: NumericLayer;
     waterDemandMm?: NumericLayer;
     buildingDensity?: NumericLayer;
+    flowRetention?: NumericLayer;
   };
   subsurface?: {
     gridN?: number;
@@ -40,7 +41,7 @@ interface GeoModel {
   physicalCoupling?: { summary?: { processIntegrityIndex?: number } };
 }
 
-interface ScenarioParams {
+export interface ScenarioParams {
   mapSizeKm?: number;
   seed?: number;
   currentYear?: number;
@@ -51,14 +52,16 @@ interface ScenarioParams {
   dayOfYear?: number;
 }
 
-interface BackendOptions {
+export interface BackendOptions {
   resolution?: number;
+  maximumResolution?: number;
   includeLayers?: boolean;
+  authoritativeSurfaceLayers?: boolean;
   fetchImpl?: FetchLike;
   kernelTransport?: KernelTransport;
 }
 
-interface KernelTransport {
+export interface KernelTransport {
   capabilities(): Promise<unknown>;
   simulate(scenario: BackendScenario): Promise<unknown>;
 }
@@ -71,7 +74,7 @@ interface BackendState {
   capabilities: Record<string, unknown> | null;
 }
 
-interface BackendScenario {
+export interface BackendScenario {
   apiVersion: string;
   scenarioId: string;
   grid: {
@@ -89,10 +92,11 @@ interface BackendScenario {
   geomorphology: Record<string, unknown>;
   ecology: Record<string, unknown>;
   control: Record<string, unknown>;
+  output: { authoritativeSurfaceLayers: boolean };
   includeLayers: boolean;
 }
 
-interface SimulationReport extends Record<string, unknown> {
+export interface SimulationReport extends Record<string, unknown> {
   apiVersion: string;
   engine: string;
   summary: Record<string, unknown>;
@@ -203,7 +207,7 @@ export function buildBackendScenario(
   const resolution = clampInteger(
     options.resolution ?? Math.min(DEFAULT_AUDIT_RESOLUTION, model.n),
     3,
-    Math.min(512, model.n)
+    Math.min(clampInteger(options.maximumResolution ?? 512, 3, 1024), model.n)
   );
   const mapSizeM = finite(model.sizeKm, finite(params.mapSizeKm, 128)) * 1000;
   const sample = (values: NumericLayer, fallback: number, minimum: number, maximum: number) => sampleLayer(
@@ -241,7 +245,9 @@ export function buildBackendScenario(
     },
     management: {
       irrigationMm: sample(model.infrastructureInfluence?.irrigationMm, 0, 0, 5_000),
-      requestedDemandMm: sample(model.infrastructureInfluence?.waterDemandMm, 0, 0, 10_000)
+      requestedDemandMm: sample(model.infrastructureInfluence?.waterDemandMm, 0, 0, 10_000),
+      runoffRetentionFraction: sample(model.infrastructureInfluence?.flowRetention, 0, 0, 0.95)
+        .map((value) => value * 0.78)
     },
     routing: { method: "multiple-flow-direction", mfdExponent: 1.1 },
     subsurface: buildSubsurfaceInput(model, resolution, sample),
@@ -261,6 +267,7 @@ export function buildBackendScenario(
       habitatThreshold: 0.55
     },
     control: { durationDays: 365, timestepDays: 30 },
+    output: { authoritativeSurfaceLayers: Boolean(options.authoritativeSurfaceLayers) },
     includeLayers: Boolean(options.includeLayers)
   };
 }

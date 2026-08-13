@@ -70,7 +70,7 @@ function buildBackendScenario(model, params = {}, options = {}) {
   const resolution = clampInteger(
     options.resolution ?? Math.min(DEFAULT_AUDIT_RESOLUTION, model.n),
     3,
-    Math.min(512, model.n)
+    Math.min(clampInteger(options.maximumResolution ?? 512, 3, 1024), model.n)
   );
   const mapSizeM = finite(model.sizeKm, finite(params.mapSizeKm, 128)) * 1e3;
   const sample = (values, fallback, minimum, maximum) => sampleLayer(
@@ -108,7 +108,8 @@ function buildBackendScenario(model, params = {}, options = {}) {
     },
     management: {
       irrigationMm: sample(model.infrastructureInfluence?.irrigationMm, 0, 0, 5e3),
-      requestedDemandMm: sample(model.infrastructureInfluence?.waterDemandMm, 0, 0, 1e4)
+      requestedDemandMm: sample(model.infrastructureInfluence?.waterDemandMm, 0, 0, 1e4),
+      runoffRetentionFraction: sample(model.infrastructureInfluence?.flowRetention, 0, 0, 0.95).map((value) => value * 0.78)
     },
     routing: { method: "multiple-flow-direction", mfdExponent: 1.1 },
     subsurface: buildSubsurfaceInput(model, resolution, sample),
@@ -128,6 +129,7 @@ function buildBackendScenario(model, params = {}, options = {}) {
       habitatThreshold: 0.55
     },
     control: { durationDays: 365, timestepDays: 30 },
+    output: { authoritativeSurfaceLayers: Boolean(options.authoritativeSurfaceLayers) },
     includeLayers: Boolean(options.includeLayers)
   };
 }

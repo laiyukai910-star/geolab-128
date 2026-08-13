@@ -1,6 +1,6 @@
 {
   "name": "geolab-128-local",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Interactive 3D geographic systems laboratory with shared native and WebAssembly Rust verification",
   "main": "main.cjs",

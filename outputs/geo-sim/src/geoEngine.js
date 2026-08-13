@@ -2140,6 +2140,35 @@ export function runModel(model, params) {
   return model;
 }
 
+export function refreshModelAfterKernelIntegration(model, params = {}) {
+  const start = performance.now();
+  const previousWildlife = model.wildlife || null;
+  rebuildRiverNetworkFromCurrentFlow(model, params);
+  model.hydraulics = computeHydraulicDiagnostics(model, params);
+  model.wetnessIndex = computeWetnessIndex(model);
+  model.subsurface = computeSubsurfaceVolume(model, params);
+  model.hazards = computeTimeHazards(model, params);
+  refreshInfrastructureAfterEnvironmentalState(model, params);
+  model.builtResilience = computeBuiltEnvironmentResilienceState(model, params);
+  model.landscapeNetwork = buildLandscapeBlockNetwork(model, params);
+  model.wildlife = buildWildlifeState(model, params, model.landscapeNetwork, {
+    previousState: previousWildlife,
+    elapsedYears: 0
+  });
+  model.dataConfidence = computeDataConfidence(model, params);
+  model.stats = computeStats(model, params);
+  model.physicalCoupling = buildPhysicalCouplingState(model, params);
+  model.stats.physicalCoupling = model.physicalCoupling.summary;
+  model.stats.landscapeNetwork = model.landscapeNetwork.summary;
+  model.stats.wildlife = model.wildlife.summary;
+  model.stats.rustAuthoritative = model.rustAuthoritative || null;
+  model.kernelDerivedRuntimeMs = performance.now() - start;
+  model.runtimeMs = (Number(model.runtimeMs) || 0) + model.kernelDerivedRuntimeMs;
+  model.fullRuntimeMs = model.runtimeMs;
+  model.lastUpdateMode = "rust-authoritative";
+  return model;
+}
+
 export function updateTemporalModel(model, params = {}) {
   const start = performance.now();
   if (!model?.height || !model?.surface || !model?.hydraulics || !model?.subsurface || !model?.flowAccumulation) {
@@ -2174,6 +2203,7 @@ export function updateTemporalModel(model, params = {}) {
   model.stats.physicalCoupling = model.physicalCoupling.summary;
   model.stats.landscapeNetwork = model.landscapeNetwork.summary;
   model.stats.wildlife = model.wildlife.summary;
+  model.stats.rustAuthoritative = model.rustAuthoritative || null;
   model.temporalRuntimeMs = performance.now() - start;
   model.runtimeMs = model.temporalRuntimeMs;
   model.lastUpdateMode = "temporal";
@@ -16681,10 +16711,6 @@ function computeAccumulation(model, params) {
   const allocatedDemandMm = new Float32Array(len);
   const unmetDemandMm = new Float32Array(len);
   const flowDivergence = new Float32Array(len);
-  const streamOrder = new Uint8Array(len);
-  const maxChildOrder = new Uint8Array(len);
-  const childOrderCount = new Uint8Array(len);
-  const channelLength = new Float32Array(len);
   const sorted = Array.from({ length: len }, (_, i) => i);
   sorted.sort((a, b) => model.filledHeight[b] - model.filledHeight[a]);
   const calibration = params.externalLayers?.calibration || {};
@@ -16693,24 +16719,6 @@ function computeAccumulation(model, params) {
   const dischargeScale = lerp(1, Number(calibration.dischargeScale) || 1, clamp(Number(params.calibrationStrength ?? 0.75), 0, 1));
   const mfdReceivers = new Int32Array(8);
   const mfdWeights = new Float32Array(8);
-
-  const primaryRoutingReceiver = (index) => {
-    if (routingMode === "dinf") {
-      const dinfReceiver = model.dInfinityReceiver?.[index] ?? -1;
-      if (dinfReceiver >= 0) return dinfReceiver;
-    }
-    return model.receiver?.[index] ?? -1;
-  };
-
-  const primaryRoutingDistance = (index) => {
-    if (routingMode === "dinf") {
-      const dinfReceiver = model.dInfinityReceiver?.[index] ?? -1;
-      if (dinfReceiver >= 0) {
-        return model.dInfinityReceiverDistance?.[index] || model.receiverDistance?.[index] || 1;
-      }
-    }
-    return model.receiverDistance?.[index] || 1;
-  };
 
   const distributeMfd = (i) => {
     const x = i % model.n;
@@ -16854,43 +16862,6 @@ function computeAccumulation(model, params) {
     }
   }
 
-  const threshold = Number(params.riverThreshold);
-  const hydrologyMask = model.hydrologyConstraint?.mask || null;
-  const isChannelCell = (index) => flowAccumulation[index] >= threshold || hydrologyMask?.[index] > 0;
-  const riverSegments = [];
-  for (const i of sorted) {
-    if (model.height[i] <= seaLevel) continue;
-    if (!isChannelCell(i)) continue;
-    streamOrder[i] = Math.max(1, streamOrder[i]);
-    const r = primaryRoutingReceiver(i);
-    if (r < 0) continue;
-    if (model.height[r] > seaLevel && isChannelCell(r)) {
-      const current = streamOrder[i];
-      if (current > maxChildOrder[r]) {
-        maxChildOrder[r] = current;
-        childOrderCount[r] = 1;
-      } else if (current === maxChildOrder[r]) {
-        childOrderCount[r] += 1;
-      }
-      streamOrder[r] = maxChildOrder[r] + (childOrderCount[r] >= 2 ? 1 : 0);
-      channelLength[r] = Math.max(
-        channelLength[r],
-        channelLength[i] + primaryRoutingDistance(i) * model.cellSizeKm
-      );
-    }
-    riverSegments.push({
-      from: i,
-      to: r,
-      order: streamOrder[i],
-      catchment: flowAccumulation[i],
-      discharge: discharge[i],
-      source: hydrologyMask?.[i] > 0 && flowAccumulation[i] < threshold ? "flowline-promoted" : "modeled",
-      flowlineConstrained: hydrologyMask?.[i] > 0 || hydrologyMask?.[r] > 0
-    });
-  }
-  const flowlineSegments = buildFlowlineRiverSegments(model, riverSegments, flowAccumulation, discharge, streamOrder);
-  riverSegments.push(...flowlineSegments);
-
   model.flowAccumulation = flowAccumulation;
   model.discharge = discharge;
   model.runoffCoefficient = runoffCoefficient;
@@ -16908,15 +16879,79 @@ function computeAccumulation(model, params) {
   };
   model.flowDivergence = flowDivergence;
   model.flowRouting = routingMode;
+  model.sortedByHeight = sorted;
+  rebuildRiverNetworkFromCurrentFlow(model, params);
+}
+
+function rebuildRiverNetworkFromCurrentFlow(model, params) {
+  const len = model.height.length;
+  const seaLevel = Number(params.seaLevel);
+  const threshold = Number(params.riverThreshold);
+  const hydrologyMask = model.hydrologyConstraint?.mask || null;
+  const streamOrder = new Uint8Array(len);
+  const maxChildOrder = new Uint8Array(len);
+  const childOrderCount = new Uint8Array(len);
+  const channelLength = new Float32Array(len);
+  const sorted = model.sortedByHeight?.length === len
+    ? model.sortedByHeight
+    : Array.from({ length: len }, (_, index) => index).sort((a, b) => model.filledHeight[b] - model.filledHeight[a]);
+  const isChannelCell = (index) => model.flowAccumulation[index] >= threshold || hydrologyMask?.[index] > 0;
+  const primaryReceiver = (index) => {
+    if (model.flowRouting === "dinf") {
+      const receiver = model.dInfinityReceiver?.[index] ?? -1;
+      if (receiver >= 0) return receiver;
+    }
+    return model.receiver?.[index] ?? -1;
+  };
+  const receiverDistance = (index) => {
+    if (model.flowRouting === "dinf" && (model.dInfinityReceiver?.[index] ?? -1) >= 0) {
+      return model.dInfinityReceiverDistance?.[index] || model.receiverDistance?.[index] || 1;
+    }
+    return model.receiverDistance?.[index] || 1;
+  };
+  const riverSegments = [];
+  for (const i of sorted) {
+    if (model.height[i] <= seaLevel || !isChannelCell(i)) continue;
+    streamOrder[i] = Math.max(1, streamOrder[i]);
+    const receiver = primaryReceiver(i);
+    if (receiver < 0) continue;
+    if (model.height[receiver] > seaLevel && isChannelCell(receiver)) {
+      const current = streamOrder[i];
+      if (current > maxChildOrder[receiver]) {
+        maxChildOrder[receiver] = current;
+        childOrderCount[receiver] = 1;
+      } else if (current === maxChildOrder[receiver]) {
+        childOrderCount[receiver] += 1;
+      }
+      streamOrder[receiver] = maxChildOrder[receiver] + (childOrderCount[receiver] >= 2 ? 1 : 0);
+      channelLength[receiver] = Math.max(
+        channelLength[receiver],
+        channelLength[i] + receiverDistance(i) * model.cellSizeKm
+      );
+    }
+    riverSegments.push({
+      from: i,
+      to: receiver,
+      order: streamOrder[i],
+      catchment: model.flowAccumulation[i],
+      discharge: model.discharge[i],
+      source: hydrologyMask?.[i] > 0 && model.flowAccumulation[i] < threshold ? "flowline-promoted" : "modeled",
+      flowlineConstrained: hydrologyMask?.[i] > 0 || hydrologyMask?.[receiver] > 0
+    });
+  }
+  const flowlineSegments = buildFlowlineRiverSegments(
+    model,
+    riverSegments,
+    model.flowAccumulation,
+    model.discharge,
+    streamOrder
+  );
+  riverSegments.push(...flowlineSegments);
   model.streamOrder = streamOrder;
   model.sortedByHeight = sorted;
   model.riverSegments = riverSegments;
   model.flowlineRiverSegmentCount = flowlineSegments.length;
-  let mainChannelLengthKm = 0;
-  for (let i = 0; i < channelLength.length; i += 1) {
-    if (channelLength[i] > mainChannelLengthKm) mainChannelLengthKm = channelLength[i];
-  }
-  model.mainChannelLengthKm = mainChannelLengthKm;
+  model.mainChannelLengthKm = channelLength.reduce((maximum, value) => Math.max(maximum, value), 0);
 }
 
 function computeHydraulicDiagnostics(model, params) {

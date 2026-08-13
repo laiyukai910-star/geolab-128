@@ -24,7 +24,8 @@ const model = {
   infrastructureInfluence: {
     irrigationMm: Float32Array.from({ length }, () => 0),
     waterDemandMm: Float32Array.from({ length }, () => 0),
-    buildingDensity: Float32Array.from({ length }, (_, index) => index === 5 ? 0.8 : 0)
+    buildingDensity: Float32Array.from({ length }, (_, index) => index === 5 ? 0.8 : 0),
+    flowRetention: Float32Array.from({ length }, (_, index) => index === 5 ? 0.5 : 0)
   },
   subsurface: {
     gridN: 2,
@@ -56,6 +57,7 @@ assert.equal(request.subsurface.aquiferThicknessM[0], 21);
 assert.equal(request.subsurface.initialStorageFraction.length, length);
 assert.ok(request.subsurface.initialStorageFraction.every((value) => value >= 0 && value <= 1));
 assert.equal(request.ecology.barrierFraction.length, length);
+assert.equal(request.management.runoffRetentionFraction[5], 0.39);
 assert.equal(request.control.durationDays, 365);
 
 const fetchImpl = async (url, init = {}) => {

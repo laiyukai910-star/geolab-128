@@ -1,0 +1,560 @@
+import type { GeoModel } from "./backendClient.js";
+
+type NumericLayer = ArrayLike<number> | null | undefined;
+
+export interface KernelMutableModel extends GeoModel {
+  areaKm2?: number;
+  cellSizeKm?: number;
+  filledHeight?: NumericLayer;
+  slope?: NumericLayer;
+  receiver?: NumericLayer;
+  receiverDistance?: NumericLayer;
+  flowDirection?: NumericLayer;
+  flowAccumulation?: NumericLayer;
+  discharge?: NumericLayer;
+  runoffCoefficient?: NumericLayer;
+  localRunoffAnnualM3?: NumericLayer;
+  retainedFlowAnnualM3?: NumericLayer;
+  flowDivergence?: NumericLayer;
+  flowRouting?: string;
+  sortedByHeight?: number[];
+  hydroBudget?: Record<string, unknown>;
+  surface?: GeoModel["surface"] & {
+    potentialEvapotranspiration?: NumericLayer;
+    actualEvapotranspiration?: NumericLayer;
+  };
+  rustFlowTargets?: {
+    offsets: Uint32Array;
+    indices: Uint32Array;
+    fractions: Float32Array;
+  };
+  rustAuthoritative?: RustAuthoritativeState;
+  [key: string]: unknown;
+}
+
+interface VerificationLike {
+  transport?: unknown;
+  durationMs?: unknown;
+  report?: unknown;
+}
+
+interface AuthoritativeWireLayers {
+  filledElevationM: number[];
+  slopeDegrees: number[];
+  dominantFlowReceiver: number[];
+  flowTargetOffsets: number[];
+  flowTargetIndices: number[];
+  flowTargetFractions: number[];
+  contributingAreaM2: number[];
+  annualDischargeM3: number[];
+  referenceEvapotranspirationMm: number[];
+  actualEvapotranspirationMm: number[];
+  runoffDepthMm: number[];
+  retainedRunoffDepthMm: number[];
+  groundwaterRechargeMm: number[];
+  soilStorageChangeMm: number[];
+  waterBalanceResidualMm: number[];
+}
+
+export interface RustAuthoritativeState {
+  status: "applied" | "skipped" | "rejected";
+  schemaVersion: "1.0.0";
+  reason: string | null;
+  transport: string | null;
+  resolution: number;
+  processIntegrityIndex: number | null;
+  passedGateCount: number | null;
+  reviewGateCount: number | null;
+  failedGateCount: number | null;
+  executionMs: number | null;
+  appliedLayers: string[];
+  comparison: Record<string, unknown> | null;
+}
+
+const REQUIRED_CONTINUOUS_CELL_LAYERS: Array<keyof AuthoritativeWireLayers> = [
+  "filledElevationM",
+  "slopeDegrees",
+  "contributingAreaM2",
+  "annualDischargeM3",
+  "referenceEvapotranspirationMm",
+  "actualEvapotranspirationMm",
+  "runoffDepthMm",
+  "retainedRunoffDepthMm",
+  "groundwaterRechargeMm",
+  "soilStorageChangeMm",
+  "waterBalanceResidualMm"
+];
+
+const APPLIED_LAYERS = [
+  "filled-elevation",
+  "slope",
+  "dominant-flow-receiver",
+  "fractional-flow-targets",
+  "contributing-area",
+  "annual-discharge",
+  "reference-et",
+  "actual-et",
+  "runoff",
+  "managed-runoff-retention",
+  "groundwater-recharge",
+  "soil-storage-change",
+  "water-balance-residual"
+];
+
+export function applyRustAuthoritativeSurfaceLayers(
+  model: KernelMutableModel,
+  verification: VerificationLike
+): RustAuthoritativeState {
+  const report = record(verification.report, "verification.report");
+  const grid = record(report.grid, "report.grid");
+  const terrain = record(report.terrain, "report.terrain");
+  const summary = record(report.summary, "report.summary");
+  const waterBudget = record(report.waterBudget, "report.waterBudget");
+  const subsurfaceBudget = record(report.subsurfaceBudget, "report.subsurfaceBudget");
+  const sedimentBudget = record(report.sedimentBudget, "report.sedimentBudget");
+  const layers = parseLayers(report.authoritativeSurfaceLayers, model.n);
+  const topologicalOrder = assertCommitGates(
+    model,
+    report,
+    grid,
+    terrain,
+    summary,
+    waterBudget,
+    subsurfaceBudget,
+    sedimentBudget,
+    layers
+  );
+
+  const cellCount = model.n * model.n;
+  const filledHeight = Float32Array.from(layers.filledElevationM);
+  const slope = Float32Array.from(layers.slopeDegrees);
+  const receiver = Int32Array.from(layers.dominantFlowReceiver);
+  const flowAccumulation = Float64Array.from(layers.contributingAreaM2, (value) => value / 1_000_000);
+  const discharge = Float64Array.from(layers.annualDischargeM3);
+  const referenceEt = Float32Array.from(layers.referenceEvapotranspirationMm);
+  const actualEt = Float32Array.from(layers.actualEvapotranspirationMm);
+  const runoffDepth = Float32Array.from(layers.runoffDepthMm);
+  const retainedRunoffDepth = Float32Array.from(layers.retainedRunoffDepthMm);
+  const rechargeDepth = Float32Array.from(layers.groundwaterRechargeMm);
+  const storageChange = Float32Array.from(layers.soilStorageChangeMm);
+  const residual = Float32Array.from(layers.waterBalanceResidualMm);
+  const targetOffsets = Uint32Array.from(layers.flowTargetOffsets);
+  const targetIndices = Uint32Array.from(layers.flowTargetIndices);
+  const targetFractions = Float32Array.from(layers.flowTargetFractions);
+  const flowDivergence = new Uint8Array(cellCount);
+  for (let index = 0; index < cellCount; index += 1) {
+    flowDivergence[index] = targetOffsets[index + 1] - targetOffsets[index];
+  }
+  const { receiverDistance, flowDirection } = deriveReceiverGeometry(receiver, model.n);
+  const comparison = compareCandidateLayers(model, {
+    slope,
+    receiver,
+    flowAccumulation,
+    discharge,
+    runoffDepth,
+    rechargeDepth
+  });
+  const cellAreaM2 = finite(grid.cellSupportAreaM2, (Number(model.areaKm2) * 1_000_000) / cellCount);
+  const localRunoffAnnualM3 = Float64Array.from(runoffDepth, (value) => value / 1_000 * cellAreaM2);
+  const retainedFlowAnnualM3 = Float64Array.from(retainedRunoffDepth, (value) => value / 1_000 * cellAreaM2);
+  const runoffCoefficient = new Float32Array(cellCount);
+  const allocatedDemandMm = new Float32Array(cellCount);
+  const unmetDemandMm = new Float32Array(cellCount);
+  for (let index = 0; index < cellCount; index += 1) {
+    const precipitation = Math.max(0, Number(model.precipitation?.[index]) || 0);
+    const irrigation = Math.max(0, Number(model.infrastructureInfluence?.irrigationMm?.[index]) || 0);
+    const requestedDemand = Math.max(0, Number(model.infrastructureInfluence?.waterDemandMm?.[index]) || 0);
+    const input = precipitation + irrigation;
+    allocatedDemandMm[index] = Math.min(input, requestedDemand);
+    unmetDemandMm[index] = Math.max(0, requestedDemand - allocatedDemandMm[index]);
+    runoffCoefficient[index] = clamp(runoffDepth[index] / Math.max(1, input), 0, 0.95);
+  }
+
+  const state: RustAuthoritativeState = {
+    status: "applied",
+    schemaVersion: "1.0.0",
+    reason: null,
+    transport: typeof verification.transport === "string" ? verification.transport : null,
+    resolution: model.n,
+    processIntegrityIndex: finiteOrNull(summary.processIntegrityIndex),
+    passedGateCount: integerOrNull(summary.passedGateCount),
+    reviewGateCount: integerOrNull(summary.reviewGateCount),
+    failedGateCount: integerOrNull(summary.failedGateCount),
+    executionMs: finiteOrNull(verification.durationMs),
+    appliedLayers: [...APPLIED_LAYERS],
+    comparison
+  };
+
+  // Commit only after every candidate layer and cross-layer invariant has passed.
+  model.filledHeight = filledHeight;
+  model.slope = slope;
+  model.receiver = receiver;
+  model.receiverDistance = receiverDistance;
+  model.flowDirection = flowDirection;
+  model.flowAccumulation = flowAccumulation;
+  model.discharge = discharge;
+  model.runoffCoefficient = runoffCoefficient;
+  model.localRunoffAnnualM3 = localRunoffAnnualM3;
+  model.retainedFlowAnnualM3 = retainedFlowAnnualM3;
+  model.flowDivergence = flowDivergence;
+  model.flowRouting = "mfd";
+  model.sortedByHeight = topologicalOrder;
+  model.rustFlowTargets = { offsets: targetOffsets, indices: targetIndices, fractions: targetFractions };
+  model.hydroBudget = {
+    ...(model.hydroBudget || {}),
+    method: "rust-authoritative-annual-water-partition-with-managed-retention",
+    localRunoffDepthMm: runoffDepth,
+    retainedRunoffDepthMm: retainedRunoffDepth,
+    groundwaterRechargeMm: rechargeDepth,
+    soilStorageChangeMm: storageChange,
+    waterBudgetResidualMm: residual,
+    allocatedDemandMm,
+    unmetDemandMm
+  };
+  if (model.surface) {
+    model.surface.potentialEvapotranspiration = referenceEt;
+    model.surface.actualEvapotranspiration = actualEt;
+  }
+  model.rustAuthoritative = state;
+  return state;
+}
+
+export function skippedRustAuthoritativeState(
+  model: Pick<KernelMutableModel, "n">,
+  reason: string,
+  transport: string | null = null
+): RustAuthoritativeState {
+  return {
+    status: "skipped",
+    schemaVersion: "1.0.0",
+    reason,
+    transport,
+    resolution: model.n,
+    processIntegrityIndex: null,
+    passedGateCount: null,
+    reviewGateCount: null,
+    failedGateCount: null,
+    executionMs: null,
+    appliedLayers: [],
+    comparison: null
+  };
+}
+
+export function rejectedRustAuthoritativeState(
+  model: Pick<KernelMutableModel, "n">,
+  reason: string,
+  transport: string | null = null
+): RustAuthoritativeState {
+  return { ...skippedRustAuthoritativeState(model, reason, transport), status: "rejected" };
+}
+
+function assertCommitGates(
+  model: KernelMutableModel,
+  report: Record<string, unknown>,
+  grid: Record<string, unknown>,
+  terrain: Record<string, unknown>,
+  summary: Record<string, unknown>,
+  waterBudget: Record<string, unknown>,
+  subsurfaceBudget: Record<string, unknown>,
+  sedimentBudget: Record<string, unknown>,
+  layers: AuthoritativeWireLayers
+) {
+  if (report.apiVersion !== "1.0" || report.engine !== "geolab-core-rust") {
+    throw new Error("Rust authoritative report uses an incompatible engine contract");
+  }
+  if (integer(grid.width) !== model.n || integer(grid.height) !== model.n) {
+    throw new Error(`Rust authoritative grid must match the ${model.n} x ${model.n} working grid`);
+  }
+  if (terrain.routingMethod !== "multiple-flow-direction") {
+    throw new Error("Rust authoritative commit requires multiple-flow-direction routing");
+  }
+  const failedGateCount = integer(summary.failedGateCount);
+  const integrity = finite(summary.processIntegrityIndex, 0);
+  if (failedGateCount !== 0 || integrity < 0.98) {
+    throw new Error(`Rust authoritative gates rejected commit (${failedGateCount} failed, integrity ${integrity})`);
+  }
+  const gates = array(report.gates, "report.gates");
+  if (gates.some((gate) => record(gate, "report.gates[]").status === "fail")) {
+    throw new Error("Rust authoritative report contains a failed process gate");
+  }
+  for (const [label, value] of [
+    ["surface water", waterBudget.residualPercentOfInput],
+    ["groundwater", subsurfaceBudget.residualPercentOfInput],
+    ["sediment", sedimentBudget.residualPercentOfDetachment]
+  ] as const) {
+    if (Math.abs(finite(value, Number.POSITIVE_INFINITY)) > 1e-5) {
+      throw new Error(`Rust authoritative ${label} residual exceeds commit tolerance`);
+    }
+  }
+  validatePhysicalRanges(layers, grid, model.n);
+  return validateFlowGraph(layers, model.n);
+}
+
+function parseLayers(value: unknown, cellCountSide: number): AuthoritativeWireLayers {
+  const source = record(value, "report.authoritativeSurfaceLayers");
+  const cellCount = cellCountSide * cellCountSide;
+  const output = {} as AuthoritativeWireLayers;
+  for (const key of REQUIRED_CONTINUOUS_CELL_LAYERS) {
+    output[key] = finiteArray(source[key], key, cellCount) as never;
+  }
+  output.dominantFlowReceiver = integerArray(
+    source.dominantFlowReceiver,
+    "dominantFlowReceiver",
+    cellCount
+  );
+  output.flowTargetOffsets = integerArray(source.flowTargetOffsets, "flowTargetOffsets", cellCount + 1);
+  output.flowTargetIndices = integerArray(source.flowTargetIndices, "flowTargetIndices");
+  output.flowTargetFractions = finiteArray(source.flowTargetFractions, "flowTargetFractions");
+  if (output.flowTargetIndices.length !== output.flowTargetFractions.length) {
+    throw new Error("Rust authoritative flow target indices and fractions differ in length");
+  }
+  return output;
+}
+
+function validatePhysicalRanges(
+  layers: AuthoritativeWireLayers,
+  grid: Record<string, unknown>,
+  side: number
+) {
+  const cellCount = side * side;
+  const cellAreaM2 = finite(grid.cellSupportAreaM2, -1);
+  if (cellAreaM2 <= 0) throw new Error("Rust authoritative grid has an invalid cell support area");
+  const domainAreaM2 = cellAreaM2 * cellCount;
+  for (let index = 0; index < cellCount; index += 1) {
+    const slope = layers.slopeDegrees[index];
+    const area = layers.contributingAreaM2[index];
+    const runoff = layers.runoffDepthMm[index];
+    const retained = layers.retainedRunoffDepthMm[index];
+    if (slope < 0 || slope > 90) {
+      throw new Error(`Rust authoritative slope is outside physical bounds at cell ${index}`);
+    }
+    if (area < cellAreaM2 * (1 - 1e-7) || area > domainAreaM2 * (1 + 1e-7)) {
+      throw new Error(`Rust authoritative contributing area is outside domain bounds at cell ${index}`);
+    }
+    if (
+      layers.annualDischargeM3[index] < 0 ||
+      layers.referenceEvapotranspirationMm[index] < 0 ||
+      layers.actualEvapotranspirationMm[index] < 0 ||
+      runoff < 0 ||
+      retained < 0 ||
+      retained > runoff + 1e-7 ||
+      layers.groundwaterRechargeMm[index] < 0 ||
+      layers.soilStorageChangeMm[index] < 0 ||
+      Math.abs(layers.waterBalanceResidualMm[index]) > 1e-6
+    ) {
+      throw new Error(`Rust authoritative water layers are outside physical bounds at cell ${index}`);
+    }
+  }
+}
+
+function validateFlowGraph(layers: AuthoritativeWireLayers, side: number) {
+  const cellCount = side * side;
+  const upstreamCount = new Uint8Array(cellCount);
+  let previousOffset = 0;
+  for (let index = 0; index < cellCount; index += 1) {
+    const start = layers.flowTargetOffsets[index];
+    const end = layers.flowTargetOffsets[index + 1];
+    if (start !== previousOffset || end < start || end > layers.flowTargetIndices.length) {
+      throw new Error(`Rust authoritative flow offsets are invalid at cell ${index}`);
+    }
+    if (end - start > 8) throw new Error(`Rust authoritative flow fan-out exceeds D8 neighbors at cell ${index}`);
+    const dominant = layers.dominantFlowReceiver[index];
+    if ((end === start && dominant !== -1) || (end > start && dominant < 0)) {
+      throw new Error(`Rust authoritative dominant receiver disagrees with routing targets at cell ${index}`);
+    }
+    let fractionSum = 0;
+    let dominantFound = end === start;
+    const uniqueTargets = new Set<number>();
+    for (let cursor = start; cursor < end; cursor += 1) {
+      const target = layers.flowTargetIndices[cursor];
+      const fraction = layers.flowTargetFractions[cursor];
+      if (target < 0 || target >= cellCount || target === index || fraction <= 0 || fraction > 1) {
+        throw new Error(`Rust authoritative flow target is invalid at cell ${index}`);
+      }
+      const dx = Math.abs(target % side - index % side);
+      const dy = Math.abs(Math.floor(target / side) - Math.floor(index / side));
+      if (dx > 1 || dy > 1) throw new Error(`Rust authoritative flow target is nonlocal at cell ${index}`);
+      if (uniqueTargets.has(target)) throw new Error(`Rust authoritative flow target is duplicated at cell ${index}`);
+      if (layers.filledElevationM[target] > layers.filledElevationM[index] + 1e-7) {
+        throw new Error(`Rust authoritative flow target climbs uphill at cell ${index}`);
+      }
+      uniqueTargets.add(target);
+      upstreamCount[target] += 1;
+      fractionSum += fraction;
+      if (target === dominant) dominantFound = true;
+    }
+    if (end > start && Math.abs(fractionSum - 1) > 1e-5) {
+      throw new Error(`Rust authoritative flow fractions do not close at cell ${index}`);
+    }
+    if (!dominantFound) throw new Error(`Rust authoritative dominant receiver is absent at cell ${index}`);
+    previousOffset = end;
+  }
+  if (previousOffset !== layers.flowTargetIndices.length) {
+    throw new Error("Rust authoritative flow offsets do not consume every target");
+  }
+  const queue: number[] = [];
+  for (let index = 0; index < cellCount; index += 1) {
+    if (upstreamCount[index] === 0) queue.push(index);
+  }
+  const topologicalOrder: number[] = [];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const index = queue[cursor];
+    topologicalOrder.push(index);
+    const start = layers.flowTargetOffsets[index];
+    const end = layers.flowTargetOffsets[index + 1];
+    for (let targetCursor = start; targetCursor < end; targetCursor += 1) {
+      const target = layers.flowTargetIndices[targetCursor];
+      upstreamCount[target] -= 1;
+      if (upstreamCount[target] === 0) queue.push(target);
+    }
+  }
+  if (topologicalOrder.length !== cellCount) {
+    throw new Error("Rust authoritative flow graph contains a cycle");
+  }
+  return topologicalOrder;
+}
+
+function deriveReceiverGeometry(receiver: Int32Array, side: number) {
+  const receiverDistance = new Float32Array(receiver.length);
+  const flowDirection = new Int8Array(receiver.length);
+  flowDirection.fill(-1);
+  const directions = new Map([
+    ["1,0", 0], ["1,1", 1], ["0,1", 2], ["-1,1", 3],
+    ["-1,0", 4], ["-1,-1", 5], ["0,-1", 6], ["1,-1", 7]
+  ]);
+  for (let index = 0; index < receiver.length; index += 1) {
+    const target = receiver[index];
+    if (target < 0) continue;
+    const dx = target % side - index % side;
+    const dy = Math.floor(target / side) - Math.floor(index / side);
+    receiverDistance[index] = Math.hypot(dx, dy);
+    flowDirection[index] = directions.get(`${dx},${dy}`) ?? -1;
+  }
+  return { receiverDistance, flowDirection };
+}
+
+function compareCandidateLayers(
+  model: KernelMutableModel,
+  candidate: {
+    slope: NumericLayer;
+    receiver: NumericLayer;
+    flowAccumulation: NumericLayer;
+    discharge: NumericLayer;
+    runoffDepth: NumericLayer;
+    rechargeDepth: NumericLayer;
+  }
+) {
+  return {
+    slope: layerDelta(model.slope, candidate.slope),
+    logContributingArea: layerDelta(model.flowAccumulation, candidate.flowAccumulation, logTransform),
+    logAnnualDischarge: layerDelta(model.discharge, candidate.discharge, logTransform),
+    runoffDepth: layerDelta(model.hydroBudget?.localRunoffDepthMm as NumericLayer, candidate.runoffDepth),
+    rechargeDepth: layerDelta(model.hydroBudget?.groundwaterRechargeMm as NumericLayer, candidate.rechargeDepth),
+    dominantReceiverAgreement: receiverAgreement(model.receiver, candidate.receiver)
+  };
+}
+
+function layerDelta(left: NumericLayer, right: NumericLayer, transform: (value: number) => number = identity) {
+  if (!left || !right || left.length !== right.length || left.length === 0) return null;
+  const stride = Math.max(1, Math.floor(left.length / 65_536));
+  let count = 0;
+  let absolute = 0;
+  let squared = 0;
+  let bias = 0;
+  let magnitude = 0;
+  for (let index = 0; index < left.length; index += stride) {
+    const a = transform(Number(left[index]));
+    const b = transform(Number(right[index]));
+    if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+    const delta = b - a;
+    absolute += Math.abs(delta);
+    squared += delta * delta;
+    bias += delta;
+    magnitude += (Math.abs(a) + Math.abs(b)) * 0.5;
+    count += 1;
+  }
+  if (!count) return null;
+  const scale = Math.max(1e-9, magnitude / count);
+  return {
+    sampleCount: count,
+    meanAbsoluteDifference: absolute / count,
+    rootMeanSquareDifference: Math.sqrt(squared / count),
+    meanBias: bias / count,
+    normalizedMeanAbsoluteDifference: absolute / count / scale
+  };
+}
+
+function receiverAgreement(left: NumericLayer, right: NumericLayer) {
+  if (!left || !right || left.length !== right.length || left.length === 0) return null;
+  let comparable = 0;
+  let equal = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    const a = integer(left[index]);
+    const b = integer(right[index]);
+    if (a < 0 && b < 0) continue;
+    comparable += 1;
+    if (a === b) equal += 1;
+  }
+  return comparable ? equal / comparable : 1;
+}
+
+function finiteArray(value: unknown, label: string, expectedLength?: number): number[] {
+  const values = array(value, label);
+  if (expectedLength !== undefined && values.length !== expectedLength) {
+    throw new Error(`${label} expected ${expectedLength} values, received ${values.length}`);
+  }
+  return values.map((entry, index) => {
+    const number = Number(entry);
+    if (!Number.isFinite(number)) throw new Error(`${label}[${index}] is not finite`);
+    return number;
+  });
+}
+
+function integerArray(value: unknown, label: string, expectedLength?: number): number[] {
+  return finiteArray(value, label, expectedLength).map((entry, index) => {
+    if (!Number.isSafeInteger(entry)) throw new Error(`${label}[${index}] is not an integer`);
+    return entry;
+  });
+}
+
+function record(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
+  return value as Record<string, unknown>;
+}
+
+function array(value: unknown, label: string): unknown[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  return value;
+}
+
+function finite(value: unknown, fallback: number) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function finiteOrNull(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function integer(value: unknown) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) ? number : -1;
+}
+
+function integerOrNull(value: unknown) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) ? number : null;
+}
+
+function identity(value: number) {
+  return value;
+}
+
+function logTransform(value: number) {
+  return Math.log1p(Math.max(0, value));
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
+}

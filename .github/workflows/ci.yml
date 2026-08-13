@@ -60,6 +60,7 @@ jobs:
           node outputs/geo-sim/tests/physicalCouplingInterop.test.mjs
           node outputs/geo-sim/tests/backendClient.test.mjs
           node outputs/geo-sim/tests/wasmKernel.test.mjs
+          node outputs/geo-sim/tests/modelKernel.test.mjs
 
       - name: Verify local entry points
         run: |
@@ -72,15 +73,20 @@ jobs:
           test -f outputs/geo-sim/src/backendClient.js
           test -f outputs/geo-sim/src/rustKernelWorker.js
           test -f outputs/geo-sim/src/wasmAbi.js
+          test -f outputs/geo-sim/src/modelKernel.js
+          test -f outputs/geo-sim/src/modelWorker.js
           test -f outputs/geo-sim/src-ts/backendClient.ts
           test -f outputs/geo-sim/src-ts/rustKernelWorker.ts
           test -f outputs/geo-sim/src-ts/wasmAbi.ts
+          test -f outputs/geo-sim/src-ts/modelKernel.ts
+          test -f outputs/geo-sim/src-ts/modelWorker.ts
           test -f outputs/geo-sim/vendor/geolab/geolab_core.wasm
           test -f outputs/geo-sim/tests/scenarioSynthesis.test.mjs
           test -f outputs/geo-sim/tests/landscapeEcology.test.mjs
           test -f outputs/geo-sim/tests/physicalCouplingInterop.test.mjs
           test -f outputs/geo-sim/tests/backendClient.test.mjs
           test -f outputs/geo-sim/tests/wasmKernel.test.mjs
+          test -f outputs/geo-sim/tests/modelKernel.test.mjs
           test -f outputs/geo-sim-desktop/package.json
           test -f engine/Cargo.toml
           test -f engine/Cargo.lock

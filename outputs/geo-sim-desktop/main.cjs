@@ -302,6 +302,7 @@ async function runSmokeTest(window, localUrl, externalRequests) {
       gpu: globalThis.__geoLabGpuStats || null,
       gpuPipelineWarmup: globalThis.__geoLabGpuPipelineWarmupStats || null,
       systemPriority: globalThis.__geoLabSystemPriorityStats || null,
+      rustAuthority: globalThis.__geoLabModelStats?.rustAuthoritative || null,
       rustBackend: globalThis.__geoLabRustBackend ? {
         transport: globalThis.__geoLabRustBackend.transport || null,
         requestId: globalThis.__geoLabRustBackend.requestId || null,
@@ -330,7 +331,8 @@ async function runSmokeTest(window, localUrl, externalRequests) {
       pageState?.rustBackend?.routingMethod === "multiple-flow-direction" &&
       pageState?.rustBackend?.failedGateCount === 0
     );
-    if (pageState?.ready && pageState?.render?.completed && pageState?.gpuPipelineWarmup?.status === "ready" && pageState?.systemPriority?.highPriorityProcessCount >= 3 && rustReady) break;
+    const authoritativeReady = pageState?.rustAuthority?.status === "applied" && pageState?.rustAuthority?.resolution <= 512;
+    if (pageState?.ready && pageState?.render?.completed && pageState?.gpuPipelineWarmup?.status === "ready" && pageState?.systemPriority?.highPriorityProcessCount >= 3 && rustReady && authoritativeReady) break;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   const priorityReady = Boolean(
@@ -347,6 +349,7 @@ async function runSmokeTest(window, localUrl, externalRequests) {
         pageState?.rustBackend?.routingMethod === "multiple-flow-direction" &&
         pageState?.rustBackend?.failedGateCount === 0
       ) &&
+      pageState?.rustAuthority?.status === "applied" &&
       priorityReady &&
       externalRequests.length === 0
     ),

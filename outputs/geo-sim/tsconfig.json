@@ -10,7 +10,9 @@
     "exactOptionalPropertyTypes": false,
     "useUnknownInCatchVariables": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": false
+    "skipLibCheck": false,
+    "allowJs": true,
+    "checkJs": false
   },
   "include": ["src-ts/**/*.ts"]
 }

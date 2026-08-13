@@ -6,6 +6,30 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-13
+
+### Added
+
+- Added a focused `authoritativeSurfaceLayers` Rust output profile for filled terrain, slope, sparse MFD routing, contributing area, annual discharge, reference/actual ET, runoff, managed retention, recharge, storage change, and cell residual without serializing unrelated diagnostic rasters.
+- Added explicit per-cell managed runoff-retention input, retained-runoff layers, a separate retained volume in the water ledger, and a thirteenth gate proving that outlet surface runoff equals generated runoff minus managed retention.
+- Added a strict TypeScript two-phase commit module that validates engine/API identity, exact grid shape, physical layer ranges, sparse-flow offsets, local and unique D8-neighbor targets, positive fractions, fraction closure, dominant receiver membership, downhill routing, acyclic topology, process gates, and water/groundwater/sediment residuals before mutation.
+- Added bounded JS/Rust comparison metrics for slope, log contributing area, log discharge, runoff, recharge, and dominant-receiver agreement.
+- Added an authoritative model-integration test using the real Rust WASM binary, including successful dependency rebuild plus forced failed-gate and cyclic-graph cases that prove the original model arrays remain untouched.
+
+### Changed
+
+- Migrated `modelWorker` to reviewed strict TypeScript with serialized job execution, native/WASM transport selection, Rust runtime accounting, and transferable-buffer return diagnostics.
+- Working grids up to 512 x 512 now use Rust results for thirteen live model layers before rebuilding rivers, hydraulics, wetness, subsurface state, hazards, infrastructure feedback, ecology, wildlife, statistics, physical gates, and the Three.js scene.
+- Expanded the Rust-core readout to distinguish same-resolution working-layer commits from the independent 96 x 96 audit and to expose dominant-routing agreement.
+- Updated native and WASM desktop smoke tests to require an applied authoritative commit in addition to successful MFD audit gates, GPU warm-up, completed rendering, and zero external requests.
+
+### Fixed
+
+- Preserved facility, reservoir, and landscape runoff-retention effects when Rust becomes authoritative instead of silently dropping retention at the browser-to-core boundary.
+- Rebuilt stream order, river segments, hydraulic diagnostics, groundwater volumes, hazards, ecosystem state, and statistics after an authoritative commit so no dependent layer remains tied to the discarded JS routing candidate.
+- Replaced height-only river reconstruction order with the validated MFD graph's topological order, preserving correct upstream-to-downstream propagation across depression-filled equal-elevation cells.
+- Included Rust transport and execution time in the displayed full-model runtime instead of reporting only browser candidate and dependency-rebuild time.
+
 ## [0.4.0] - 2026-08-13
 
 ### Added
@@ -130,7 +154,8 @@ This section is the preserved release history for the `v0.1.0` tag. It is not a 
 - This release establishes the public **teaching and exploratory prototype** baseline.
 - It does not claim calibrated or validated predictive performance.
 
-[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.1.0...v0.2.0

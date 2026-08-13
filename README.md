@@ -10,7 +10,7 @@
 
 GeoLab 128 is an interactive geographic systems laboratory for exploring how a region behaves as a connected whole. Raise a ridge and the wind exposure changes. Change rainfall or vegetation and the water partition shifts. Add roads, housing, reservoirs, or utilities and the model updates runoff, heat, habitat, service demand, and local suitability together.
 
-The application combines an interactive browser authoring engine with one Rust computation core delivered through two transports. Electron uses a native loopback sidecar; static-browser mode loads the same `geolab-core` algorithms as bundled WebAssembly in a dedicated Worker. Strict TypeScript contracts now govern this boundary while Three.js remains focused on visualization and interaction.
+The application combines an interactive browser authoring engine with one Rust computation core delivered through two transports. Electron uses a native loopback sidecar; static-browser mode loads the same `geolab-core` algorithms as bundled WebAssembly in the model Worker. For working grids up to 512 x 512, Rust can atomically commit terrain, MFD routing, contributing area, discharge, evapotranspiration, runoff, managed retention, recharge, storage, and residual layers back into the live model before rivers, hazards, subsurface state, ecology, statistics, and Three.js geometry are rebuilt.
 
 ## What You Can Explore
 
@@ -25,7 +25,7 @@ The application combines an interactive browser authoring engine with one Rust c
 | Time and hazards | Multi-year vegetation and water response, seasonal state, drought, flood, wildfire, slope instability, compound events, recovery, and resilience summaries. |
 | Evidence and exports | DEM, land cover, soils, weather, flowlines, facilities, boreholes, calibration inputs, provenance audits, uncertainty reports, GeoJSON/CSV, and engine-ready terrain packages. |
 
-Study areas range from 4 km to 512 km per side. Interactive terrain options extend to 4096 × 4096 samples, while local refinement, ecological blocks, networks, footprints, transects, subsurface solids, and agents provide additional representations where one raster is not enough.
+Study areas range from 4 km to 512 km per side. Interactive terrain options extend to 4096 x 4096 samples, while local refinement, ecological blocks, networks, footprints, transects, subsurface solids, and agents provide additional representations where one raster is not enough. Phase-two atomic Rust commits are capped at 512 x 512; larger working grids retain the browser candidate model and bounded Rust audit until a globally conservative binary tile protocol is available.
 
 ## A Coupled Scenario
 
@@ -33,7 +33,7 @@ Study areas range from 4 km to 512 km per side. Interactive terrain options exte
 2. Edit the surface or select an area for infrastructure and ecological intervention.
 3. Run the model to resolve wind exposure, water partitioning, flow paths, erosion pressure, habitat state, subsurface response, and facility feedback.
 4. Inspect the same state as a 3D landscape, analysis layer, cell record, ecological network, cross-section, volume ledger, or scenario synthesis.
-5. Run the Rust verification kernel and export both the result and the assumptions that produced it.
+5. Inspect the gated Rust working-layer commit and independent audit, then export both the result and the assumptions that produced it.
 
 The aim is not a single opaque score. GeoLab keeps weak links visible through separate process gates, coupling scores, evidence coverage, source records, and uncertainty notes.
 
@@ -42,18 +42,21 @@ The aim is not a single opaque score. GeoLab keeps weak links visible through se
 ```mermaid
 flowchart LR
     A["Scenario authoring"] --> B["Browser simulation engine"]
-    B --> C["3D scene and analytical layers"]
-    B --> D["Rust verification request"]
+    B --> D["Typed full-resolution candidate"]
     D --> E{"Local runtime"}
     E -->|"Electron"| F["Native Rust sidecar"]
     E -->|"Static browser"| G["Rust WASM Worker"]
     F --> H["Shared geolab-core"]
     G --> H
     H --> I["Typed validation"]
-    I --> J["Priority-Flood and D8 or MFD routing"]
-    J --> K["Water, groundwater, sediment and habitat"]
+    I --> J["Priority-Flood and MFD routing"]
+    J --> K["Water, retention, groundwater, sediment and habitat"]
     K --> L["Independent process gates"]
-    L --> C
+    L --> N{"Atomic commit eligible"}
+    N -->|"yes"| O["Commit 13 working layers"]
+    N -->|"no"| P["Preserve browser candidate"]
+    O --> C["Rebuild dependent systems and 3D scene"]
+    P --> C
     C --> M["Reports, data and engine exports"]
 ```
 
@@ -67,7 +70,7 @@ The Rust workspace provides:
 - a time-stepped groundwater reservoir that reports initial and final storage, baseflow, overflow, inferred water-table depth, and an independent mass residual;
 - RUSLE-structured gross detachment followed by transport-capacity-limited deposition and export with a separate sediment ledger;
 - climate, moisture, slope, vegetation, imperviousness, and barrier-constrained habitat patches with resistance-weighted connectivity and bottleneck diagnostics;
-- twelve independent gates covering water, routing fractions, outlet area, groundwater, sediment, habitat accounting, bounded ecology, and finite numerics;
+- thirteen independent gates covering water, routing fractions, outlet area, managed runoff retention, groundwater, sediment, habitat accounting, bounded ecology, and finite numerics;
 - a loopback-only Axum API with bounded payloads, bounded concurrency, execution timeout, versioned endpoints, and deterministic reports;
 - a dependency-free WebAssembly ABI, off-main-thread Worker transport, and an end-to-end ABI test that executes a real scenario in Node.
 
@@ -75,7 +78,7 @@ The desktop application starts and stops the native service automatically. Stati
 
 ### Language boundary
 
-Migration is capability-driven rather than a file-extension exercise. Numerically sensitive, deterministic, and conservation-checked work moves to Rust first. Browser-to-core schemas and asynchronous orchestration move to strict TypeScript. Three.js rendering and stable UI modules remain JavaScript until their contracts are isolated and covered, then migrate incrementally. Generated files under `outputs/geo-sim/src/` are browser artifacts; their reviewed sources live under `outputs/geo-sim/src-ts/`.
+Migration is capability-driven rather than a file-extension exercise. Numerically sensitive, deterministic, and conservation-checked work moves to Rust first. Browser-to-core schemas, the queued model Worker, two-phase commit validation, rollback, and asynchronous orchestration live in strict TypeScript. Three.js rendering and stable UI modules remain JavaScript until their contracts are isolated and covered, then migrate incrementally. Generated files under `outputs/geo-sim/src/` are browser artifacts; their reviewed sources live under `outputs/geo-sim/src-ts/`.
 
 ## 3D And Engine Workflows
 
@@ -143,7 +146,7 @@ GeoLab 128 is a teaching and exploratory prototype under active validation devel
 | `engine/geolab-core/` | Rust terrain, hydroclimate, routing, conservation, and gate library. |
 | `engine/geolab-server/` | Bounded local Axum service used by the desktop application. |
 | `engine/geolab-wasm/` | Minimal browser ABI for the shared Rust core. |
-| `outputs/geo-sim/` | Browser application, strict TypeScript kernel bridge, exploratory authoring engine, Three.js renderer, adapters, and exports. |
+| `outputs/geo-sim/` | Browser application, strict TypeScript kernel bridge and atomic commit layer, exploratory authoring engine, Three.js renderer, adapters, and exports. |
 | `outputs/geo-sim-desktop/` | Electron runtime, native/WASM build orchestration, Rust sidecar lifecycle, and local packaging. |
 | `outputs/geo-sim/tests/` | Deterministic client, model, ecology, reporting, and interchange tests. |
 | `.github/workflows/ci.yml` | Rust, WebAssembly, TypeScript, JavaScript, and cross-runtime integrity pipeline. |

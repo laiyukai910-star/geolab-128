@@ -1,4 +1,3 @@
-// Generated from src-ts/modelWorker.ts. Run npm run browser:build to regenerate.
 import {
   buildModel,
   erodeModel,
@@ -7,40 +6,74 @@ import {
   updateTemporalModel
 } from "../src/geoEngine.js";
 import {
-  runBackendVerification
+  runBackendVerification,
+  type BackendScenario,
+  type KernelTransport,
+  type ScenarioParams
 } from "./backendClient.js";
 import {
   applyRustAuthoritativeSurfaceLayers,
   rejectedRustAuthoritativeState,
-  skippedRustAuthoritativeState
+  skippedRustAuthoritativeState,
+  type KernelMutableModel
 } from "./modelKernel.js";
 import { createRustWasmKernel } from "./wasmAbi.js";
+
+type ModelOperation = "build" | "run" | "temporal" | "erode";
+
+interface ModelRequest {
+  id: number;
+  op: ModelOperation;
+  params?: Record<string, unknown>;
+  model?: KernelMutableModel;
+  passes?: number;
+  rustBackendEndpoint?: string | null;
+}
+
+type ModelResponse =
+  | {
+      id: number;
+      ok: true;
+      model: KernelMutableModel;
+      transferDiagnostics: { mode: string; bufferCount: number; totalBytes: number };
+    }
+  | { id: number; ok: false; error: string };
+
+interface ModelWorkerScope {
+  location: Location;
+  addEventListener(type: "message", listener: (event: MessageEvent<ModelRequest>) => void): void;
+  postMessage(message: ModelResponse, transfer: Transferable[]): void;
+}
+
 const MAX_AUTHORITATIVE_RESOLUTION = 512;
-const scope = globalThis;
+const scope = globalThis as unknown as ModelWorkerScope;
 let taskQueue = Promise.resolve();
-let wasmKernelPromise = null;
+let wasmKernelPromise: ReturnType<typeof loadWasmKernel> | null = null;
 let wasmRequestSequence = 0;
+
 scope.addEventListener("message", (event) => {
   taskQueue = taskQueue.then(() => handleRequest(event.data), () => handleRequest(event.data));
 });
-async function handleRequest(request) {
+
+async function handleRequest(request: ModelRequest) {
   try {
     const params = request.params || {};
-    let result;
+    let result: KernelMutableModel;
     if (request.op === "build") {
-      result = buildModel(params);
+      result = buildModel(params) as KernelMutableModel;
     } else if (request.op === "run") {
       if (!request.model) throw new Error("Run operation requires a model");
-      result = runModel(request.model, params);
+      result = runModel(request.model, params) as KernelMutableModel;
     } else if (request.op === "temporal") {
       if (!request.model) throw new Error("Temporal operation requires a model");
-      result = updateTemporalModel(request.model, params);
+      result = updateTemporalModel(request.model, params) as KernelMutableModel;
     } else if (request.op === "erode") {
       if (!request.model) throw new Error("Erode operation requires a model");
-      result = erodeModel(request.model, params, request.passes || 4);
+      result = erodeModel(request.model, params, request.passes || 4) as KernelMutableModel;
     } else {
       throw new Error(`Unknown worker operation: ${String(request.op)}`);
     }
+
     if (request.op !== "temporal") {
       result = await reconcileRustAuthoritativeLayers(
         result,
@@ -67,7 +100,12 @@ async function handleRequest(request) {
     }, []);
   }
 }
-async function reconcileRustAuthoritativeLayers(model, params, endpoint) {
+
+async function reconcileRustAuthoritativeLayers(
+  model: KernelMutableModel,
+  params: Record<string, unknown>,
+  endpoint: string | null
+) {
   const transportName = endpoint ? "native-sidecar" : "browser-wasm";
   if (params.rustAuthoritativeLayers === false) {
     setAuthorityState(model, skippedRustAuthoritativeState(model, "disabled-by-scenario", transportName));
@@ -82,10 +120,10 @@ async function reconcileRustAuthoritativeLayers(model, params, endpoint) {
     return model;
   }
   try {
-    const kernelTransport = endpoint ? void 0 : directWasmTransport();
+    const kernelTransport = endpoint ? undefined : directWasmTransport();
     const verification = await runBackendVerification(
       model,
-      params,
+      params as ScenarioParams,
       endpoint,
       {
         resolution: model.n,
@@ -98,7 +136,7 @@ async function reconcileRustAuthoritativeLayers(model, params, endpoint) {
     applyRustAuthoritativeSurfaceLayers(model, verification);
     model.kernelExecutionRuntimeMs = verification.durationMs;
     model.runtimeMs = (Number(model.runtimeMs) || 0) + verification.durationMs;
-    return refreshModelAfterKernelIntegration(model, params);
+    return refreshModelAfterKernelIntegration(model, params) as KernelMutableModel;
   } catch (error) {
     setAuthorityState(model, rejectedRustAuthoritativeState(
       model,
@@ -108,34 +146,39 @@ async function reconcileRustAuthoritativeLayers(model, params, endpoint) {
     return model;
   }
 }
-function setAuthorityState(model, state) {
+
+function setAuthorityState(model: KernelMutableModel, state: NonNullable<KernelMutableModel["rustAuthoritative"]>) {
   model.rustAuthoritative = state;
-  const stats = model.stats;
+  const stats = model.stats as Record<string, unknown> | undefined;
   if (stats) stats.rustAuthoritative = state;
 }
-function directWasmTransport() {
+
+function directWasmTransport(): KernelTransport {
   return {
     capabilities: async () => (await getWasmKernel()).capabilities(),
-    simulate: async (scenario) => ({
+    simulate: async (scenario: BackendScenario) => ({
       requestId: `model-wasm-${(++wasmRequestSequence).toString(36)}`,
       ...(await getWasmKernel()).simulate(scenario)
     })
   };
 }
+
 function getWasmKernel() {
   wasmKernelPromise ||= loadWasmKernel();
   return wasmKernelPromise;
 }
+
 async function loadWasmKernel() {
   const wasmUrl = new URL("../vendor/geolab/geolab_core.wasm", scope.location.href);
   const response = await fetch(wasmUrl);
   if (!response.ok) throw new Error(`Unable to load bundled Rust WASM (${response.status})`);
   return createRustWasmKernel(await response.arrayBuffer());
 }
-function collectTransferableBuffers(value) {
-  const visited = /* @__PURE__ */ new WeakSet();
-  const buffers = /* @__PURE__ */ new Set();
-  const visit = (entry) => {
+
+function collectTransferableBuffers(value: unknown) {
+  const visited = new WeakSet<object>();
+  const buffers = new Set<ArrayBuffer>();
+  const visit = (entry: unknown) => {
     if (!entry || typeof entry !== "object") return;
     if (ArrayBuffer.isView(entry)) {
       if (entry.buffer instanceof ArrayBuffer) buffers.add(entry.buffer);
@@ -151,7 +194,7 @@ function collectTransferableBuffers(value) {
       for (const item of entry) visit(item);
       return;
     }
-    for (const item of Object.values(entry)) visit(item);
+    for (const item of Object.values(entry as Record<string, unknown>)) visit(item);
   };
   visit(value);
   return Array.from(buffers);
