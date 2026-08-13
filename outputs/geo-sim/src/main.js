@@ -3,6 +3,7 @@ import {
   applyBrush,
   buildAdaptiveInfrastructurePlacementPlan,
   buildBlockDetailAtlas,
+  buildEcologicalIntegrityReport,
   buildBuiltEnvironmentRecoverySeries,
   buildBuiltEnvironmentResilienceAtlas,
   buildHazardEventScenario,
@@ -34,6 +35,7 @@ import {
   makePhysicalTimeProgressionCSV,
   makeTimeProgressionCSV,
   makeGridCSV,
+  makeEcologicalIntegrityCSV,
   makeSubsurfaceColumnReasoningCSV,
   makeSubsurfaceCubeLedgerCSV,
   makeSubsurfaceTransectCSV,
@@ -185,6 +187,7 @@ const wildlifeReleaseHabitat = document.getElementById("wildlifeReleaseHabitat")
 const wildlifeReleaseBlockId = document.getElementById("wildlifeReleaseBlockId");
 const wildlifeReleaseQueue = document.getElementById("wildlifeReleaseQueue");
 const ecosystemFunctionReadout = document.getElementById("ecosystemFunctionReadout");
+const ecologicalRigorReadout = document.getElementById("ecologicalRigorReadout");
 const dataStatus = document.getElementById("dataStatus");
 const cellReadout = document.getElementById("cellReadout");
 const viewMode = document.getElementById("viewMode");
@@ -838,6 +841,8 @@ function bindUi() {
   document.getElementById("queueWildlifeRelease")?.addEventListener("click", queueWildlifeReleaseBatch);
   document.getElementById("executeWildlifeReleases")?.addEventListener("click", executeWildlifeReleaseBatches);
   document.getElementById("clearWildlifeReleases")?.addEventListener("click", clearWildlifeReleaseBatches);
+  document.getElementById("exportEcologicalIntegrity")?.addEventListener("click", exportEcologicalIntegrity);
+  document.getElementById("exportEcologicalIntegrityCSV")?.addEventListener("click", exportEcologicalIntegrityCSV);
 
   ["seed", "mapSizeKm", "resolution", "relief", "ridgeWeight", "tectonics"].forEach((id) => {
     ui[id].addEventListener("change", () => {
@@ -964,6 +969,7 @@ function bindUi() {
   document.getElementById("exportScenarioBrief")?.addEventListener("click", exportScenarioBrief);
   [scenarioTitle, scenarioPurpose, scenarioNotes].forEach((control) => control?.addEventListener("input", updateScenarioSynthesis));
   window.addEventListener("geolab:localechange", updateScenarioSynthesis);
+  window.addEventListener("geolab:localechange", updateEcosystemFunctionReadout);
   document.getElementById("exportSettings").addEventListener("click", () => {
     download(
       "geolab-128-settings.json",
@@ -2064,13 +2070,17 @@ function updateWildlifeReleaseReadout() {
   wildlifeReleaseQueue.appendChild(title);
   const applied = new Set(model?.wildlife?.appliedReleaseBatchIds || []);
   const outcomes = new Map((model?.wildlife?.releaseOutcomes || []).map((row) => [row.batchId, row]));
+  const locale = globalThis.__geoLabLocale?.locale === "zh-CN" ? "zh" : "en";
   for (const batch of wildlifeReleaseBatches.slice(-12)) {
     const species = WILDLIFE_SPECIES.find((row) => row.id === batch.speciesId);
     const outcome = outcomes.get(batch.batchId);
     const row = document.createElement("div");
     const destination = batch.targetBlockId === null ? localizedReleaseHabitat(batch.targetHabitat) : `区块 ${batch.targetBlockId}`;
+    const outcomeStatus = outcome ? localizedReleaseOutcomeStatus(outcome.status, locale) : "";
     row.textContent = outcome
-      ? `${species?.labelZh || batch.speciesId} × ${batch.count} · ${destination} · 存活 ${Math.round(outcome.survivingCount)} (${Math.round(outcome.survivalRate * 100)}%)`
+      ? locale === "zh"
+        ? `${species?.labelZh || batch.speciesId} × ${batch.count} · ${destination} · 存活 ${Math.round(outcome.survivingCount)} (${Math.round(outcome.survivalRate * 100)}%) · ${outcomeStatus}`
+        : `${species?.id || batch.speciesId} × ${batch.count} · ${batch.targetBlockId === null ? batch.targetHabitat : `block ${batch.targetBlockId}`} · survivors ${Math.round(outcome.survivingCount)} (${Math.round(outcome.survivalRate * 100)}%) · ${outcomeStatus}`
       : `${species?.labelZh || batch.speciesId} × ${batch.count} · ${destination} · ${applied.has(batch.batchId) ? "已执行" : "待执行"}`;
     wildlifeReleaseQueue.appendChild(row);
   }
@@ -2094,15 +2104,82 @@ function updateEcosystemFunctionReadout() {
   const state = model?.wildlife;
   if (!state?.ecosystemFunctions) {
     ecosystemFunctionReadout.textContent = "生态功能将在演算后汇总";
+    if (ecologicalRigorReadout) ecologicalRigorReadout.textContent = "生态与地理一致性将在演算后诊断";
     return;
   }
+  const locale = globalThis.__geoLabLocale?.locale === "zh-CN" ? "zh" : "en";
   const title = document.createElement("strong");
-  title.textContent = `生态功能 ${Math.round(state.ecosystemFunctions.summary.compositeFunctionIndex * 100)}% · 食物网 ${state.foodWeb?.links?.length || 0} 条`;
+  title.textContent = locale === "zh"
+    ? `生态功能 ${Math.round(state.ecosystemFunctions.summary.compositeFunctionIndex * 100)}% · 食物网 ${state.foodWeb?.links?.length || 0} 条`
+    : `Ecosystem functions ${Math.round(state.ecosystemFunctions.summary.compositeFunctionIndex * 100)}% · ${state.foodWeb?.links?.length || 0} food-web links`;
   ecosystemFunctionReadout.appendChild(title);
   const limiting = state.ecosystemFunctions.guilds.find((row) => row.guildId === state.ecosystemFunctions.summary.limitingGuildId);
   const detailRow = document.createElement("div");
-  detailRow.textContent = `活跃物种 ${state.summary.activeSpeciesCount}/${state.summary.speciesCount} · 营养平衡 ${Math.round((state.foodWeb?.summary?.trophicBalance || 0) * 100)}% · 限制环节 ${limiting?.labelZh || "未识别"}`;
+  detailRow.textContent = locale === "zh"
+    ? `活跃物种 ${state.summary.activeSpeciesCount}/${state.summary.speciesCount} · 营养资源支持 ${Math.round((state.foodWeb?.summary?.trophicResourceSupport || 0) * 100)}% · 限制环节 ${limiting?.labelZh || "未识别"}`
+    : `Active species ${state.summary.activeSpeciesCount}/${state.summary.speciesCount} · Trophic resource support ${Math.round((state.foodWeb?.summary?.trophicResourceSupport || 0) * 100)}% · Limiting guild ${limiting?.guildId || "unresolved"}`;
   ecosystemFunctionReadout.appendChild(detailRow);
+  updateEcologicalRigorReadout(locale);
+}
+
+function localizedReleaseOutcomeStatus(status, locale) {
+  const labels = {
+    "ecosystem-disabled": { zh: "生态层关闭", en: "ecosystem disabled" },
+    "outside-regional-template": { zh: "区域不匹配，已拦截", en: "regional mismatch, blocked" },
+    "no-viable-habitat": { zh: "无可用生境，已拦截", en: "no viable habitat, blocked" },
+    "high-fit-screening": { zh: "高适配筛查", en: "higher-fit screening" },
+    "conditional-screening": { zh: "条件性筛查", en: "conditional screening" },
+    "low-fit-screening": { zh: "低适配筛查", en: "low-fit screening" }
+  };
+  return labels[status]?.[locale] || status;
+}
+
+function updateEcologicalRigorReadout(locale = globalThis.__geoLabLocale?.locale === "zh-CN" ? "zh" : "en") {
+  if (!ecologicalRigorReadout) return;
+  ecologicalRigorReadout.replaceChildren();
+  const integrity = model?.wildlife?.ecologicalIntegrity;
+  const geography = model?.landscapeNetwork?.geographicConsistency;
+  if (!integrity || !geography) {
+    ecologicalRigorReadout.textContent = locale === "zh" ? "生态与地理一致性将在演算后诊断" : "Ecological and geographic consistency will be diagnosed after simulation.";
+    return;
+  }
+  const heading = document.createElement("strong");
+  heading.textContent = locale === "zh"
+    ? `生态完整性筛查 ${Math.round(integrity.summary.integrityIndex * 100)}% · 地图面积闭合 ${format(geography.mapAreaClosurePct, 1)}%`
+    : `Ecological integrity screening ${Math.round(integrity.summary.integrityIndex * 100)}% · Map-area closure ${format(geography.mapAreaClosurePct, 1)}%`;
+  const diversity = document.createElement("div");
+  diversity.textContent = locale === "zh"
+    ? `Shannon ${format(integrity.biodiversity.shannonDiversity, 2)} · 有效物种数 q1 ${format(integrity.biodiversity.hillNumberQ1, 1)} · 核心生境 ${format(geography.coreHabitatAreaKm2, 1)} km²`
+    : `Shannon ${format(integrity.biodiversity.shannonDiversity, 2)} · Effective species q1 ${format(integrity.biodiversity.hillNumberQ1, 1)} · Core-habitat proxy ${format(geography.coreHabitatAreaKm2, 1)} km²`;
+  const consistency = document.createElement("div");
+  consistency.textContent = locale === "zh"
+    ? `气候—植被一致性 ${Math.round(geography.meanClimateVegetationConsistency * 100)}% · 边缘压力 ${Math.round(geography.meanEdgePressure * 100)}% · 拦截投放 ${integrity.translocation.blockedReleaseCount}`
+    : `Climate-vegetation consistency ${Math.round(geography.meanClimateVegetationConsistency * 100)}% · Edge pressure ${Math.round(geography.meanEdgePressure * 100)}% · Blocked releases ${integrity.translocation.blockedReleaseCount}`;
+  const boundary = document.createElement("small");
+  boundary.textContent = locale === "zh" ? "筛查指数不等于现场生物多样性调查、种群生存力分析或投放许可。" : "Screening indices are not field biodiversity surveys, population viability analyses, or release authorizations.";
+  ecologicalRigorReadout.append(heading, diversity, consistency, boundary);
+  if (typeof globalThis !== "undefined") {
+    globalThis.__geoLabEcologicalRigor = {
+      geographicConsistency: geography,
+      ecologicalIntegrity: integrity,
+      foodWebSummary: model.wildlife.foodWeb?.summary || null,
+      wildlifeSummary: model.wildlife.summary || null
+    };
+  }
+}
+
+function exportEcologicalIntegrity() {
+  if (!model?.wildlife?.ecologicalIntegrity) return;
+  const report = buildEcologicalIntegrityReport(model, params);
+  download("geolab-128-ecological-integrity.json", "application/json", JSON.stringify(report, null, 2));
+  setStatus("生态完整性报告已导出");
+}
+
+function exportEcologicalIntegrityCSV() {
+  if (!model?.wildlife?.ecologicalIntegrity) return;
+  const report = buildEcologicalIntegrityReport(model, params);
+  download("geolab-128-species-diagnostics.csv", "text/csv;charset=utf-8", makeEcologicalIntegrityCSV(report));
+  setStatus("物种诊断 CSV 已导出");
 }
 
 async function applyTerrainPresetSelection() {
@@ -2347,7 +2424,7 @@ function updateReadout(event) {
     `${cell.landCover.code} · 土壤 ${cell.soilGroup.code} · 植被 ${format(sample.vegetation * 100, 0)}% · LAI ${format(sample.leafAreaIndex, 1)} · 冠层 ${format(sample.canopyHeight, 1)} m`,
     `${cell.vegetationType?.name || "植被"} · 韧性 ${format(cell.vegetationResilience || 0, 2)} · 碳储量 ${format(cell.biomassCarbonKgM2 || 0, 1)} kg/m2 · 冠层粗糙 ${format(cell.canopyRoughnessLengthM || 0, 2)} m`,
     ecology
-      ? `生态区块 ${ecology.block.blockId} · 栖息地 ${format(ecology.block.habitatQuality, 2)} · 连通 ${format(ecology.block.meanNeighborConnectivity, 2)} · 阻力 ${format(1 - ecology.block.meanNeighborConnectivity, 2)} · 物种 ${ecology.state?.richness || 0} · 优势种 ${ecology.dominantSpeciesLabel}`
+      ? `生态区块 ${ecology.block.blockId} · 栖息地 ${format(ecology.block.habitatQuality, 2)} · 连通 ${format(ecology.block.meanNeighborConnectivity, 2)} · 边缘压力 ${format(ecology.block.edgePressure, 2)} · 干湿区 ${ecology.block.aridityZone} · 气植一致 ${format(ecology.block.climateVegetationConsistency, 2)} · 物种 ${ecology.state?.richness || 0} · 优势种 ${ecology.dominantSpeciesLabel}`
       : "",
     `实际蒸散 ${Math.round(sample.actualEvapotranspiration)} mm/yr · 水量 ${Math.round(sample.waterBalance)} mm/yr · 径流 ${format(cell.runoffCoefficient, 2)} · 湿润指数 ${format(sample.wetnessIndex, 1)}`,
     `饱和导水率 ${format(sample.hydraulicConductivityMmHr, 1)} mm/hr | 可用水 ${Math.round(sample.availableWaterCapacityMm)} mm | 根深 ${format(sample.rootDepthM, 2)} m | 不透水 ${format(sample.imperviousFraction * 100, 0)}% | 入渗 ${format(sample.infiltrationCapacity, 2)}`,
@@ -2718,6 +2795,9 @@ function updateMetrics() {
     stats.wildlife ? `<span>动物 ${stats.wildlife.activeSpeciesCount}/${stats.wildlife.speciesCount} 种</span>` : "",
     Number.isFinite(stats.wildlife?.totalPopulationEstimate) ? `<span>种群估算 ${Math.round(stats.wildlife.totalPopulationEstimate)}</span>` : "",
     stats.wildlife?.migrationLinkCount ? `<span>迁徙廊道 ${stats.wildlife.migrationLinkCount}</span>` : "",
+    Number.isFinite(stats.wildlife?.ecologicalIntegrityIndex) ? `<span>生态完整性 ${Math.round(stats.wildlife.ecologicalIntegrityIndex * 100)}%</span>` : "",
+    Number.isFinite(stats.wildlife?.hillNumberQ1) ? `<span>有效物种 q1 ${format(stats.wildlife.hillNumberQ1, 1)}</span>` : "",
+    Number.isFinite(stats.landscapeNetwork?.mapAreaClosurePct) ? `<span>面积闭合 ${format(stats.landscapeNetwork.mapAreaClosurePct, 1)}%</span>` : "",
     globalThis.__geoLabGpuStats
       ? `<span>GPU ${globalThis.__geoLabGpuStats.hardwareAccelerated === false ? "兼容" : "硬件"} · ${globalThis.__geoLabGpuStats.webglVersion}</span>`
       : "",
@@ -4431,6 +4511,7 @@ function exportQualityReport() {
     manualSurfacePatches: manualSurfaceCollection(),
     manualInfrastructure: manualInfrastructureCollection(),
     scenarioSynthesis: currentScenarioSynthesis(),
+    ecologicalIntegrity: model?.wildlife?.ecologicalIntegrity ? buildEcologicalIntegrityReport(model, params) : null,
     derivedLayers: model?.stats
       ? {
           meanWindSpeed: model.stats.meanWindSpeed,
@@ -4575,6 +4656,20 @@ function buildPipelineAudit() {
   if (Number.isFinite(waterBudget?.outletRunoffCoefficientByVolume) && waterBudget.outletRunoffCoefficientByVolume > 0.95) {
     warnings.push(`出口径流体积为年输入水量的 ${format(waterBudget.outletRunoffCoefficientByVolume, 2)}；当前土壤、土地覆盖和人造设施情景可能产流过高。`);
   }
+  const geographicConsistency = model?.landscapeNetwork?.geographicConsistency;
+  if (Number.isFinite(geographicConsistency?.mapAreaClosurePct) && Math.abs(geographicConsistency.mapAreaClosurePct - 100) > 0.01) {
+    warnings.push(`生态区块面积闭合为 ${format(geographicConsistency.mapAreaClosurePct, 2)}%；请检查地图范围与栅格支撑面积。`);
+  }
+  if (Number.isFinite(geographicConsistency?.meanClimateVegetationConsistency) && geographicConsistency.meanClimateVegetationConsistency < 0.55) {
+    warnings.push(`气候—植被一致性只有 ${format(geographicConsistency.meanClimateVegetationConsistency, 2)}；请检查 P/PET、植被覆盖和生物量输入。`);
+  }
+  const ecologicalIntegrity = model?.wildlife?.ecologicalIntegrity;
+  if (Number.isFinite(ecologicalIntegrity?.summary?.integrityIndex) && ecologicalIntegrity.summary.integrityIndex < 0.4) {
+    warnings.push(`生态完整性筛查为 ${format(ecologicalIntegrity.summary.integrityIndex, 2)}；应检查各分项，不可将综合值视为现场生态评价。`);
+  }
+  if ((ecologicalIntegrity?.translocation?.blockedReleaseCount || 0) > 0) {
+    warnings.push(`${ecologicalIntegrity.translocation.blockedReleaseCount} 个生物投放批次因区域不匹配、缺少可用生境或生态层关闭而被拦截。`);
+  }
   const hydraulics = model?.stats?.hydraulicDiagnostics;
   if (Number.isFinite(hydraulics?.maxFlowVelocityMs) && hydraulics.maxFlowVelocityMs > 5.5) {
     warnings.push(`最大模型流速为 ${format(hydraulics.maxFlowVelocityMs, 2)} m/s；请检查河道坡降、流量尺度、DEM 伪影和水力粗糙度。`);
@@ -4643,7 +4738,9 @@ function buildPipelineAudit() {
       "估算河道/坡面流速、剪切应力、水流功率、输沙能力、侵蚀风险和淤积风险",
       "运行洪水、干旱、野火、滑坡/地震触发、累积侵蚀和植被投影的时间与自然灾害情景层",
       "按地形、水文、植被、气候、灾害和人造扰动聚合八邻域生态区块，并计算跨区通量、阻力与廊道等级",
-      "按物种生态位、区块承载力、猎物依赖和迁徙阻力演算种群分布，并生成可动画化的三维动物代理",
+      "以地图面积除以栅格点数定义体积与面积统计的支撑面积，同时保留点间距用于坡度、流向和空间距离",
+      "按限制因子生态位、物种有效栖息面积、功能连通性、干扰死亡、猎物生物量支持和迁徙阻力演算种群分布",
+      "计算 P/PET 干湿度分区、气候—植被一致性、核心生境代理、Shannon/Hill 多样性与透明生态完整性筛查",
       "应用校准偏差、径流倍率和观测流量偏差诊断",
       "运行可导出的参数扰动集合，量化降水、温度、土壤、水文阈值、植被和人造设施反馈敏感性",
       "综合地形、气候、水文、生态、地下、设施、灾害与证据八个系统，分离计算系统覆盖和证据覆盖，并生成联动链路与验证优先事项",
@@ -4665,8 +4762,9 @@ function buildPipelineAudit() {
       wind: "地形暴露 + 背风遮蔽 + 冠层/粗糙度阻力 + 可选栅格风场覆盖；u/v 分量会转换为气象学风来向",
       vegetation: "土地覆盖/NDVI 冠层融合，包含 LAI、根系固结、截留、蒸散和水量平衡诊断",
       terrainDiagnostics: "可调多尺度域扭曲、分形噪声、山脊与微地形生成，并计算坡度、坡向、曲率、地形位置指数、局地粗糙度、地形湿润指数和亚格双线性检查器",
-      landscapeConnectivity: "八邻域生态区块图，将地形连续性、水文连续性、植被、土地水体边界、人造扰动与灾害合成为连通度、阻力和跨区通量",
-      wildlife: "36 类区域物种生态位 + 区块承载力 + 食物网猎物依赖 + 迁徙阻力网络 + 批量投放存活推演 + 时间种群更新；Three.js 语义解剖部件合批模型表现个体运动与鸟类振翅",
+      landscapeConnectivity: "面积闭合的八邻域生态区块图，将地形、水文、P/PET 干湿度、植被、人造干扰与灾害合成为边缘压力、核心生境代理、连通度、阻力和跨区通量",
+      wildlife: "36 类区域物种的限制因子生态位 + 有效栖息面积承载力 + 代表性成年体重生物量 + 猎物资源支持 + 干扰死亡 + 功能连通网络 + 受约束投放筛查；不替代种群生存力分析",
+      ecologicalIntegrity: "以可展开的生境、连通性、核心生境、气候—植被一致性、Shannon/Hill 多样性、功能群和营养资源分项构成筛查指数，并保留专业解释边界",
       proceduralAssets: "109 类语义程序化资产工厂，以曲线、挤压、旋转体、桁架、肋板、非规则多面体和多部件装配构造自然物件、人造设施与动物解剖",
       continentTemplates: "15 套全球与区域模板联动地貌、气候、风、水文、植被、生态区系和随机种子",
       scenarioSynthesis: "八系统情景综合分离系统覆盖与证据覆盖，汇总跨域联动链路、目的相关验证优先事项，并输出结构化 JSON 与可读 Markdown 简报"

@@ -661,6 +661,34 @@ input[type="range"] {
   line-height: 1.4;
 }
 
+.ecological-rigor-readout {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+  border-left: 3px solid var(--accent);
+}
+
+.ecological-rigor-readout strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.ecological-rigor-readout div,
+.ecological-rigor-readout small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.ecological-rigor-readout small {
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.ecological-rigor-actions {
+  margin-top: 8px;
+}
+
 .infrastructure-placement-strip {
   display: block;
   padding: 9px 10px;

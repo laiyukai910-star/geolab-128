@@ -1,11 +1,20 @@
 import {
+  buildEcologicalIntegrityReport,
   buildLandscapeBlockNetwork,
   buildWildlifeState,
   ECOSYSTEM_GUILDS,
+  makeEcologicalIntegrityCSV,
   WILDLIFE_SPECIES
 } from "./landscapeEcology.js";
 
-export { buildLandscapeBlockNetwork, buildWildlifeState, ECOSYSTEM_GUILDS, WILDLIFE_SPECIES };
+export {
+  buildEcologicalIntegrityReport,
+  buildLandscapeBlockNetwork,
+  buildWildlifeState,
+  ECOSYSTEM_GUILDS,
+  makeEcologicalIntegrityCSV,
+  WILDLIFE_SPECIES
+};
 
 export const MAP_SIZE_KM = 128;
 export const MAP_AREA_KM2 = MAP_SIZE_KM * MAP_SIZE_KM;
@@ -14,6 +23,15 @@ export const SUPPORTED_MODEL_RESOLUTIONS = Object.freeze([128, 192, 256, 384, 51
 export const MAX_TERRAIN_ELEVATION_M = 10000;
 export const MAX_MODEL_RESOLUTION = 4096;
 export const MAX_SUBSURFACE_GRID_RESOLUTION = 512;
+
+function modelCellSupportAreaKm2(model) {
+  const stored = Number(model?.cellSupportAreaKm2);
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  const areaKm2 = Number(model?.areaKm2);
+  const cellCount = Number(model?.height?.length);
+  if (Number.isFinite(areaKm2) && areaKm2 > 0 && Number.isFinite(cellCount) && cellCount > 0) return areaKm2 / cellCount;
+  return Math.max(0, Number(model?.cellSizeKm) || 0) ** 2;
+}
 
 export const INFRASTRUCTURE_TYPE_CODES = Object.freeze({
   custom: 0,
@@ -2041,6 +2059,7 @@ export function runModel(model, params) {
   model.sizeKm = sizeKm;
   model.areaKm2 = sizeKm * sizeKm;
   model.cellSizeKm = sizeKm / Math.max(1, model.n - 1);
+  model.cellSupportAreaKm2 = model.areaKm2 / Math.max(1, model.height.length);
   params = {
     ...params,
     mapSizeKm: sizeKm,
@@ -2118,6 +2137,7 @@ export function updateTemporalModel(model, params = {}) {
   model.sizeKm = sizeKm;
   model.areaKm2 = sizeKm * sizeKm;
   model.cellSizeKm = sizeKm / Math.max(1, model.n - 1);
+  model.cellSupportAreaKm2 = model.areaKm2 / Math.max(1, model.height.length);
   params = {
     ...params,
     mapSizeKm: sizeKm,
@@ -2956,7 +2976,7 @@ export function buildWatershedDelineation(model, params = {}, options = {}) {
   const includeCells = options.includeCells !== false;
   const rows = includeCells ? [] : null;
   const seaLevel = Number(params.seaLevel ?? 0);
-  const cellAreaKm2 = model.cellSizeKm * model.cellSizeKm;
+  const cellAreaKm2 = modelCellSupportAreaKm2(model);
   const cellAreaM2 = cellAreaKm2 * 1_000_000;
   const areaKm2 = cells.length * cellAreaKm2;
   const aoiAreaKm2 = Number(model.areaKm2) || MAP_AREA_KM2;
@@ -5892,7 +5912,7 @@ export function buildPhysicalTimeProgressionSeries(model, params = {}, options =
   const seasonalState = model.hazards?.summary?.seasonalState || computeSeasonalTimeState(model, params);
   const seaLevel = Number(params.seaLevel ?? 0);
   const len = model.height.length;
-  const cellAreaM2 = model.cellSizeKm * model.cellSizeKm * 1_000_000;
+  const cellAreaM2 = modelCellSupportAreaKm2(model) * 1_000_000;
   const landIndices = [];
   for (let i = 0; i < len; i += 1) {
     if (model.height[i] > seaLevel) landIndices.push(i);
@@ -5944,7 +5964,7 @@ export function buildInfrastructureImpactAtlas(model, params = {}, options = {})
   if (!model?.height) throw new Error("A computed model is required for infrastructure impact atlas");
   const influence = model.infrastructureInfluence || null;
   const len = model.height.length;
-  const cellAreaKm2 = model.cellSizeKm * model.cellSizeKm;
+  const cellAreaKm2 = modelCellSupportAreaKm2(model);
   const cellAreaM2 = cellAreaKm2 * 1_000_000;
   const totalAreaKm2 = model.areaKm2 || MAP_AREA_KM2;
   const highCompositeThreshold = clamp(Number(options.highCompositeThreshold ?? 0.65), 0, 1);
@@ -6028,7 +6048,7 @@ export function buildInfrastructureBlockStateReport(model, params = {}, options 
       sizeKm: model.sizeKm || MAP_SIZE_KM,
       areaKm2: model.areaKm2 || MAP_AREA_KM2,
       resolution: model.n,
-      cellAreaKm2: round(model.cellSizeKm * model.cellSizeKm, 6)
+      cellAreaKm2: round(modelCellSupportAreaKm2(model), 6)
     },
     infrastructure: influence
       ? {
@@ -6149,7 +6169,7 @@ export function buildInfrastructureCellPlacementLedger(model, params = {}, optio
       sizeKm: model.sizeKm || MAP_SIZE_KM,
       areaKm2: model.areaKm2 || MAP_AREA_KM2,
       resolution: model.n,
-      cellAreaKm2: round(model.cellSizeKm * model.cellSizeKm, 6),
+      cellAreaKm2: round(modelCellSupportAreaKm2(model), 6),
       blockCellSize,
       blockGridSize
     },
@@ -6262,7 +6282,7 @@ export function buildInfrastructureSuitabilityMatrix(model, params = {}, options
       blockCellSize: blockState.blockCellSize,
       blockGridSize: blockState.blockGridSize,
       blockSizeKm: round(blockState.blockCellSize * model.cellSizeKm, 6),
-      cellAreaKm2: round(model.cellSizeKm * model.cellSizeKm, 6)
+      cellAreaKm2: round(modelCellSupportAreaKm2(model), 6)
     },
     assumptions: [
       "Scores are block-scale screening values derived from terrain, hydrology, climate, hazard, foundation, block capacity, and neighborhood context.",
@@ -6486,7 +6506,7 @@ export function buildBlockDetailAtlas(model, params = {}, options = {}) {
       blockCellSize: blockState.blockCellSize,
       blockGridSize: blockState.blockGridSize,
       blockCount: blockState.blockCount,
-      cellAreaKm2: round(model.cellSizeKm * model.cellSizeKm, 6)
+      cellAreaKm2: round(modelCellSupportAreaKm2(model), 6)
     },
     assumptions: [
       "Block rows are analysis cells, not rendered meshes; Three.js remains a view adapter over simulation state.",
@@ -6518,7 +6538,7 @@ export function buildBuiltEnvironmentResilienceAtlas(model, params = {}, options
   if (!model?.height) throw new Error("A computed model is required for built environment resilience atlas");
   const influence = model.infrastructureInfluence || null;
   const resilience = model.builtResilience || computeBuiltEnvironmentResilienceState(model, params);
-  const cellAreaKm2 = model.cellSizeKm * model.cellSizeKm;
+  const cellAreaKm2 = modelCellSupportAreaKm2(model);
   const totalAreaKm2 = model.areaKm2 || MAP_AREA_KM2;
   const groups = new Map();
   if (influence?.mask) {
@@ -6648,7 +6668,7 @@ export function buildHazardEventScenario(model, params = {}, options = {}) {
   const intensity = clamp(Number(options.intensity ?? params.disasterIntensity ?? 0.5), 0, 2);
   const returnPeriodYears = clampInteger(options.returnPeriodYears ?? hazardReturnPeriodYears(params.disasterMode, intensity), 2, 500, 50);
   const hotspotLimit = clampInteger(options.hotspotLimit ?? 32, 0, 500, 32);
-  const cellAreaKm2 = model.cellSizeKm * model.cellSizeKm;
+  const cellAreaKm2 = modelCellSupportAreaKm2(model);
   const maxShearStressPa = Math.max(120, maxFinite(model.hydraulics?.shearStressPa));
   const events = eventTypes.map((eventType) => hazardEventSummary(model, params, eventType, {
     intensity,
@@ -6901,7 +6921,7 @@ function timeProgressionRow(model, params, year, targetYears) {
   const hazards = model.hazards || {};
   const seaLevel = Number(params.seaLevel ?? 0);
   const progress = targetYears > 0 ? clamp(Number(year) / targetYears, 0, 1) : 0;
-  const cellAreaKm2 = model.cellSizeKm * model.cellSizeKm;
+  const cellAreaKm2 = modelCellSupportAreaKm2(model);
   let landCells = 0;
   let meanFlood = 0;
   let meanDrought = 0;
@@ -16604,7 +16624,7 @@ function dInfinityCandidate(filled, n, x, y, index, direction, center) {
 
 function computeAccumulation(model, params) {
   const len = model.height.length;
-  const cellAreaKm2 = model.cellSizeKm * model.cellSizeKm;
+  const cellAreaKm2 = modelCellSupportAreaKm2(model);
   const cellAreaM2 = cellAreaKm2 * 1_000_000;
   const seaLevel = Number(params.seaLevel);
   const requestedRouting = String(params.flowRouting || "d8").toLowerCase();
@@ -16965,7 +16985,7 @@ function computeTimeHazards(model, params) {
   const currentProjectedVegetation = new Float32Array(len);
   const maxFlow = Math.max(2, maxFinite(model.flowAccumulation));
   const maxShear = Math.max(1, maxFinite(model.hydraulics?.shearStressPa));
-  const cellAreaKm2 = model.cellSizeKm * model.cellSizeKm;
+  const cellAreaKm2 = modelCellSupportAreaKm2(model);
   const landCells = Math.max(1, model.height.reduce((sum, h) => sum + (h > Number(params.seaLevel) ? 1 : 0), 0));
   let meanFlood = 0;
   let meanDrought = 0;
@@ -18615,7 +18635,7 @@ function computeDataConfidence(model, params = {}) {
   const hasMeteorologyBoundary = Boolean(model.boundaryForcing?.sourceCount);
   const maxFlowLog = Math.log1p(Math.max(2, maxFinite(model.flowAccumulation)));
   const domainCounts = Object.fromEntries(Object.keys(DATA_SOURCE_FLAGS).map((key) => [key, 0]));
-  const cellAreaKm2 = model.cellSizeKm * model.cellSizeKm;
+  const cellAreaKm2 = modelCellSupportAreaKm2(model);
   let landCells = 0;
   let supportSum = 0;
   let sourceCountSum = 0;
@@ -18838,7 +18858,7 @@ function computeStats(model, params) {
   let maxFlowAccumulation = 0;
   let maxDischargeAnnualM3 = 0;
   let landCells = 0;
-  const cellAreaKm2 = model.cellSizeKm * model.cellSizeKm;
+  const cellAreaKm2 = modelCellSupportAreaKm2(model);
   const cellAreaM2 = cellAreaKm2 * 1_000_000;
   let precipitationVolumeM3 = 0;
   let actualEtVolumeM3 = 0;
@@ -19062,6 +19082,8 @@ function computeStats(model, params) {
     meanRoughness: meanRoughness / divisor
   });
   return {
+    cellSupportAreaKm2: cellAreaKm2,
+    rasterAreaClosurePct: ratio(cellAreaKm2 * model.height.length, model.areaKm2) * 100,
     minElevation,
     maxElevation,
     meanElevation: meanElevation / divisor,
@@ -22188,7 +22210,7 @@ function builtRecoveryRowFromState(model, params, cells, damageState, recoverySt
     backlog: 0,
     dominantHazard: "none"
   };
-  const cellAreaKm2 = model.cellSizeKm * model.cellSizeKm;
+  const cellAreaKm2 = modelCellSupportAreaKm2(model);
   return {
     year,
     progress_fraction: targetYears > 0 ? round(year / targetYears, 6) : 0,

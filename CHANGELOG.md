@@ -8,6 +8,10 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 
 ### Added
 
+- Added area-closed ecological blocks with UNEP / UNCCD `P/PET` aridity zones, climate-vegetation consistency, edge pressure, effective habitat, and core-habitat proxies.
+- Added limiting-factor species niches, functional-connectivity carrying capacity, bounded disturbance-aware population dynamics, representative adult body-mass traits, and prey-biomass support.
+- Added transparent ecological-integrity diagnostics with Shannon diversity, Hill numbers, Pielou evenness, functional-guild representation, trophic biomass, component weights, interpretation boundaries, JSON export, and species-level CSV.
+- Added hard screening gates that assign zero survival to wildlife releases outside the selected regional template or without viable habitat, with explicit professional review requirements.
 - Added a purpose-aware cross-system scenario synthesis spanning terrain, climate, water, ecology, subsurface, infrastructure, hazards, and evidence.
 - Added separate system-coverage and evidence-coverage diagnostics, explicit coupling pathways, prioritized follow-up actions, and visible interpretation boundaries.
 - Added portable scenario-synthesis JSON and Markdown brief exports plus deterministic CI tests for report structure, evidence scoring, intervention feedback, and failure handling.
@@ -17,6 +21,8 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 
 ### Changed
 
+- Area and volume accounting now uses map area divided by grid-point count while terrain derivatives and distances continue to use point spacing, removing resolution-dependent area inflation from water, hazard, infrastructure, ecology, and time-series totals.
+- Replaced raw-count trophic balance with standing-biomass and accessible-prey support diagnostics while retaining a compatibility alias for existing views.
 - Reframed and expanded the project documentation around GeoLab 128 as a local-first geographic systems laboratory, with explicit modeling vocabulary, coupled scenario workflow, design principles, repository map, and professional boundaries.
 - Consolidated project-wide release notes into this root changelog and established it as the only maintained changelog in the repository.
 - Rebalanced 3D vegetation, wildlife, and built-asset proportions using meter-based visual scales, shared geometry reuse, frustum culling, and bounded animation updates.

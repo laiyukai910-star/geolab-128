@@ -84,7 +84,7 @@ For research, planning, or engineering work, use quality-controlled source data,
 | Terrain and geomorphology | Procedural terrain, editable landform operations, continental templates, elevation up to 10,000 m, and terrain-derived exposure and roughness. |
 | Climate and wind | Editable temperature, humidity, latitude, lapse rate, wind direction, wind speed, and terrain-exposure conditions with orographic and rain-shadow approximations. |
 | Water and landform response | Priority-Flood handling, D8/MFD/D∞ routing, river extraction, runoff, erosion, deposition, and screening-level flood, drought, wildfire, and slope-risk indicators. |
-| Ecology | Habitat and block conditions, functional guilds, carrying-capacity proxies, movement corridors, food-web relationships, and batch wildlife-release scenarios. |
+| Ecology | Area-closed habitat blocks, limiting-factor niches, effective-habitat carrying capacity, biomass-aware trophic support, functional connectivity, diversity diagnostics, and screened wildlife-release scenarios. |
 | Built environment | Area-aware placement of buildings, transport, utilities, water infrastructure, civic facilities, and landmarks with environmental-suitability and land-surface feedback. |
 | Evidence and interchange | Selected data imports plus GeoJSON, CSV, parameters, source audits, quality gates, diagnostics, and scenario exports. |
 | Scenario synthesis | A purpose-aware cross-system overview covering terrain, climate, water, ecology, subsurface, infrastructure, hazards, and evidence, with explicit coupling pathways and prioritized next actions. |
@@ -100,6 +100,22 @@ The **Export** drawer includes a live scenario-synthesis workspace that turns th
 - **Portable handoff:** the same state can be exported as structured JSON or a human-readable Markdown brief with assumptions and professional boundaries attached.
 
 The implementation lives in [`outputs/geo-sim/src/scenarioSynthesis.js`](outputs/geo-sim/src/scenarioSynthesis.js) and is tested independently from the interface so future validation rules can evolve without coupling them to rendering code.
+
+## Ecological And Geographic Rigor
+
+GeoLab now distinguishes raster spacing from raster support area. Point spacing remains the basis for slope, flow direction, and distance, while map area divided by grid-point count is used for area and volume accounting. This keeps block, water, hazard, infrastructure, and time-series totals closed to the configured map area across resolutions.
+
+The ecology model adds several inspectable constraints:
+
+- Annual precipitation divided by potential evapotranspiration (`P/PET`) produces hyperarid, arid, semiarid, dry-subhumid, humid, cold, or unresolved screening zones using published UNEP / UNCCD thresholds.
+- Species niches use a weighted geometric response plus essential limiting factors, reducing the ability of an excellent variable to compensate for unsuitable temperature, land-water context, human pressure, or habitat structure.
+- Carrying capacity is based on species-specific usable area, edge retention, functional connectivity, habitat suitability, density, and regional affinity.
+- Predator support uses prey carrying biomass and representative adult body-mass traits rather than comparing raw individual counts across elephants, hares, birds, and carnivores.
+- Population updates use bounded density dependence plus hazard, disturbance, and isolation mortality. Results remain deterministic screening trajectories, not population viability analyses.
+- Biodiversity output includes Shannon diversity, Hill numbers `q1` and `q2`, Pielou evenness, functional-guild representation, trophic biomass, core-habitat proxy area, climate-vegetation agreement, and transparent component weights.
+- Wildlife releases outside the selected regional template or without viable habitat are blocked at zero survival. Every release report still requires disease, genetic, legal, stakeholder, field-habitat, and monitoring review.
+
+The method references are the [UNCCD aridity-zone definition](https://www.unccd.int/sites/default/files/sessions/documents/ICCD_CRIC6_3_Add.1/3add1eng.pdf), [USGS functional-connectivity guidance](https://pubs.usgs.gov/publication/70026441), and [IUCN conservation-translocation guidelines](https://portals.iucn.org/library/node/10386). These references inform model structure; they do not certify the generated scenario or turn broad species traits into local observations.
 
 ## What Has Been Demonstrated
 

@@ -1,3 +1,60 @@
+const REPRESENTATIVE_ADULT_BODY_MASS_KG = Object.freeze({
+  red_deer: 180,
+  wild_boar: 90,
+  blue_sheep: 45,
+  gray_wolf: 40,
+  brown_bear: 250,
+  red_fox: 6,
+  river_otter: 8,
+  wetland_crane: 6,
+  golden_eagle: 5.5,
+  mountain_hare: 3,
+  siberian_tiger: 180,
+  giant_panda: 100,
+  snow_leopard: 40,
+  yak: 500,
+  saiga: 40,
+  asian_elephant: 3500,
+  great_hornbill: 2.8,
+  european_bison: 600,
+  eurasian_lynx: 22,
+  beaver: 20,
+  moose: 450,
+  american_bison: 700,
+  capybara: 50,
+  jaguar: 95,
+  andean_condor: 11,
+  african_lion: 190,
+  african_elephant: 5000,
+  zebra: 300,
+  giraffe: 800,
+  red_kangaroo: 70,
+  cassowary: 45,
+  emperor_penguin: 30,
+  arctic_seal: 70,
+  reindeer: 120,
+  polar_bear: 450,
+  albatross: 8.5
+});
+
+const ECOLOGICAL_METHOD_REFERENCES = Object.freeze([
+  Object.freeze({
+    id: "unep-aridity-index",
+    title: "UNEP / UNCCD aridity zones from annual precipitation divided by potential evapotranspiration",
+    url: "https://www.unccd.int/sites/default/files/sessions/documents/ICCD_CRIC6_3_Add.1/3add1eng.pdf"
+  }),
+  Object.freeze({
+    id: "usgs-functional-connectivity",
+    title: "USGS organism-dependent functional habitat connectivity screening",
+    url: "https://pubs.usgs.gov/publication/70026441"
+  }),
+  Object.freeze({
+    id: "iucn-conservation-translocation",
+    title: "IUCN Guidelines for Reintroductions and Other Conservation Translocations",
+    url: "https://portals.iucn.org/library/node/10386"
+  })
+]);
+
 export const WILDLIFE_SPECIES = Object.freeze([
   species("red_deer", "马鹿", "ungulate", 0x9b704c, 1.05, {
     guild: "large-herbivore", density: 0.72, growth: 0.2, elevation: [900, 2400], slope: [0.28, 0.42],
@@ -17,7 +74,8 @@ export const WILDLIFE_SPECIES = Object.freeze([
   species("gray_wolf", "灰狼", "canid", 0x727678, 0.92, {
     guild: "apex-predator", density: 0.075, growth: 0.1, elevation: [1250, 3200], slope: [0.42, 0.52],
     vegetation: [0.52, 0.56], wetness: [0.34, 0.48], roughness: [0.46, 0.52], temperature: [5, 20],
-    humanTolerance: 0.08, aquaticAffinity: 0.05, movementKmPerDay: 12.5, preyDependent: true
+    humanTolerance: 0.08, aquaticAffinity: 0.05, movementKmPerDay: 12.5, preyDependent: true,
+    preyIds: ["red_deer", "wild_boar", "blue_sheep", "saiga", "reindeer"]
   }),
   species("brown_bear", "棕熊", "bear", 0x6b5140, 1.25, {
     guild: "large-omnivore", density: 0.042, growth: 0.07, elevation: [1050, 2800], slope: [0.38, 0.5],
@@ -27,7 +85,7 @@ export const WILDLIFE_SPECIES = Object.freeze([
   species("red_fox", "赤狐", "canid", 0xb36d42, 0.55, {
     guild: "mesopredator", density: 0.24, growth: 0.26, elevation: [850, 3300], slope: [0.34, 0.62],
     vegetation: [0.46, 0.62], wetness: [0.3, 0.54], roughness: [0.34, 0.62], temperature: [10, 23],
-    humanTolerance: 0.48, aquaticAffinity: 0.04, movementKmPerDay: 6.4
+    humanTolerance: 0.48, aquaticAffinity: 0.04, movementKmPerDay: 6.4, preyIds: ["mountain_hare"]
   }),
   species("river_otter", "水獭", "semi-aquatic", 0x574f47, 0.62, {
     guild: "riparian-predator", density: 0.12, growth: 0.15, elevation: [420, 2300], slope: [0.16, 0.42],
@@ -42,7 +100,8 @@ export const WILDLIFE_SPECIES = Object.freeze([
   species("golden_eagle", "金雕", "raptor", 0x8f7142, 0.78, {
     guild: "aerial-predator", density: 0.026, growth: 0.08, elevation: [2450, 3500], slope: [0.72, 0.34],
     vegetation: [0.26, 0.54], wetness: [0.14, 0.42], roughness: [0.76, 0.34], temperature: [4, 19],
-    humanTolerance: 0.08, aquaticAffinity: 0.01, movementKmPerDay: 38, preyDependent: true
+    humanTolerance: 0.08, aquaticAffinity: 0.01, movementKmPerDay: 38, preyDependent: true,
+    preyIds: ["mountain_hare"]
   }),
   species("mountain_hare", "山兔", "small-mammal", 0xb9aa94, 0.48, {
     guild: "small-herbivore", density: 1.65, growth: 0.42, elevation: [1550, 3200], slope: [0.38, 0.58],
@@ -209,7 +268,8 @@ export function buildLandscapeBlockNetwork(model, params = {}, options = {}) {
   const blockCellSize = Math.max(1, Math.ceil(n / requestedGrid));
   const gridSize = Math.ceil(n / blockCellSize);
   const blockCount = gridSize * gridSize;
-  const cellAreaKm2 = model.cellSizeKm * model.cellSizeKm;
+  const mapAreaKm2 = finite(model.areaKm2, finite(model.sizeKm, 0) ** 2);
+  const cellAreaKm2 = mapAreaKm2 > 0 ? mapAreaKm2 / model.height.length : model.cellSizeKm * model.cellSizeKm;
   const seaLevel = finite(params.seaLevel, 0);
   const accumulators = Array.from({ length: blockCount }, (_, blockId) => createBlockAccumulator(blockId, gridSize));
   const flowAccumulation = model.flowAccumulation || [];
@@ -248,6 +308,10 @@ export function buildLandscapeBlockNetwork(model, params = {}, options = {}) {
       block.canopySum += Math.max(0, finite(model.surface?.canopyHeight?.[i], 0));
       block.temperatureSum += finite(model.temperature?.[i], 12);
       block.precipitationSum += Math.max(0, finite(model.precipitation?.[i], 0));
+      block.potentialEvapotranspirationSum += Math.max(0, finite(model.surface?.potentialEvapotranspiration?.[i], 0));
+      block.actualEvapotranspirationSum += Math.max(0, finite(model.surface?.actualEvapotranspiration?.[i], 0));
+      block.waterBalanceSum += finite(model.surface?.waterBalance?.[i], 0);
+      block.biomassCarbonSum += Math.max(0, finite(model.surface?.biomassCarbonKgM2?.[i], 0));
       block.windSum += Math.max(0, finite(model.windSpeed?.[i], 0));
       block.imperviousSum += clamp01(model.surface?.imperviousFraction?.[i]);
       block.floodSum += clamp01(currentFlood[i]);
@@ -298,20 +362,54 @@ export function buildLandscapeBlockNetwork(model, params = {}, options = {}) {
   for (const block of blocks) {
     block.meanNeighborConnectivity = connectivitySums[block.blockId] / Math.max(1, linkCounts[block.blockId]);
     block.corridorCapacity = clamp01(block.habitatQuality * 0.46 + block.meanNeighborConnectivity * 0.4 + (1 - block.disturbancePressure) * 0.14);
+    block.edgePressure = clamp01(
+      block.disturbancePressure * 0.42 +
+      (1 - block.meanNeighborConnectivity) * 0.34 +
+      block.meanImpervious * 0.16 +
+      (1 - block.landFraction) * block.landFraction * 0.08
+    );
+    block.coreHabitatProxy = clamp01(block.habitatQuality * (1 - block.edgePressure));
+    block.effectiveHabitatAreaKm2 = block.areaKm2 * clamp01(
+      block.landFraction * block.coreHabitatProxy +
+      block.waterFraction * block.hydrologicConnectivity * (1 - block.disturbancePressure)
+    );
+    block.climateVegetationConsistency = climateVegetationConsistency(block);
   }
   const meanConnectivity = mean(links, (row) => row.connectivity);
   const meanHabitatQuality = mean(blocks, (row) => row.habitatQuality);
   const meanCrossBlockFlux = mean(links, (row) => row.crossBlockFlux);
+  const representedAreaKm2 = blocks.reduce((sum, block) => sum + block.areaKm2, 0);
+  const effectiveHabitatAreaKm2 = blocks.reduce((sum, block) => sum + block.effectiveHabitatAreaKm2, 0);
+  const coreHabitatAreaKm2 = blocks.reduce((sum, block) => sum + block.areaKm2 * block.coreHabitatProxy, 0);
+  const aridityZoneAreaKm2 = {};
+  for (const block of blocks) aridityZoneAreaKm2[block.aridityZone] = (aridityZoneAreaKm2[block.aridityZone] || 0) + block.areaKm2;
+  const geographicConsistency = {
+    type: "geolab-biogeographic-consistency",
+    schemaVersion: 1,
+    aridityMethod: "annual-precipitation-divided-by-potential-evapotranspiration",
+    aridityThresholds: { hyperarid: 0.05, arid: 0.2, semiarid: 0.5, drySubhumid: 0.65 },
+    aridityZoneAreaKm2: Object.fromEntries(Object.entries(aridityZoneAreaKm2).map(([key, value]) => [key, round(value, 5)])),
+    meanClimateVegetationConsistency: round(areaWeightedMean(blocks, (block) => block.climateVegetationConsistency), 5),
+    meanEdgePressure: round(areaWeightedMean(blocks, (block) => block.edgePressure), 5),
+    effectiveHabitatAreaKm2: round(effectiveHabitatAreaKm2, 5),
+    coreHabitatAreaKm2: round(coreHabitatAreaKm2, 5),
+    representedAreaKm2: round(representedAreaKm2, 5),
+    mapAreaClosurePct: round(representedAreaKm2 / Math.max(0.0001, mapAreaKm2) * 100, 5),
+    elevationRangeM: round(Math.max(...blocks.map((block) => block.maxElevationM)) - Math.min(...blocks.map((block) => block.minElevationM)), 5),
+    interpretationBoundary: "Aridity and climate-vegetation agreement are screening diagnostics based on model annual means; they are not mapped ecoregions or field-validated habitat classes."
+  };
   return {
     type: "geolab-landscape-block-network",
-    schemaVersion: 1,
-    method: "eight-neighbor-terrain-hydrology-climate-habitat-coupling",
+    schemaVersion: 2,
+    method: "area-closed-eight-neighbor-terrain-hydrology-climate-habitat-coupling",
     mapSizeKm: model.sizeKm,
     mapAreaKm2: model.areaKm2,
     gridSize,
     blockCellSize,
     blocks,
     links,
+    geographicConsistency,
+    methodReferences: ECOLOGICAL_METHOD_REFERENCES,
     summary: {
       blockCount,
       linkCount: links.length,
@@ -320,7 +418,12 @@ export function buildLandscapeBlockNetwork(model, params = {}, options = {}) {
       meanCrossBlockFlux: round(meanCrossBlockFlux, 5),
       highConnectivityLinkCount: links.filter((row) => row.connectivity >= 0.68).length,
       hydrologicCorridorCount: links.filter((row) => row.corridorClass === "riparian-corridor").length,
-      ruggedPassCount: links.filter((row) => row.corridorClass === "rugged-pass").length
+      ruggedPassCount: links.filter((row) => row.corridorClass === "rugged-pass").length,
+      effectiveHabitatAreaKm2: geographicConsistency.effectiveHabitatAreaKm2,
+      coreHabitatAreaKm2: geographicConsistency.coreHabitatAreaKm2,
+      meanEdgePressure: geographicConsistency.meanEdgePressure,
+      meanClimateVegetationConsistency: geographicConsistency.meanClimateVegetationConsistency,
+      mapAreaClosurePct: geographicConsistency.mapAreaClosurePct
     }
   };
 }
@@ -339,6 +442,8 @@ export function buildWildlifeState(model, params = {}, network = model?.landscap
   const years = clamp(finite(options.elapsedYears, 1), 0, 50);
   const suitabilityBySpecies = {};
   const capacityBySpecies = {};
+  const preySupportBySpecies = {};
+  const speciesById = new Map(WILDLIFE_SPECIES.map((row) => [row.id, row]));
 
   for (const speciesRecord of WILDLIFE_SPECIES) {
     const suitability = new Float32Array(network.blocks.length);
@@ -353,15 +458,42 @@ export function buildWildlifeState(model, params = {}, network = model?.landscap
   }
 
   for (const speciesRecord of WILDLIFE_SPECIES) {
+    const suitability = suitabilityBySpecies[speciesRecord.id];
+    const capacity = capacityBySpecies[speciesRecord.id];
+    for (const block of network.blocks) {
+      const value = clamp01(suitability[block.blockId]);
+      const usableAreaKm2 = speciesEffectiveHabitatAreaKm2(speciesRecord, block);
+      const connectivity = functionalConnectivity(speciesRecord, block);
+      capacity[block.blockId] = usableAreaKm2 * speciesRecord.density * Math.pow(value, 1.42) * abundance * (0.52 + connectivity * 0.48);
+    }
+  }
+
+  for (const speciesRecord of WILDLIFE_SPECIES) {
     if (!speciesRecord.preyDependent) continue;
     const target = suitabilityBySpecies[speciesRecord.id];
+    const targetCapacity = capacityBySpecies[speciesRecord.id];
+    const preySupport = new Float32Array(network.blocks.length);
     const preyIds = speciesRecord.preyIds?.length
       ? speciesRecord.preyIds
       : ["red_deer", "wild_boar", "blue_sheep", "mountain_hare", "saiga", "reindeer"];
     for (let blockId = 0; blockId < network.blocks.length; blockId += 1) {
-      const prey = mean(preyIds, (id) => suitabilityBySpecies[id]?.[blockId] || 0);
-      target[blockId] *= 0.34 + prey * 0.66;
+      const block = network.blocks[blockId];
+      let availablePreyBiomassKg = 0;
+      let potentialPreyBiomassKg = 0;
+      for (const preyId of preyIds) {
+        const preyRecord = speciesById.get(preyId);
+        if (!preyRecord) continue;
+        const bodyMassKg = preyRecord.adultBodyMassKg;
+        availablePreyBiomassKg += (capacityBySpecies[preyId]?.[blockId] || 0) * bodyMassKg;
+        potentialPreyBiomassKg += speciesEffectiveHabitatAreaKm2(preyRecord, block) * preyRecord.density * abundance * bodyMassKg;
+      }
+      const support = clamp01(availablePreyBiomassKg / Math.max(0.001, potentialPreyBiomassKg));
+      const resourceMultiplier = 0.16 + Math.sqrt(support) * 0.84;
+      preySupport[blockId] = support;
+      target[blockId] *= resourceMultiplier;
+      targetCapacity[blockId] *= Math.pow(resourceMultiplier, 1.18);
     }
+    preySupportBySpecies[speciesRecord.id] = preySupport;
   }
 
   const populations = [];
@@ -374,30 +506,47 @@ export function buildWildlifeState(model, params = {}, network = model?.landscap
     let occupiedBlocks = 0;
     let suitabilitySum = 0;
     let connectivitySum = 0;
+    let disturbanceSum = 0;
+    let hazardSum = 0;
+    let effectiveHabitatAreaKm2 = 0;
+    let preySupportSum = 0;
     for (const block of network.blocks) {
       const value = clamp01(suitability[block.blockId]);
-      const localCapacity = block.areaKm2 * speciesRecord.density * Math.pow(value, 1.28) * abundance;
-      capacity[block.blockId] = localCapacity;
+      const localCapacity = capacity[block.blockId];
+      const connectivity = functionalConnectivity(speciesRecord, block);
       carryingCapacity += localCapacity;
       suitabilitySum += value;
-      connectivitySum += block.meanNeighborConnectivity * value;
+      connectivitySum += connectivity * value;
+      disturbanceSum += block.disturbancePressure * value;
+      hazardSum += block.meanHazard * value;
+      effectiveHabitatAreaKm2 += localCapacity / Math.max(0.0001, speciesRecord.density * Math.max(0.01, abundance));
+      preySupportSum += (preySupportBySpecies[speciesRecord.id]?.[block.blockId] || 0) * value;
       if (value >= 0.36 && localCapacity >= 0.03) occupiedBlocks += 1;
     }
+    const meanFunctionalConnectivity = connectivitySum / Math.max(0.001, suitabilitySum);
+    const meanDisturbance = disturbanceSum / Math.max(0.001, suitabilitySum);
+    const meanHazard = hazardSum / Math.max(0.001, suitabilitySum);
+    const stressMortalityRate = clamp(
+      meanHazard * 0.08 +
+      meanDisturbance * (0.1 - speciesRecord.humanTolerance * 0.045) +
+      (1 - meanFunctionalConnectivity) * 0.035,
+      0,
+      0.24
+    );
     const previous = previousPopulation.get(speciesRecord.id);
     let estimate = carryingCapacity * (0.72 + deterministic01(speciesRecord.id.length, network.blocks.length, 91) * 0.2);
     if (Number.isFinite(previous)) {
-      const safeCapacity = Math.max(0.001, carryingCapacity);
-      const growth = speciesRecord.growth * years * previous * (1 - previous / safeCapacity);
-      const colonization = previous <= 0.01 ? safeCapacity * migrationStrength * 0.025 * years : 0;
-      estimate = clamp(previous + growth + colonization, 0, safeCapacity * 1.08);
+      estimate = projectPopulation(previous, carryingCapacity, speciesRecord.growth, stressMortalityRate, years);
+      if (previous <= 0.01 && carryingCapacity > 0) estimate += carryingCapacity * migrationStrength * meanFunctionalConnectivity * 0.012 * years;
+      estimate = clamp(estimate, 0, carryingCapacity * 1.06);
     }
     const speciesReleases = pendingReleases.filter((row) => row.speciesId === speciesRecord.id);
     let releasedSurvivors = 0;
     for (const release of speciesReleases) {
-      const outcome = buildWildlifeReleaseOutcome(release, speciesRecord, network, suitability, carryingCapacity, estimate, enabled);
+      const outcome = buildWildlifeReleaseOutcome(release, speciesRecord, network, suitability, carryingCapacity, estimate, enabled, regionalAffinity);
       releaseOutcomes.push(outcome);
       releasedSurvivors += outcome.survivingCount;
-      estimate = clamp(estimate + outcome.survivingCount, 0, Math.max(outcome.survivingCount, carryingCapacity * 1.35));
+      estimate = clamp(estimate + outcome.survivingCount, 0, carryingCapacity);
     }
     if (!enabled) estimate = 0;
     populations.push({
@@ -405,13 +554,20 @@ export function buildWildlifeState(model, params = {}, network = model?.landscap
       labelZh: speciesRecord.labelZh,
       guild: speciesRecord.guild,
       trophicLevel: speciesRecord.trophicLevel,
+      adultBodyMassKg: speciesRecord.adultBodyMassKg,
       regionalAffinity: round(regionalAffinity, 4),
       populationEstimate: round(estimate, 2),
+      estimatedBiomassKg: round(estimate * speciesRecord.adultBodyMassKg, 2),
       carryingCapacity: round(carryingCapacity, 2),
+      effectiveHabitatAreaKm2: round(effectiveHabitatAreaKm2, 5),
       releasedSurvivors: round(releasedSurvivors, 2),
       occupiedBlockCount: occupiedBlocks,
       meanSuitability: round(suitabilitySum / Math.max(1, network.blocks.length), 5),
-      meanHabitatConnectivity: round(connectivitySum / Math.max(0.001, suitabilitySum), 5)
+      meanHabitatConnectivity: round(meanFunctionalConnectivity, 5),
+      meanDisturbancePressure: round(meanDisturbance, 5),
+      meanHazardExposure: round(meanHazard, 5),
+      stressMortalityRate: round(stressMortalityRate, 5),
+      preyBiomassSupport: speciesRecord.preyDependent ? round(preySupportSum / Math.max(0.001, suitabilitySum), 5) : null
     });
   }
 
@@ -424,13 +580,14 @@ export function buildWildlifeState(model, params = {}, network = model?.landscap
   const totalPopulationEstimate = populations.reduce((sum, row) => sum + row.populationEstimate, 0);
   const foodWeb = buildFoodWebState(populations);
   const ecosystemFunctions = buildEcosystemFunctionState(network, populations, foodWeb);
+  const ecologicalIntegrity = buildEcologicalIntegrityState(network, populations, foodWeb, releaseOutcomes);
   const meanHabitatConnectivity = active.length
     ? mean(active, (row) => row.meanHabitatConnectivity)
     : network.summary.meanConnectivity;
   return {
     type: "geolab-wildlife-state",
-    schemaVersion: 2,
-    method: "regional-niche-carrying-capacity-food-web-release-and-migration-network",
+    schemaVersion: 3,
+    method: "limiting-factor-niche-effective-habitat-metapopulation-biomass-food-web-and-screened-translocation",
     enabled,
     continentTemplate,
     species: WILDLIFE_SPECIES,
@@ -446,6 +603,8 @@ export function buildWildlifeState(model, params = {}, network = model?.landscap
     ])),
     foodWeb,
     ecosystemFunctions,
+    ecologicalIntegrity,
+    methodReferences: ECOLOGICAL_METHOD_REFERENCES,
     summary: {
       speciesCount: WILDLIFE_SPECIES.length,
       activeSpeciesCount: active.length,
@@ -460,7 +619,15 @@ export function buildWildlifeState(model, params = {}, network = model?.landscap
       survivingReleasedCount: round(releaseOutcomes.reduce((sum, row) => sum + row.survivingCount, 0), 2),
       foodWebLinkCount: foodWeb.links.length,
       trophicBalance: foodWeb.summary.trophicBalance,
+      trophicResourceSupport: foodWeb.summary.trophicResourceSupport,
       ecosystemFunctionIndex: ecosystemFunctions.summary.compositeFunctionIndex,
+      ecologicalIntegrityIndex: ecologicalIntegrity.summary.integrityIndex,
+      shannonDiversity: ecologicalIntegrity.biodiversity.shannonDiversity,
+      hillNumberQ1: ecologicalIntegrity.biodiversity.hillNumberQ1,
+      hillNumberQ2: ecologicalIntegrity.biodiversity.hillNumberQ2,
+      populationEvenness: ecologicalIntegrity.biodiversity.pielouEvenness,
+      totalBiomassKg: ecologicalIntegrity.trophic.totalBiomassKg,
+      blockedReleaseCount: ecologicalIntegrity.translocation.blockedReleaseCount,
       continentTemplate,
       abundanceScale: abundance,
       migrationStrength,
@@ -490,7 +657,7 @@ function continentAffinity(speciesRecord, continentTemplate) {
   return 0;
 }
 
-function buildWildlifeReleaseOutcome(release, speciesRecord, network, suitability, carryingCapacity, existingPopulation, enabled) {
+function buildWildlifeReleaseOutcome(release, speciesRecord, network, suitability, carryingCapacity, existingPopulation, enabled, regionalAffinity) {
   const candidates = network.blocks.filter((block) => {
     if (release.targetBlockId !== null) return block.blockId === release.targetBlockId;
     return releaseHabitatMatches(block, release.targetHabitat);
@@ -502,8 +669,25 @@ function buildWildlifeReleaseOutcome(release, speciesRecord, network, suitabilit
     .slice(0, Math.max(1, Math.min(12, Math.ceil(considered.length * 0.08))));
   const habitatFit = mean(ranked, (row) => row.suitability);
   const capacityPressure = carryingCapacity > 0 ? clamp01(existingPopulation / carryingCapacity) : 1;
-  const survivalRate = enabled ? clamp(0.08 + habitatFit * 0.82 - capacityPressure * 0.24, 0.03, 0.92) : 0;
-  const survivingCount = release.requestedCount * survivalRate;
+  const availableCapacity = Math.max(0, carryingCapacity - existingPopulation);
+  const regionalMatch = regionalAffinity > 0;
+  const habitatAvailable = habitatFit >= 0.08 && carryingCapacity >= 0.05 && availableCapacity >= 0.01;
+  const unconstrainedSurvivalRate = enabled && regionalMatch && habitatAvailable
+    ? clamp((habitatFit * 0.9 - capacityPressure * 0.24) * (0.72 + regionalAffinity * 0.28), 0, 0.9)
+    : 0;
+  const survivingCount = Math.min(release.requestedCount * unconstrainedSurvivalRate, availableCapacity);
+  const survivalRate = survivingCount / Math.max(1, release.requestedCount);
+  const status = !enabled
+    ? "ecosystem-disabled"
+    : !regionalMatch
+      ? "outside-regional-template"
+      : !habitatAvailable
+        ? "no-viable-habitat"
+        : survivalRate >= 0.62
+          ? "high-fit-screening"
+          : survivalRate >= 0.34
+            ? "conditional-screening"
+            : "low-fit-screening";
   return {
     batchId: release.batchId,
     speciesId: speciesRecord.id,
@@ -514,10 +698,21 @@ function buildWildlifeReleaseOutcome(release, speciesRecord, network, suitabilit
     survivalRate: round(survivalRate, 5),
     habitatFit: round(habitatFit, 5),
     capacityPressure: round(capacityPressure, 5),
+    availableCapacityBeforeRelease: round(availableCapacity, 5),
+    capacityLimited: survivingCount + 0.0001 < release.requestedCount * unconstrainedSurvivalRate,
+    regionalAffinity: round(regionalAffinity, 5),
     targetHabitat: release.targetHabitat,
     targetBlockId: release.targetBlockId,
-    releaseBlockIds: ranked.slice(0, 4).map((row) => row.blockId),
-    status: !enabled ? "ecosystem-disabled" : survivalRate >= 0.62 ? "high-fit" : survivalRate >= 0.34 ? "conditional" : "low-fit"
+    releaseBlockIds: survivalRate > 0 ? ranked.slice(0, 4).map((row) => row.blockId) : [],
+    status,
+    professionalReviewRequired: [
+      "taxonomic-and-origin-verification",
+      "disease-and-parasite-screening",
+      "genetic-and-demographic-assessment",
+      "legal-and-stakeholder-authorization",
+      "field-habitat-survey-and-post-release-monitoring"
+    ],
+    interpretationBoundary: "This result is a scenario screening outcome and is not authorization or evidence that a conservation translocation is appropriate."
   };
 }
 
@@ -538,36 +733,62 @@ function buildFoodWebState(populations) {
     labelZh: speciesRecord.labelZh,
     guild: speciesRecord.guild,
     trophicLevel: speciesRecord.trophicLevel,
-    populationEstimate: populationById.get(speciesRecord.id)?.populationEstimate || 0
+    adultBodyMassKg: speciesRecord.adultBodyMassKg,
+    populationEstimate: populationById.get(speciesRecord.id)?.populationEstimate || 0,
+    estimatedBiomassKg: populationById.get(speciesRecord.id)?.estimatedBiomassKg || 0
   }));
   const links = [];
+  const predatorResourceRows = [];
   for (const predator of WILDLIFE_SPECIES) {
-    for (const preyId of predator.preyIds || []) {
-      const predatorPopulation = populationById.get(predator.id)?.populationEstimate || 0;
-      const preyPopulation = populationById.get(preyId)?.populationEstimate || 0;
-      if (predatorPopulation < 0.05 || preyPopulation < 0.05) continue;
+    const predatorPopulation = populationById.get(predator.id)?.populationEstimate || 0;
+    const predatorBiomassKg = populationById.get(predator.id)?.estimatedBiomassKg || 0;
+    if (predatorPopulation < 0.05 || !(predator.preyIds || []).length) continue;
+    const preyRows = (predator.preyIds || []).map((preyId) => ({
+      preyId,
+      preyPopulation: populationById.get(preyId)?.populationEstimate || 0,
+      preyBiomassKg: populationById.get(preyId)?.estimatedBiomassKg || 0
+    })).filter((row) => row.preyPopulation >= 0.05 && row.preyBiomassKg > 0);
+    const accessiblePreyBiomassKg = preyRows.reduce((sum, row) => sum + row.preyBiomassKg, 0);
+    for (const { preyId, preyBiomassKg } of preyRows) {
       links.push({
         fromSpeciesId: preyId,
         toSpeciesId: predator.id,
         interaction: "predation",
-        strength: round(clamp01(Math.sqrt(predatorPopulation * preyPopulation) / Math.max(1, predatorPopulation + preyPopulation) * 2.4), 5)
+        preyBiomassKg: round(preyBiomassKg, 2),
+        predatorBiomassKg: round(predatorBiomassKg, 2),
+        strength: round(clamp01(preyBiomassKg / Math.max(1, accessiblePreyBiomassKg)), 5)
       });
     }
+    predatorResourceRows.push({
+      speciesId: predator.id,
+      predatorBiomassKg: round(predatorBiomassKg, 2),
+      accessiblePreyBiomassKg: round(accessiblePreyBiomassKg, 2),
+      resourceSupport: round(clamp01(
+        populationById.get(predator.id)?.preyBiomassSupport ??
+        accessiblePreyBiomassKg / Math.max(1, accessiblePreyBiomassKg + predatorBiomassKg)
+      ), 5)
+    });
   }
-  const herbivoreBiomass = nodes.filter((row) => row.trophicLevel <= 2.2).reduce((sum, row) => sum + row.populationEstimate, 0);
-  const predatorBiomass = nodes.filter((row) => row.trophicLevel >= 3).reduce((sum, row) => sum + row.populationEstimate, 0);
-  const trophicBalance = clamp01(1 - Math.abs(predatorBiomass / Math.max(1, herbivoreBiomass) - 0.08) / 0.2);
+  const herbivoreBiomassKg = nodes.filter((row) => row.trophicLevel <= 2.2).reduce((sum, row) => sum + row.estimatedBiomassKg, 0);
+  const predatorBiomassKg = nodes.filter((row) => row.trophicLevel >= 3).reduce((sum, row) => sum + row.estimatedBiomassKg, 0);
+  const trophicResourceSupport = predatorResourceRows.length ? mean(predatorResourceRows, (row) => row.resourceSupport) : 0;
   return {
     type: "geolab-food-web",
-    schemaVersion: 1,
+    schemaVersion: 2,
     nodes,
     links,
+    predatorResourceRows,
     summary: {
       nodeCount: nodes.length,
       activeNodeCount: nodes.filter((row) => row.populationEstimate >= 0.5).length,
       linkCount: links.length,
-      trophicBalance: round(trophicBalance, 5)
-    }
+      herbivoreBiomassKg: round(herbivoreBiomassKg, 2),
+      predatorBiomassKg: round(predatorBiomassKg, 2),
+      predatorToHerbivoreBiomassRatio: round(predatorBiomassKg / Math.max(1, herbivoreBiomassKg), 5),
+      trophicResourceSupport: round(trophicResourceSupport, 5),
+      trophicBalance: round(trophicResourceSupport, 5)
+    },
+    interpretationBoundary: "Standing biomass and accessible-prey ratios are screening proxies; they do not model diet composition, kill rates, age structure, seasonality, or energetic demand."
   };
 }
 
@@ -602,6 +823,154 @@ function buildEcosystemFunctionState(network, populations, foodWeb) {
   };
 }
 
+function buildEcologicalIntegrityState(network, populations, foodWeb, releaseOutcomes) {
+  const active = populations.filter((row) => row.populationEstimate >= 0.5);
+  const totalIndividuals = active.reduce((sum, row) => sum + row.populationEstimate, 0);
+  const proportions = active
+    .map((row) => row.populationEstimate / Math.max(0.0001, totalIndividuals))
+    .filter((value) => value > 0);
+  const shannonDiversity = -proportions.reduce((sum, value) => sum + value * Math.log(value), 0);
+  const hillNumberQ1 = Math.exp(shannonDiversity);
+  const hillNumberQ2 = proportions.length ? 1 / proportions.reduce((sum, value) => sum + value * value, 0) : 0;
+  const pielouEvenness = active.length > 1 ? shannonDiversity / Math.log(active.length) : active.length ? 1 : 0;
+  const representedGuildCount = new Set(active.map((row) => row.guild)).size;
+  const possibleGuildCount = new Set(WILDLIFE_SPECIES.map((row) => row.guild)).size;
+  const totalBiomassKg = populations.reduce((sum, row) => sum + row.estimatedBiomassKg, 0);
+  const primaryConsumerBiomassKg = populations.filter((row) => row.trophicLevel <= 2.2).reduce((sum, row) => sum + row.estimatedBiomassKg, 0);
+  const omnivoreBiomassKg = populations.filter((row) => row.trophicLevel > 2.2 && row.trophicLevel < 3).reduce((sum, row) => sum + row.estimatedBiomassKg, 0);
+  const predatorBiomassKg = populations.filter((row) => row.trophicLevel >= 3).reduce((sum, row) => sum + row.estimatedBiomassKg, 0);
+  const habitatQuality = areaWeightedMean(network.blocks, (block) => block.habitatQuality);
+  const connectivity = areaWeightedMean(network.blocks, (block) => block.meanNeighborConnectivity);
+  const coreHabitat = network.geographicConsistency?.coreHabitatAreaKm2 / Math.max(0.0001, network.mapAreaKm2);
+  const climateVegetation = network.geographicConsistency?.meanClimateVegetationConsistency ?? 0;
+  const components = [
+    integrityComponent("habitat-condition", "Habitat condition", "生境状况", habitatQuality, 0.2),
+    integrityComponent("functional-connectivity", "Functional connectivity", "功能连通性", connectivity, 0.16),
+    integrityComponent("core-habitat", "Core-habitat proxy", "核心生境代理", coreHabitat, 0.16),
+    integrityComponent("climate-vegetation", "Climate-vegetation consistency", "气候—植被一致性", climateVegetation, 0.14),
+    integrityComponent("population-evenness", "Population evenness", "种群均匀度", pielouEvenness, 0.12),
+    integrityComponent("functional-guilds", "Functional-guild representation", "功能群代表性", representedGuildCount / Math.max(1, possibleGuildCount), 0.1),
+    integrityComponent("trophic-resource", "Trophic resource support", "营养资源支持", foodWeb.summary.trophicResourceSupport, 0.12)
+  ];
+  const integrityIndex = weightedGeometricMean(components.map((row) => [row.value, row.weight]));
+  const blockedReleaseCount = releaseOutcomes.filter((row) => ["outside-regional-template", "no-viable-habitat", "ecosystem-disabled"].includes(row.status)).length;
+  const warnings = [];
+  if (coreHabitat < 0.2) warnings.push("core-habitat-proxy-below-20-percent");
+  if (connectivity < 0.35) warnings.push("functional-connectivity-low");
+  if (climateVegetation < 0.55) warnings.push("climate-vegetation-consistency-low");
+  if (foodWeb.summary.trophicResourceSupport < 0.45 && predatorBiomassKg > 0) warnings.push("predator-resource-support-low");
+  if (pielouEvenness < 0.35 && active.length >= 4) warnings.push("population-distribution-highly-uneven");
+  if (blockedReleaseCount) warnings.push("one-or-more-release-batches-blocked-by-screening");
+  return {
+    type: "geolab-ecological-integrity-screening",
+    schemaVersion: 1,
+    method: "component-transparent-habitat-connectivity-diversity-biomass-and-biogeographic-screening",
+    summary: {
+      integrityIndex: round(integrityIndex, 5),
+      integrityClass: integrityClass(integrityIndex),
+      warningCount: warnings.length,
+      componentCount: components.length
+    },
+    components,
+    biodiversity: {
+      activeSpeciesCount: active.length,
+      shannonDiversity: round(shannonDiversity, 5),
+      hillNumberQ1: round(hillNumberQ1, 5),
+      hillNumberQ2: round(hillNumberQ2, 5),
+      pielouEvenness: round(pielouEvenness, 5),
+      representedGuildCount,
+      possibleGuildCount
+    },
+    trophic: {
+      totalBiomassKg: round(totalBiomassKg, 2),
+      primaryConsumerBiomassKg: round(primaryConsumerBiomassKg, 2),
+      omnivoreBiomassKg: round(omnivoreBiomassKg, 2),
+      predatorBiomassKg: round(predatorBiomassKg, 2),
+      predatorToPrimaryConsumerBiomassRatio: round(predatorBiomassKg / Math.max(1, primaryConsumerBiomassKg), 5),
+      trophicResourceSupport: foodWeb.summary.trophicResourceSupport
+    },
+    habitat: {
+      mapAreaKm2: round(network.mapAreaKm2, 5),
+      effectiveHabitatAreaKm2: network.geographicConsistency?.effectiveHabitatAreaKm2 ?? null,
+      coreHabitatAreaKm2: network.geographicConsistency?.coreHabitatAreaKm2 ?? null,
+      meanEdgePressure: network.geographicConsistency?.meanEdgePressure ?? null,
+      meanFunctionalConnectivity: round(connectivity, 5),
+      meanHabitatQuality: round(habitatQuality, 5),
+      meanClimateVegetationConsistency: round(climateVegetation, 5)
+    },
+    translocation: {
+      evaluatedBatchCount: releaseOutcomes.length,
+      blockedReleaseCount,
+      professionalReviewRequired: releaseOutcomes.length > 0
+    },
+    warnings,
+    interpretationBoundary: "The integrity index is a transparent scenario-screening composite, not a field biodiversity assessment, population viability analysis, conservation status, or professional release decision.",
+    methodReferences: ECOLOGICAL_METHOD_REFERENCES
+  };
+}
+
+function integrityComponent(id, en, zh, value, weight) {
+  return { id, label: { en, zh }, value: round(clamp01(value), 5), weight };
+}
+
+function integrityClass(value) {
+  if (value >= 0.72) return "higher-screening-integrity";
+  if (value >= 0.5) return "moderate-screening-integrity";
+  if (value >= 0.3) return "low-screening-integrity";
+  return "severely-constrained-screening-integrity";
+}
+
+export function buildEcologicalIntegrityReport(model, params = {}) {
+  if (!model?.landscapeNetwork?.blocks?.length || !model?.wildlife?.ecologicalIntegrity) {
+    throw new Error("A completed landscape and wildlife model is required for ecological integrity reporting");
+  }
+  return {
+    type: "geolab-ecological-integrity-report",
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    identity: {
+      mapSizeKm: finite(model.sizeKm, params.mapSizeKm),
+      mapAreaKm2: finite(model.areaKm2, finite(model.sizeKm, params.mapSizeKm) ** 2),
+      gridResolution: model.n || null,
+      continentTemplate: model.wildlife.continentTemplate
+    },
+    geographicConsistency: model.landscapeNetwork.geographicConsistency,
+    ecologicalIntegrity: model.wildlife.ecologicalIntegrity,
+    ecosystemFunctions: model.wildlife.ecosystemFunctions,
+    foodWeb: {
+      summary: model.wildlife.foodWeb.summary,
+      predatorResourceRows: model.wildlife.foodWeb.predatorResourceRows,
+      interpretationBoundary: model.wildlife.foodWeb.interpretationBoundary
+    },
+    populations: model.wildlife.populations,
+    releaseOutcomes: model.wildlife.releaseOutcomes,
+    assumptions: [
+      "Species profiles use broad regional niches and representative adult body-mass traits rather than local demographic surveys.",
+      "Annual climate means cannot represent seasonal bottlenecks, extremes, phenology, or interannual variability.",
+      "Landscape blocks are screening units; field habitat patches, territories, barriers, and movement paths require scale-matched observations.",
+      "The population update is deterministic and does not replace age-structured, stochastic, genetic, disease, harvest, or population-viability models."
+    ],
+    methodReferences: ECOLOGICAL_METHOD_REFERENCES
+  };
+}
+
+export function makeEcologicalIntegrityCSV(report) {
+  if (report?.type !== "geolab-ecological-integrity-report") throw new Error("A GeoLab ecological integrity report is required");
+  const header = [
+    "species_id", "label_zh", "guild", "trophic_level", "adult_body_mass_kg", "population_estimate",
+    "estimated_biomass_kg", "carrying_capacity", "effective_habitat_area_km2", "occupied_block_count",
+    "mean_suitability", "mean_functional_connectivity", "mean_disturbance_pressure", "mean_hazard_exposure",
+    "stress_mortality_rate", "prey_biomass_support", "regional_affinity"
+  ];
+  const rows = report.populations.map((row) => [
+    row.speciesId, row.labelZh, row.guild, row.trophicLevel, row.adultBodyMassKg, row.populationEstimate,
+    row.estimatedBiomassKg, row.carryingCapacity, row.effectiveHabitatAreaKm2, row.occupiedBlockCount,
+    row.meanSuitability, row.meanHabitatConnectivity, row.meanDisturbancePressure, row.meanHazardExposure,
+    row.stressMortalityRate, row.preyBiomassSupport, row.regionalAffinity
+  ]);
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
 function guildState(guildId, value) {
   const descriptor = ECOSYSTEM_GUILDS.find((row) => row.id === guildId);
   return {
@@ -630,6 +999,10 @@ function createBlockAccumulator(blockId, gridSize) {
     canopySum: 0,
     temperatureSum: 0,
     precipitationSum: 0,
+    potentialEvapotranspirationSum: 0,
+    actualEvapotranspirationSum: 0,
+    waterBalanceSum: 0,
+    biomassCarbonSum: 0,
     windSum: 0,
     imperviousSum: 0,
     floodSum: 0,
@@ -654,6 +1027,11 @@ function finalizeLandscapeBlock(row, context) {
   const meanFlow = row.flowSum / count;
   const meanImpervious = row.imperviousSum / count;
   const meanHazard = row.hazardSum / count;
+  const meanPrecipitationMm = row.precipitationSum / count;
+  const meanPotentialEvapotranspirationMm = row.potentialEvapotranspirationSum / count;
+  const aridityIndex = meanPotentialEvapotranspirationMm > 0.01
+    ? meanPrecipitationMm / meanPotentialEvapotranspirationMm
+    : null;
   const landFraction = row.landCellCount / count;
   const waterFraction = 1 - landFraction;
   const disturbancePressure = clamp01(meanImpervious * 0.48 + meanHazard * 0.24 + (row.wildfireSum / count) * 0.14 + (row.landslideSum / count) * 0.14);
@@ -691,7 +1069,14 @@ function finalizeLandscapeBlock(row, context) {
     meanVegetation,
     meanCanopyHeightM: row.canopySum / count,
     meanTemperatureC: row.temperatureSum / count,
-    meanPrecipitationMm: row.precipitationSum / count,
+    meanPrecipitationMm,
+    meanPotentialEvapotranspirationMm,
+    meanActualEvapotranspirationMm: row.actualEvapotranspirationSum / count,
+    meanWaterBalanceMm: row.waterBalanceSum / count,
+    meanBiomassCarbonKgM2: row.biomassCarbonSum / count,
+    climaticWaterDeficitMm: Math.max(0, meanPotentialEvapotranspirationMm - meanPrecipitationMm),
+    aridityIndex,
+    aridityZone: aridityZone(aridityIndex, row.temperatureSum / count),
     meanWindSpeedMs: row.windSum / count,
     meanImpervious,
     meanFloodHazard: row.floodSum / count,
@@ -708,6 +1093,40 @@ function finalizeLandscapeBlock(row, context) {
     meanNeighborConnectivity: 0,
     corridorCapacity: 0
   };
+}
+
+function aridityZone(aridityIndex, meanTemperatureC) {
+  if (!Number.isFinite(aridityIndex)) return "unresolved";
+  if (meanTemperatureC < -2) return "cold";
+  if (aridityIndex < 0.05) return "hyperarid";
+  if (aridityIndex < 0.2) return "arid";
+  if (aridityIndex < 0.5) return "semiarid";
+  if (aridityIndex < 0.65) return "dry-subhumid";
+  return "humid";
+}
+
+function climateVegetationConsistency(block) {
+  const expected = {
+    hyperarid: [0, 0.18],
+    arid: [0.01, 0.38],
+    semiarid: [0.08, 0.68],
+    "dry-subhumid": [0.18, 0.88],
+    humid: [0.28, 1],
+    cold: [0, 0.58],
+    unresolved: [0, 1]
+  }[block.aridityZone] || [0, 1];
+  const vegetationFit = intervalFit(block.meanVegetation, expected[0], expected[1], 0.22);
+  const biomassFit = block.aridityZone === "hyperarid" || block.aridityZone === "arid"
+    ? intervalFit(block.meanBiomassCarbonKgM2, 0, 9, 8)
+    : 1;
+  const waterConsistency = block.meanActualEvapotranspirationMm <= block.meanPrecipitationMm + Math.max(80, block.meanWaterBalanceMm * 0.2)
+    ? 1
+    : clamp01(1 - (block.meanActualEvapotranspirationMm - block.meanPrecipitationMm) / Math.max(100, block.meanPotentialEvapotranspirationMm));
+  return round(weightedGeometricMean([
+    [vegetationFit, 0.55],
+    [biomassFit, 0.15],
+    [waterConsistency, 0.3]
+  ]), 5);
 }
 
 function landscapeLink(a, b, diagonal, linkId) {
@@ -770,20 +1189,46 @@ function habitatSuitability(speciesRecord, block, sensitivity) {
     ? closeness(block.meanFlow, speciesRecord.flowAffinity, 0.46)
     : 0.64 + block.hydrologicConnectivity * 0.18;
   const humanScore = clamp01(1 - block.meanImpervious * (1.15 - speciesRecord.humanTolerance) - block.disturbancePressure * (0.7 - speciesRecord.humanTolerance * 0.38));
-  const corridor = clamp01(block.meanNeighborConnectivity * 0.62 + block.corridorCapacity * 0.38);
-  const physical = elevation * 0.13 + slope * 0.13 + roughness * 0.11 + temperature * 0.1;
-  const habitat = vegetation * 0.18 + wetness * 0.13 + flow * 0.08 + landWater * 0.12;
-  const pressure = humanScore * 0.07 + corridor * 0.05;
-  const weighted = physical + habitat + pressure;
+  const corridor = functionalConnectivity(speciesRecord, block);
+  const weighted = weightedGeometricMean([
+    [elevation, 0.13],
+    [slope, 0.1],
+    [roughness, 0.09],
+    [temperature, 0.13],
+    [vegetation, 0.15],
+    [wetness, 0.11],
+    [flow, 0.07],
+    [landWater, 0.1],
+    [humanScore, 0.07],
+    [corridor, 0.05]
+  ]);
   const limitingFactor = Math.min(
     landWater,
     humanScore,
-    Math.max(0.18, elevation),
-    Math.max(0.2, speciesRecord.aquaticAffinity >= 0.5 ? wetness : vegetation)
+    temperature,
+    Math.max(0.08, elevation),
+    Math.max(0.08, speciesRecord.aquaticAffinity >= 0.5 ? wetness : vegetation)
   );
-  const nicheFit = weighted * (0.56 + limitingFactor * 0.44);
-  const sharpened = smoothstep(0.28 + sensitivity * 0.08, 0.84 - sensitivity * 0.05, nicheFit);
-  return clamp01(Math.pow(sharpened, 0.82 + sensitivity * 0.72));
+  const nicheFit = weighted * (0.38 + Math.sqrt(limitingFactor) * 0.62);
+  const sharpened = smoothstep(0.18 + sensitivity * 0.09, 0.76 - sensitivity * 0.04, nicheFit);
+  return clamp01(Math.pow(sharpened, 0.9 + sensitivity * 0.76));
+}
+
+function functionalConnectivity(speciesRecord, block) {
+  const structural = clamp01(block.meanNeighborConnectivity * 0.62 + block.corridorCapacity * 0.38);
+  const mobility = clamp01(Math.log1p(speciesRecord.movementKmPerDay) / Math.log(83));
+  return clamp01(structural + (1 - structural) * mobility * 0.24);
+}
+
+function speciesEffectiveHabitatAreaKm2(speciesRecord, block) {
+  const aquatic = speciesRecord.aquaticAffinity >= 0.5;
+  const baseFraction = aquatic
+    ? clamp01(block.waterFraction + block.landFraction * block.hydrologicConnectivity * 0.32)
+    : block.landFraction;
+  const edgePressure = clamp01(finite(block.edgePressure, block.disturbancePressure));
+  const edgeRetention = clamp01(1 - edgePressure * (0.72 - speciesRecord.humanTolerance * 0.34));
+  const connectivityRetention = 0.5 + functionalConnectivity(speciesRecord, block) * 0.5;
+  return block.areaKm2 * baseFraction * edgeRetention * connectivityRetention;
 }
 
 function buildMigrationLinks(network, suitabilityBySpecies, migrationStrength) {
@@ -897,6 +1342,8 @@ function species(id, labelZh, geometryClass, colorHex, bodyScale, profile) {
     geometryClass,
     colorHex,
     bodyScale,
+    adultBodyMassKg: finite(profile.adultBodyMassKg, REPRESENTATIVE_ADULT_BODY_MASS_KG[id] || Math.max(0.05, bodyScale * 10)),
+    bodyMassBasis: "representative-adult-trait-approximation",
     ...profile,
     trophicLevel,
     preyIds: Object.freeze([...(profile.preyIds || [])]),
@@ -913,6 +1360,51 @@ function inferTrophicLevel(guild, preyDependent) {
 
 function closeness(value, target, tolerance) {
   return 1 - clamp01(Math.abs(finite(value, 0) - finite(target, 0)) / Math.max(0.0001, finite(tolerance, 1)));
+}
+
+function intervalFit(value, minimum, maximum, margin) {
+  const number = finite(value, minimum);
+  if (number >= minimum && number <= maximum) return 1;
+  if (number < minimum) return clamp01(1 - (minimum - number) / Math.max(0.0001, margin));
+  return clamp01(1 - (number - maximum) / Math.max(0.0001, margin));
+}
+
+function weightedGeometricMean(entries) {
+  let weightedLogSum = 0;
+  let totalWeight = 0;
+  for (const [rawValue, rawWeight] of entries) {
+    const weight = Math.max(0, finite(rawWeight, 0));
+    if (!weight) continue;
+    weightedLogSum += Math.log(Math.max(0.0001, clamp01(rawValue))) * weight;
+    totalWeight += weight;
+  }
+  return totalWeight ? Math.exp(weightedLogSum / totalWeight) : 0;
+}
+
+function areaWeightedMean(blocks, selector) {
+  let weighted = 0;
+  let area = 0;
+  for (const block of blocks || []) {
+    const blockArea = Math.max(0, finite(block.areaKm2, 0));
+    weighted += finite(selector(block), 0) * blockArea;
+    area += blockArea;
+  }
+  return area ? weighted / area : 0;
+}
+
+function projectPopulation(previous, carryingCapacity, growthRate, mortalityRate, years) {
+  const population = Math.max(0, finite(previous, 0));
+  const capacity = Math.max(0, finite(carryingCapacity, 0));
+  if (!population || !capacity || years <= 0) return years <= 0 ? population : 0;
+  const growthFactor = Math.exp(clamp(finite(growthRate, 0) * years, -20, 20));
+  const densityRegulated = capacity * population * growthFactor / Math.max(0.0001, capacity + population * (growthFactor - 1));
+  return Math.max(0, densityRegulated * Math.exp(-clamp(finite(mortalityRate, 0), 0, 1) * years));
+}
+
+function csvCell(value) {
+  if (value === null || value === undefined) return "";
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
 function deterministic01(a, b, seed) {

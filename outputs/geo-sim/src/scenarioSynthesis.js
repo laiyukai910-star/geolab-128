@@ -46,7 +46,8 @@ export function buildScenarioSynthesis(model, params = {}, options = {}) {
       meanElevationM: numberOrNull(stats.meanElevation),
       maxElevationM: numberOrNull(stats.maxElevation),
       meanSlopeDeg: numberOrNull(stats.meanSlope),
-      meanRoughnessM: numberOrNull(stats.meanRoughness)
+      meanRoughnessM: numberOrNull(stats.meanRoughness),
+      ecologicalBlockAreaClosurePct: numberOrNull(stats.landscapeNetwork?.mapAreaClosurePct)
     }),
     domain("climate", "Climate & wind", "气候与风", finiteCount([stats.meanPrecipitation, stats.meanTemperature, stats.meanWindSpeed]) / 3 * 100, fraction(fractions.meteorology), {
       en: `${format(stats.meanPrecipitation, 0)} mm/yr precipitation, ${format(stats.meanTemperature, 1)} C mean temperature, ${format(stats.meanWindSpeed, 1)} m/s mean wind.`,
@@ -77,14 +78,22 @@ export function buildScenarioSynthesis(model, params = {}, options = {}) {
       stats.wildlife?.speciesCount > 0 ? 100 : 0,
       Number.isFinite(stats.meanVegetation) ? 100 : 0
     ]), ecologyEvidence, {
-      en: `${stats.landscapeNetwork?.blockCount || 0} ecological blocks, ${format(stats.landscapeNetwork?.meanConnectivity, 2)} mean connectivity, ${stats.wildlife?.activeSpeciesCount || 0} active species.`,
-      zh: `${stats.landscapeNetwork?.blockCount || 0} 个生态区块，平均连通度 ${format(stats.landscapeNetwork?.meanConnectivity, 2)}，${stats.wildlife?.activeSpeciesCount || 0} 个活跃物种。`
+      en: `${stats.landscapeNetwork?.blockCount || 0} ecological blocks, ${format(stats.landscapeNetwork?.coreHabitatAreaKm2, 1)} km2 core-habitat proxy, integrity screening ${format((stats.wildlife?.ecologicalIntegrityIndex || 0) * 100, 0)}%.`,
+      zh: `${stats.landscapeNetwork?.blockCount || 0} 个生态区块，核心生境代理 ${format(stats.landscapeNetwork?.coreHabitatAreaKm2, 1)} km2，完整性筛查 ${format((stats.wildlife?.ecologicalIntegrityIndex || 0) * 100, 0)}%。`
     }, {
       blockCount: stats.landscapeNetwork?.blockCount || 0,
       meanConnectivity: numberOrNull(stats.landscapeNetwork?.meanConnectivity),
+      coreHabitatAreaKm2: numberOrNull(stats.landscapeNetwork?.coreHabitatAreaKm2),
+      effectiveHabitatAreaKm2: numberOrNull(stats.landscapeNetwork?.effectiveHabitatAreaKm2),
+      meanClimateVegetationConsistency: numberOrNull(stats.landscapeNetwork?.meanClimateVegetationConsistency),
       activeSpeciesCount: stats.wildlife?.activeSpeciesCount || 0,
       migrationLinkCount: stats.wildlife?.migrationLinkCount || 0,
-      meanVegetationFraction: numberOrNull(stats.meanVegetation)
+      meanVegetationFraction: numberOrNull(stats.meanVegetation),
+      ecologicalIntegrityIndex: numberOrNull(stats.wildlife?.ecologicalIntegrityIndex),
+      shannonDiversity: numberOrNull(stats.wildlife?.shannonDiversity),
+      hillNumberQ1: numberOrNull(stats.wildlife?.hillNumberQ1),
+      totalBiomassKg: numberOrNull(stats.wildlife?.totalBiomassKg),
+      blockedReleaseCount: stats.wildlife?.blockedReleaseCount || 0
     }),
     domain("subsurface", "Subsurface", "地下系统", stats.subsurface ? 100 : 0, Math.max(
       fraction(fractions.subsurface),
@@ -341,6 +350,9 @@ function buildPriorities(stats, purposeCode, domains, readiness, infrastructureA
   if ((stats.subsurface?.meanVoxelObservedSupport ?? 0) < 0.1) add("subsurface-evidence", "medium", "subsurface", "Add borehole, lithology, groundwater, or geotechnical observations before using underground risk indicators for site decisions.", "补充钻孔、岩性、地下水或岩土观测，再将地下风险指标用于场地决策。");
   if (Number.isFinite(stats.waterBudget?.residualPctOfInput) && Math.abs(stats.waterBudget.residualPctOfInput) > 20) add("water-budget", "high", "hydrology", "Review forcing, runoff, retention, extraction, and deep-loss assumptions because the annual water-budget residual is large.", "年水量平衡余项较大，请检查边界强迫、产流、滞留、取水和深层损失假设。");
   if (Number.isFinite(stats.landscapeNetwork?.meanConnectivity) && stats.landscapeNetwork.meanConnectivity < 0.35) add("ecological-connectivity", "medium", "ecology", "Inspect barriers and habitat continuity before drawing conclusions from wildlife abundance or release scenarios.", "检查阻隔和生境连续性，再解读动物丰度或投放情景。");
+  if (Number.isFinite(stats.landscapeNetwork?.meanClimateVegetationConsistency) && stats.landscapeNetwork.meanClimateVegetationConsistency < 0.55) add("climate-vegetation-consistency", "medium", "ecology", "Review potential evapotranspiration, precipitation, vegetation, and biomass inputs because their geographic agreement is weak.", "潜在蒸散、降水、植被与生物量之间的地理一致性偏弱，请复核相关输入。");
+  if (Number.isFinite(stats.wildlife?.ecologicalIntegrityIndex) && stats.wildlife.ecologicalIntegrityIndex < 0.4) add("ecological-integrity-components", "medium", "ecology", "Inspect habitat, connectivity, diversity, trophic-resource, and climate-vegetation components instead of relying on the composite integrity screening index.", "请检查生境、连通性、多样性、营养资源和气候—植被分项，不要只依赖综合完整性筛查指数。");
+  if ((stats.wildlife?.blockedReleaseCount || 0) > 0) add("blocked-translocation", "high", "ecology", "Do not treat blocked release batches as viable; resolve regional mismatch or absent habitat and complete professional disease, genetic, legal, and field review.", "不要将被拦截的投放批次视为可行；应先解决区域不匹配或缺乏生境，并完成疾病、遗传、法律和现场专业审查。");
   if ((stats.hazards?.meanCurrentCompositeHazard ?? stats.hazards?.meanCompositeHazard ?? 0) > 0.62) add("hazard-components", "medium", "hazards", "Inspect component hazard layers and exposed assets instead of relying on the composite indicator alone.", "检查各分项灾害图层和暴露资产，不要只依赖综合指标。");
   if (purposeCode === "systems_learning") add("systems-learning", "low", "evidence", "Compare at least two controlled configurations and trace how one changed input propagates through the listed coupling pathways.", "对比至少两组受控配置，并沿已列联动链路追踪单一输入变化如何传播。");
   if (purposeCode === "hypothesis_exploration") add("hypothesis-test", "medium", "evidence", "State a directional hypothesis, hold unrelated parameters constant, and define a diagnostic that could contradict it before running variants.", "先提出有方向的假设，固定无关参数，并定义可能否定该假设的诊断指标，再运行变体。");
