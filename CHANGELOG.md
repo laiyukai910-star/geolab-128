@@ -25,6 +25,7 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 
 ### Changed
 
+- Updated the CI checkout and Node setup actions to their Node 24-based v7 releases, removing the deprecated Node 20 action-runtime warning.
 - Replaced the temperature-only potential-evapotranspiration proxy with a FAO-56 Penman-Monteith structure using bounded radiation, humidity, wind, elevation-pressure, vapor-pressure, and terrain-exposure terms.
 - Reworked annual runoff into an explicit mass-conserving partition of precipitation and irrigation across demand, actual ET, runoff, groundwater recharge, and soil-storage change, with an NRCS curve-number event-response constraint.
 - Separated requested, allocated, and unmet infrastructure demand so the conservation ledger deducts only water that the scenario can actually supply.
