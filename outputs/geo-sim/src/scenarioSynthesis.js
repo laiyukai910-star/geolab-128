@@ -56,6 +56,9 @@ export function buildScenarioSynthesis(model, params = {}, options = {}) {
       meanPrecipitationMmYr: numberOrNull(stats.meanPrecipitation),
       meanTemperatureC: numberOrNull(stats.meanTemperature),
       meanWindSpeedMs: numberOrNull(stats.meanWindSpeed),
+      meanReferenceEvapotranspirationMmYr: numberOrNull(stats.meanPotentialEvapotranspiration),
+      meanNetRadiationMjM2Day: numberOrNull(stats.meanNetRadiationMjM2Day),
+      meanVaporPressureDeficitKPa: numberOrNull(stats.meanVaporPressureDeficitKPa),
       dominantClimateCode: stats.dominantClimate ?? null
     }),
     domain("hydrology", "Water & sediment", "水文与泥沙", mean([
@@ -71,6 +74,10 @@ export function buildScenarioSynthesis(model, params = {}, options = {}) {
       riverSegmentCount: stats.riverSegmentCount || 0,
       meanRunoffCoefficient: numberOrNull(stats.meanRunoffCoefficient),
       waterBudgetResidualPct: numberOrNull(stats.waterBudget?.residualPctOfInput),
+      groundwaterRechargeVolumeM3: numberOrNull(stats.waterBudget?.groundwaterRechargeVolumeM3),
+      soilStorageChangeVolumeM3: numberOrNull(stats.waterBudget?.soilStorageChangeVolumeM3),
+      processIntegrityIndex: numberOrNull(stats.physicalCoupling?.processIntegrityIndex),
+      couplingIntegrityIndex: numberOrNull(stats.physicalCoupling?.couplingIntegrityIndex),
       highErosionAreaKm2: numberOrNull(stats.hydraulicDiagnostics?.highErosionAreaKm2)
     }),
     domain("ecology", "Ecology & wildlife", "生态与动物", mean([
@@ -295,6 +302,22 @@ function buildCouplings(stats, params, infrastructureActive) {
       }
     },
     {
+      id: "water-partition-closure",
+      label: { en: "Water partition closure", zh: "水量分配闭合" },
+      summary: {
+        en: `Unresolved annual residual is ${format(stats.waterBudget?.residualPctOfInput, 3)}% of input; recharge is ${format((stats.waterBudget?.groundwaterRechargeVolumeM3 || 0) / 1e6, 1)} million m3/yr and soil storage change is ${format((stats.waterBudget?.soilStorageChangeVolumeM3 || 0) / 1e6, 1)} million m3/yr.`,
+        zh: `年水量未闭合余项占输入 ${format(stats.waterBudget?.residualPctOfInput, 3)}%；地下补给 ${format((stats.waterBudget?.groundwaterRechargeVolumeM3 || 0) / 1e6, 1)} 百万 m3/yr，土壤储量变化 ${format((stats.waterBudget?.soilStorageChangeVolumeM3 || 0) / 1e6, 1)} 百万 m3/yr。`
+      }
+    },
+    {
+      id: "physical-coupling-gates",
+      label: { en: "Physical coupling gates", zh: "物理联动门控" },
+      summary: {
+        en: `Process integrity ${format((stats.physicalCoupling?.processIntegrityIndex || 0) * 100, 0)}%, coupling integrity ${format((stats.physicalCoupling?.couplingIntegrityIndex || 0) * 100, 0)}%, with ${stats.physicalCoupling?.failedGateCount || 0} failed and ${stats.physicalCoupling?.reviewGateCount || 0} review gates.`,
+        zh: `物理过程完整性 ${format((stats.physicalCoupling?.processIntegrityIndex || 0) * 100, 0)}%，联动完整性 ${format((stats.physicalCoupling?.couplingIntegrityIndex || 0) * 100, 0)}%，失败门控 ${stats.physicalCoupling?.failedGateCount || 0}，复核门控 ${stats.physicalCoupling?.reviewGateCount || 0}。`
+      }
+    },
+    {
       id: "surface-ecology",
       label: { en: "Surface to ecology", zh: "地表到生态" },
       summary: {
@@ -349,6 +372,8 @@ function buildPriorities(stats, purposeCode, domains, readiness, infrastructureA
   if (!stats.calibration?.observedDischargeM3s && !stats.calibration?.observedSeries) add("flow-calibration", "medium", "hydrology", "Add observed discharge and overlapping meteorology to evaluate water routing and hydrograph behavior.", "加入观测流量及同期气象数据，用于评估汇流和过程线行为。");
   if ((stats.subsurface?.meanVoxelObservedSupport ?? 0) < 0.1) add("subsurface-evidence", "medium", "subsurface", "Add borehole, lithology, groundwater, or geotechnical observations before using underground risk indicators for site decisions.", "补充钻孔、岩性、地下水或岩土观测，再将地下风险指标用于场地决策。");
   if (Number.isFinite(stats.waterBudget?.residualPctOfInput) && Math.abs(stats.waterBudget.residualPctOfInput) > 20) add("water-budget", "high", "hydrology", "Review forcing, runoff, retention, extraction, and deep-loss assumptions because the annual water-budget residual is large.", "年水量平衡余项较大，请检查边界强迫、产流、滞留、取水和深层损失假设。");
+  if ((stats.physicalCoupling?.failedGateCount || 0) > 0) add("physical-gate-failure", "high", "hydrology", "Resolve failed conservation or process-direction gates before interpreting the coupled scenario.", "在解释联动情景前，先处理失败的守恒或过程方向门控。");
+  if ((stats.physicalCoupling?.reviewGateCount || 0) > 0) add("physical-gate-review", "medium", "hydrology", "Review the limiting physical coupling and its evidence before comparing scenarios as if they were equally constrained.", "复核限制性物理链路及其证据，再比较不同情景，避免把它们视为同等约束。");
   if (Number.isFinite(stats.landscapeNetwork?.meanConnectivity) && stats.landscapeNetwork.meanConnectivity < 0.35) add("ecological-connectivity", "medium", "ecology", "Inspect barriers and habitat continuity before drawing conclusions from wildlife abundance or release scenarios.", "检查阻隔和生境连续性，再解读动物丰度或投放情景。");
   if (Number.isFinite(stats.landscapeNetwork?.meanClimateVegetationConsistency) && stats.landscapeNetwork.meanClimateVegetationConsistency < 0.55) add("climate-vegetation-consistency", "medium", "ecology", "Review potential evapotranspiration, precipitation, vegetation, and biomass inputs because their geographic agreement is weak.", "潜在蒸散、降水、植被与生物量之间的地理一致性偏弱，请复核相关输入。");
   if (Number.isFinite(stats.wildlife?.ecologicalIntegrityIndex) && stats.wildlife.ecologicalIntegrityIndex < 0.4) add("ecological-integrity-components", "medium", "ecology", "Inspect habitat, connectivity, diversity, trophic-resource, and climate-vegetation components instead of relying on the composite integrity screening index.", "请检查生境、连通性、多样性、营养资源和气候—植被分项，不要只依赖综合完整性筛查指数。");

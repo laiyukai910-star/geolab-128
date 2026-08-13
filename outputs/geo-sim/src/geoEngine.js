@@ -6,6 +6,12 @@ import {
   makeEcologicalIntegrityCSV,
   WILDLIFE_SPECIES
 } from "./landscapeEcology.js";
+import {
+  buildPhysicalCouplingReport,
+  buildPhysicalCouplingState,
+  makePhysicalCouplingCSV,
+  PROCESS_METHOD_REFERENCES
+} from "./physicalCoupling.js";
 
 export {
   buildEcologicalIntegrityReport,
@@ -13,7 +19,11 @@ export {
   buildWildlifeState,
   ECOSYSTEM_GUILDS,
   makeEcologicalIntegrityCSV,
-  WILDLIFE_SPECIES
+  WILDLIFE_SPECIES,
+  buildPhysicalCouplingReport,
+  buildPhysicalCouplingState,
+  makePhysicalCouplingCSV,
+  PROCESS_METHOD_REFERENCES
 };
 
 export const MAP_SIZE_KM = 128;
@@ -2120,6 +2130,8 @@ export function runModel(model, params) {
   });
   model.dataConfidence = computeDataConfidence(model, params);
   model.stats = computeStats(model, params);
+  model.physicalCoupling = buildPhysicalCouplingState(model, params);
+  model.stats.physicalCoupling = model.physicalCoupling.summary;
   model.stats.landscapeNetwork = model.landscapeNetwork.summary;
   model.stats.wildlife = model.wildlife.summary;
   model.runtimeMs = performance.now() - start;
@@ -2158,6 +2170,8 @@ export function updateTemporalModel(model, params = {}) {
     elapsedYears: 1
   });
   model.stats = computeStats(model, params);
+  model.physicalCoupling = buildPhysicalCouplingState(model, params);
+  model.stats.physicalCoupling = model.physicalCoupling.summary;
   model.stats.landscapeNetwork = model.landscapeNetwork.summary;
   model.stats.wildlife = model.wildlife.summary;
   model.temporalRuntimeMs = performance.now() - start;
@@ -15972,6 +15986,8 @@ function computeSurfaceLayers(model, params, climate) {
   const interceptionCapacity = new Float32Array(len);
   const potentialEvapotranspiration = new Float32Array(len);
   const actualEvapotranspiration = new Float32Array(len);
+  const netRadiationMjM2Day = new Float32Array(len);
+  const vaporPressureDeficitKPa = new Float32Array(len);
   const waterBalance = new Float32Array(len);
   const roughness = new Float32Array(len);
   const curveNumber = new Float32Array(len);
@@ -16006,6 +16022,8 @@ function computeSurfaceLayers(model, params, climate) {
       interceptionCapacity[i] = 0;
       potentialEvapotranspiration[i] = 0;
       actualEvapotranspiration[i] = 0;
+      netRadiationMjM2Day[i] = 0;
+      vaporPressureDeficitKPa[i] = 0;
       waterBalance[i] = 0;
       roughness[i] = LAND_COVER[11].roughness;
       curveNumber[i] = LAND_COVER[11].cn;
@@ -16149,7 +16167,18 @@ function computeSurfaceLayers(model, params, climate) {
     interceptionCapacity[i] = clamp((0.8 + leafAreaIndex[i] * 0.72 + canopyHeight[i] * 0.09) * (0.72 + vegetationInfo.interception * 0.28), 0, 14);
 
     if (climate) {
-      const pet = estimatePotentialEvapotranspiration(temp, Number(params.latitude), h);
+      const referenceEt = estimateReferenceEvapotranspiration({
+        tempC: temp,
+        latitude: Number(params.latitude),
+        elevationM: h,
+        relativeHumidity: Number(params.humidity),
+        windSpeedMs: model.wind?.speed?.[i] ?? Number(params.windSpeed),
+        dayOfYear: Number(params.dayOfYear),
+        slopeDeg: slope,
+        aspectDeg: model.aspect?.[i] ?? 0,
+        annualPrecipitationMm: precip
+      });
+      const pet = referenceEt.annualMm;
       const stress = clamp(precip / Math.max(80, pet), 0.08, 1.05);
       const soilWaterStress = clamp(
         moisture * 0.48 +
@@ -16159,14 +16188,22 @@ function computeSurfaceLayers(model, params, climate) {
         0.05,
         1.15
       );
-      const supplementalWater = (infrastructure.irrigationMm?.[i] ?? 0) + (infrastructure.storageMm?.[i] ?? 0) * 0.05;
+      const supplementalWater = infrastructure.irrigationMm?.[i] ?? 0;
       const waterDemand = infrastructure.waterDemandMm?.[i] ?? 0;
-      potentialEvapotranspiration[i] = pet;
-      actualEvapotranspiration[i] = Math.min(
-        (precip + supplementalWater) * (0.94 - imperviousFraction[i] * 0.42),
-        pet * stress * soilWaterStress * (0.16 + vegetation[i] * 0.72) + supplementalWater * (0.12 + vegetation[i] * 0.34)
+      const availableWater = Math.max(0, precip + supplementalWater - waterDemand);
+      const cropCoefficient = clamp(
+        0.16 + vegetation[i] * 0.62 + Math.min(0.24, leafAreaIndex[i] * 0.035) + vegetationInfo.interception * 0.08,
+        0.12,
+        1.12
       );
-      waterBalance[i] = precip + supplementalWater - waterDemand - actualEvapotranspiration[i];
+      potentialEvapotranspiration[i] = pet;
+      netRadiationMjM2Day[i] = referenceEt.netRadiationMjM2Day;
+      vaporPressureDeficitKPa[i] = referenceEt.vaporPressureDeficitKPa;
+      actualEvapotranspiration[i] = Math.min(
+        availableWater * (0.98 - imperviousFraction[i] * 0.28),
+        pet * cropCoefficient * stress * soilWaterStress * (1 - imperviousFraction[i] * 0.5)
+      );
+      waterBalance[i] = availableWater - actualEvapotranspiration[i];
     }
 
     roughness[i] = Math.max(
@@ -16215,6 +16252,8 @@ function computeSurfaceLayers(model, params, climate) {
     interceptionCapacity,
     potentialEvapotranspiration,
     actualEvapotranspiration,
+    netRadiationMjM2Day,
+    vaporPressureDeficitKPa,
     waterBalance,
     roughness,
     curveNumber,
@@ -16634,6 +16673,13 @@ function computeAccumulation(model, params) {
   const runoffCoefficient = new Float32Array(len);
   const localRunoffAnnualM3 = new Float64Array(len);
   const retainedFlowAnnualM3 = new Float64Array(len);
+  const localRunoffDepthMm = new Float32Array(len);
+  const groundwaterRechargeMm = new Float32Array(len);
+  const soilStorageChangeMm = new Float32Array(len);
+  const waterBudgetResidualMm = new Float32Array(len);
+  const nrcsEventRunoffRatio = new Float32Array(len);
+  const allocatedDemandMm = new Float32Array(len);
+  const unmetDemandMm = new Float32Array(len);
   const flowDivergence = new Float32Array(len);
   const streamOrder = new Uint8Array(len);
   const maxChildOrder = new Uint8Array(len);
@@ -16728,45 +16774,76 @@ function computeAccumulation(model, params) {
   for (const i of sorted) {
     if (model.height[i] <= seaLevel) continue;
     const cn = model.surface?.curveNumber?.[i] ?? 78;
-    const cnRunoff = clamp((cn - 35) / 63, 0.03, 0.98);
     const soilInfiltration = (SOIL_GROUPS[model.surface?.soilGroup?.[i] ?? 0] || SOIL_GROUPS[0]).infiltration;
     const infiltrationCapacity = model.surface?.infiltrationCapacity?.[i] ?? soilInfiltration;
     const impervious = model.surface?.imperviousFraction?.[i] ?? 0;
     const availableWater = model.surface?.availableWaterCapacityMm?.[i] ?? 120;
     const rootDepth = model.surface?.rootDepthM?.[i] ?? 1;
     const ksat = model.surface?.hydraulicConductivityMmHr?.[i] ?? soilHydrologyFromGroup(model.surface?.soilGroup?.[i] ?? 0).ksatMmHr;
+    const vegetation = model.surface?.vegetation?.[i] ?? 0;
+    const leafAreaIndex = model.surface?.leafAreaIndex?.[i] ?? 0;
+    const rootCohesion = model.surface?.rootCohesion?.[i] ?? 0;
+    const annualPrecipitationMm = Math.max(0, model.precipitation[i] || 0);
+    const eventBoost = String(params.disasterMode || "none") === "flood" ? clamp(Number(params.disasterIntensity), 0, 1) * 65 : 0;
+    const representativeStormMm = clamp(12 + annualPrecipitationMm / 52 + Number(params.humidity || 0) * 14 + eventBoost, 12, 180);
+    const curveNumberEventRatio = nrcsDirectRunoffRatio(cn, representativeStormMm);
+    nrcsEventRunoffRatio[i] = curveNumberEventRatio;
+    const antecedentWetness = clamp((model.surface?.waterBalance?.[i] ?? 0) / Math.max(35, availableWater), 0, 1.4);
     const vegetationStorage =
-      (model.surface?.vegetation?.[i] ?? 0) * 0.12 +
-      Math.min(0.18, (model.surface?.leafAreaIndex?.[i] ?? 0) * 0.022) +
-      (model.surface?.rootCohesion?.[i] ?? 0) * 0.055 +
-      (availableWater / 320) * 0.06 +
-      Math.min(0.08, rootDepth * 0.018) +
-      (Math.log1p(ksat) / Math.log1p(180)) * 0.045;
+      vegetation * 0.1 +
+      Math.min(0.14, leafAreaIndex * 0.018) +
+      rootCohesion * 0.045 +
+      (availableWater / 420) * 0.05 +
+      Math.min(0.06, rootDepth * 0.014) +
+      (Math.log1p(ksat) / Math.log1p(180)) * 0.04;
     runoffCoefficient[i] = clamp(
-      0.05 +
-        (model.slope[i] / 45) * 0.34 +
-        (1 - Number(params.permeability)) * 0.16 +
-        (1 - infiltrationCapacity) * 0.28 +
-        cnRunoff * 0.26 +
-        impervious * 0.34 +
-        ((model.precipitation[i] - 600) / 3200) * 0.12 -
+      0.025 +
+        curveNumberEventRatio * 0.58 +
+        (model.slope[i] / 70) * 0.2 +
+        (1 - Number(params.permeability)) * 0.08 +
+        (1 - infiltrationCapacity) * 0.14 +
+        impervious * 0.48 +
+        antecedentWetness * 0.1 -
         vegetationStorage,
       0.04,
       0.88
     ) * runoffMultiplier + (infrastructure.runoffDelta?.[i] ?? 0);
     runoffCoefficient[i] = clamp(runoffCoefficient[i], 0.02, 0.95);
     flowAccumulation[i] += cellAreaKm2;
-    const evapLoss = (model.surface?.actualEvapotranspiration?.[i] ?? 0) * (0.16 + (model.surface?.vegetation?.[i] ?? 0) * 0.24);
-    const effectivePrecipMm = Math.max(5, model.precipitation[i] - evapLoss);
-    const localRunoffM3 = (effectivePrecipMm / 1000) * cellAreaM2 * runoffCoefficient[i] * dischargeScale;
+    const irrigationMm = Math.max(0, infrastructure.irrigationMm?.[i] ?? 0);
+    const requestedDemandMm = Math.max(0, infrastructure.waterDemandMm?.[i] ?? 0);
+    const demandMm = Math.min(annualPrecipitationMm + irrigationMm, requestedDemandMm);
+    const actualEtMm = Math.min(
+      Math.max(0, annualPrecipitationMm + irrigationMm - demandMm),
+      Math.max(0, model.surface?.actualEvapotranspiration?.[i] ?? 0)
+    );
+    const partitionableWaterMm = Math.max(0, annualPrecipitationMm + irrigationMm - demandMm - actualEtMm);
+    const runoffDepthMm = partitionableWaterMm * runoffCoefficient[i];
+    const postRunoffWaterMm = Math.max(0, partitionableWaterMm - runoffDepthMm);
+    const rechargeFraction = clamp(
+      0.08 + infiltrationCapacity * 0.5 + (Math.log1p(ksat) / Math.log1p(180)) * 0.2 + rootDepth / 18 - impervious * 0.42 - model.slope[i] / 150,
+      0.03,
+      0.86
+    );
+    const rechargeMm = postRunoffWaterMm * rechargeFraction;
+    const storageChangeMm = Math.max(0, postRunoffWaterMm - rechargeMm);
+    const residualMm = annualPrecipitationMm + irrigationMm - demandMm - actualEtMm - runoffDepthMm - rechargeMm - storageChangeMm;
+    localRunoffDepthMm[i] = runoffDepthMm;
+    groundwaterRechargeMm[i] = rechargeMm;
+    soilStorageChangeMm[i] = storageChangeMm;
+    waterBudgetResidualMm[i] = residualMm;
+    allocatedDemandMm[i] = demandMm;
+    unmetDemandMm[i] = Math.max(0, requestedDemandMm - demandMm);
+    const localRunoffM3 = (runoffDepthMm / 1000) * cellAreaM2;
     localRunoffAnnualM3[i] = localRunoffM3;
-    discharge[i] += localRunoffM3;
     const retention = clamp(infrastructure.flowRetention?.[i] ?? 0, 0, 0.95);
+    let routedLocalRunoffM3 = localRunoffM3;
     if (retention > 0) {
-      const retained = discharge[i] * retention * 0.78;
+      const retained = localRunoffM3 * retention * 0.78;
       retainedFlowAnnualM3[i] = retained;
-      discharge[i] -= retained;
+      routedLocalRunoffM3 -= retained;
     }
+    discharge[i] += routedLocalRunoffM3 * dischargeScale;
     if (routingMode === "mfd" && distributeMfd(i)) continue;
     if (routingMode === "dinf" && distributeDInfinity(i)) continue;
     const r = model.receiver[i];
@@ -16819,6 +16896,16 @@ function computeAccumulation(model, params) {
   model.runoffCoefficient = runoffCoefficient;
   model.localRunoffAnnualM3 = localRunoffAnnualM3;
   model.retainedFlowAnnualM3 = retainedFlowAnnualM3;
+  model.hydroBudget = {
+    method: "annual-water-partition-with-NRCS-event-response-screening",
+    localRunoffDepthMm,
+    groundwaterRechargeMm,
+    soilStorageChangeMm,
+    waterBudgetResidualMm,
+    nrcsEventRunoffRatio,
+    allocatedDemandMm,
+    unmetDemandMm
+  };
   model.flowDivergence = flowDivergence;
   model.flowRouting = routingMode;
   model.streamOrder = streamOrder;
@@ -17544,7 +17631,17 @@ function seasonalCellState(model, index, context, out) {
   const meltFraction = clamp((airTemperatureC - 0.5) / 10.5, 0, 1);
   const snowpackMm = annualPrecip * 0.2 * snowFraction * clamp(context.coldSeasonIndex * 1.08 + elevationNorm * 0.36, 0, 1.45);
   const snowmeltMm = clamp(snowpackMm * (0.08 + meltFraction * 0.34) * (0.45 + context.warmSeasonIndex * 0.75), 0, snowpackMm);
-  const potentialEt30dMm = estimatePotentialEvapotranspiration(airTemperatureC, context.latitude, elevation) / 12 * clamp(0.42 + context.warmSeasonIndex * 0.82, 0.18, 1.32);
+  const potentialEt30dMm = estimateReferenceEvapotranspiration({
+    tempC: airTemperatureC,
+    latitude: context.latitude,
+    elevationM: elevation,
+    relativeHumidity: context.humidity,
+    windSpeedMs: model.windSpeed?.[index] ?? 2,
+    dayOfYear: context.dayOfYear,
+    slopeDeg: model.slope?.[index] ?? 0,
+    aspectDeg: model.aspect?.[index] ?? 0,
+    annualPrecipitationMm: annualPrecip
+  }).annualMm / 12 * clamp(0.42 + context.warmSeasonIndex * 0.82, 0.18, 1.32);
   const awc = clamp(model.surface?.availableWaterCapacityMm?.[index] ?? 120, 30, 420);
   const storageSupply = awc * clamp(model.surface?.infiltrationCapacity?.[index] ?? 0.5, 0.05, 1) * (0.36 + context.wetSeasonIndex * 0.42);
   const actualEt30dMm = Math.min(potentialEt30dMm, Math.max(0, precip30dMm * 0.48 + storageSupply * 0.42 + snowmeltMm * 0.18));
@@ -18836,7 +18933,10 @@ function computeStats(model, params) {
   let meanRootDepth = 0;
   let meanImperviousFraction = 0;
   let meanInfiltrationCapacity = 0;
+  let meanPotentialEt = 0;
   let meanActualEt = 0;
+  let meanNetRadiation = 0;
+  let meanVaporPressureDeficit = 0;
   let meanWaterBalance = 0;
   let meanRunoff = 0;
   let meanWetness = 0;
@@ -18865,8 +18965,13 @@ function computeStats(model, params) {
   let surfaceWaterBalanceVolumeM3 = 0;
   let generatedRunoffAnnualM3 = 0;
   let retainedFlowAnnualM3 = 0;
+  let groundwaterRechargeVolumeM3 = 0;
+  let soilStorageChangeVolumeM3 = 0;
+  let unresolvedWaterResidualM3 = 0;
   let infrastructureSupplyVolumeM3 = 0;
   let infrastructureDemandVolumeM3 = 0;
+  let infrastructureDemandRequestedVolumeM3 = 0;
+  let infrastructureUnmetDemandVolumeM3 = 0;
   let infrastructureStorageCapacityM3 = 0;
   let infrastructureAffectedCells = 0;
   let infrastructureHeatAreaKm2 = 0;
@@ -18915,7 +19020,10 @@ function computeStats(model, params) {
       meanRootDepth += model.surface?.rootDepthM?.[i] ?? 0;
       meanImperviousFraction += model.surface?.imperviousFraction?.[i] ?? 0;
       meanInfiltrationCapacity += model.surface?.infiltrationCapacity?.[i] ?? 0;
+      meanPotentialEt += model.surface?.potentialEvapotranspiration?.[i] ?? 0;
       meanActualEt += model.surface?.actualEvapotranspiration?.[i] ?? 0;
+      meanNetRadiation += model.surface?.netRadiationMjM2Day?.[i] ?? 0;
+      meanVaporPressureDeficit += model.surface?.vaporPressureDeficitKPa?.[i] ?? 0;
       meanWaterBalance += model.surface?.waterBalance?.[i] ?? 0;
       meanRunoff += model.runoffCoefficient?.[i] ?? 0;
       meanWetness += model.wetnessIndex?.[i] ?? 0;
@@ -18947,6 +19055,11 @@ function computeStats(model, params) {
       surfaceWaterBalanceVolumeM3 += ((model.surface?.waterBalance?.[i] ?? 0) / 1000) * cellAreaM2;
       generatedRunoffAnnualM3 += model.localRunoffAnnualM3?.[i] ?? 0;
       retainedFlowAnnualM3 += model.retainedFlowAnnualM3?.[i] ?? 0;
+      groundwaterRechargeVolumeM3 += ((model.hydroBudget?.groundwaterRechargeMm?.[i] ?? 0) / 1000) * cellAreaM2;
+      soilStorageChangeVolumeM3 += ((model.hydroBudget?.soilStorageChangeMm?.[i] ?? 0) / 1000) * cellAreaM2;
+      unresolvedWaterResidualM3 += ((model.hydroBudget?.waterBudgetResidualMm?.[i] ?? 0) / 1000) * cellAreaM2;
+      infrastructureDemandVolumeM3 += ((model.hydroBudget?.allocatedDemandMm?.[i] ?? 0) / 1000) * cellAreaM2;
+      infrastructureUnmetDemandVolumeM3 += ((model.hydroBudget?.unmetDemandMm?.[i] ?? 0) / 1000) * cellAreaM2;
       const built = model.infrastructureInfluence;
       if (built?.mask?.[i]) {
         infrastructureAffectedCells += 1;
@@ -18954,8 +19067,8 @@ function computeStats(model, params) {
         const irrigationMm = built.irrigationMm?.[i] ?? 0;
         const demandMm = built.waterDemandMm?.[i] ?? 0;
         const impervious = built.imperviousFraction?.[i] ?? 0;
-        infrastructureSupplyVolumeM3 += ((irrigationMm + storageMm * 0.05) / 1000) * cellAreaM2;
-        infrastructureDemandVolumeM3 += (demandMm / 1000) * cellAreaM2;
+        infrastructureSupplyVolumeM3 += (irrigationMm / 1000) * cellAreaM2;
+        infrastructureDemandRequestedVolumeM3 += (demandMm / 1000) * cellAreaM2;
         infrastructureStorageCapacityM3 += (storageMm / 1000) * cellAreaM2;
         infrastructureImperviousAreaKm2 += impervious * cellAreaKm2;
         if (Math.abs(built.temperatureDeltaC?.[i] ?? 0) > 0.05) infrastructureHeatAreaKm2 += cellAreaKm2;
@@ -19009,8 +19122,13 @@ function computeStats(model, params) {
     surfaceWaterBalanceVolumeM3,
     generatedRunoffAnnualM3,
     retainedFlowAnnualM3,
+    groundwaterRechargeVolumeM3,
+    soilStorageChangeVolumeM3,
+    unresolvedWaterResidualM3,
     infrastructureSupplyVolumeM3,
     infrastructureDemandVolumeM3,
+    infrastructureDemandRequestedVolumeM3,
+    infrastructureUnmetDemandVolumeM3,
     infrastructureStorageCapacityM3,
     outletCatchmentAreaKm2: maxFlowAccumulation,
     outletRunoffAnnualM3: maxDischargeAnnualM3
@@ -19022,7 +19140,7 @@ function computeStats(model, params) {
         affectedCells: infrastructureAffectedCells,
         cellAreaKm2,
         infrastructureSupplyVolumeM3,
-        infrastructureDemandVolumeM3,
+        infrastructureDemandVolumeM3: infrastructureDemandRequestedVolumeM3,
         infrastructureStorageCapacityM3,
         retainedFlowAnnualM3,
         infrastructureHeatAreaKm2,
@@ -19108,7 +19226,10 @@ function computeStats(model, params) {
     meanRootDepthM: meanRootDepth / divisor,
     meanImperviousFraction: meanImperviousFraction / divisor,
     meanInfiltrationCapacity: meanInfiltrationCapacity / divisor,
+    meanPotentialEvapotranspiration: meanPotentialEt / divisor,
     meanActualEvapotranspiration: meanActualEt / divisor,
+    meanNetRadiationMjM2Day: meanNetRadiation / divisor,
+    meanVaporPressureDeficitKPa: meanVaporPressureDeficit / divisor,
     meanWaterBalance: meanWaterBalance / divisor,
     meanRunoffCoefficient: meanRunoff / divisor,
     meanWetnessIndex: meanWetness / divisor,
@@ -20433,11 +20554,78 @@ function fillFloat(length, value) {
   return data;
 }
 
-function estimatePotentialEvapotranspiration(tempC, latitude, elevation) {
-  const heat = Math.max(0, tempC + 5);
-  const daylight = clamp(1.14 - Math.abs(latitude) / 140, 0.62, 1.16);
-  const elevationDrying = 1 + clamp(elevation / MAX_TERRAIN_ELEVATION_M, 0, 1) * 0.16;
-  return clamp(heat * 33.5 * daylight * elevationDrying, 0, 2300);
+function estimateReferenceEvapotranspiration(input) {
+  const tempC = clamp(firstFinite(input.tempC, 15), -35, 48);
+  const latitudeRad = clamp(firstFinite(input.latitude, 0), -66.5, 66.5) * Math.PI / 180;
+  const elevationM = clamp(firstFinite(input.elevationM, 0), 0, MAX_TERRAIN_ELEVATION_M);
+  const dayOfYear = clampInteger(firstFinite(input.dayOfYear, 183), 1, 365, 183);
+  const relativeHumidity = clamp(firstFinite(input.relativeHumidity, 0.65), 0.05, 1);
+  const windSpeedMs = clamp(firstFinite(input.windSpeedMs, 2), 0.1, 35);
+  const annualPrecipitationMm = Math.max(0, firstFinite(input.annualPrecipitationMm, 900));
+  const slopeRad = clamp(firstFinite(input.slopeDeg, 0), 0, 75) * Math.PI / 180;
+  const aspectRad = normalizeDegrees(firstFinite(input.aspectDeg, 180)) * Math.PI / 180;
+
+  const solarConstant = 0.0820;
+  const inverseEarthSunDistance = 1 + 0.033 * Math.cos((2 * Math.PI * dayOfYear) / 365);
+  const solarDeclination = 0.409 * Math.sin((2 * Math.PI * dayOfYear) / 365 - 1.39);
+  const sunsetHourAngle = Math.acos(clamp(-Math.tan(latitudeRad) * Math.tan(solarDeclination), -1, 1));
+  const extraterrestrialRadiation = (24 * 60 / Math.PI) * solarConstant * inverseEarthSunDistance * (
+    sunsetHourAngle * Math.sin(latitudeRad) * Math.sin(solarDeclination) +
+    Math.cos(latitudeRad) * Math.cos(solarDeclination) * Math.sin(sunsetHourAngle)
+  );
+
+  const cloudHumidity = clamp(relativeHumidity * 0.72 + Math.min(1, annualPrecipitationMm / 2400) * 0.28, 0.08, 0.98);
+  const sunshineFraction = clamp(1 - cloudHumidity * 0.68, 0.18, 0.82);
+  const equatorFacingAspect = latitudeRad >= 0 ? Math.PI : 0;
+  const terrainRadiationFactor = clamp(1 + Math.sin(slopeRad) * Math.cos(aspectRad - equatorFacingAspect) * 0.18, 0.78, 1.18);
+  const solarRadiation = (0.25 + 0.5 * sunshineFraction) * extraterrestrialRadiation * terrainRadiationFactor;
+  const clearSkyRadiation = Math.max(0.001, (0.75 + 0.00002 * elevationM) * extraterrestrialRadiation);
+  const temperatureRangeC = clamp(13 - relativeHumidity * 6 + elevationM / 2400, 4, 19);
+  const tMin = tempC - temperatureRangeC * 0.5;
+  const tMax = tempC + temperatureRangeC * 0.5;
+  const saturationAtMin = saturationVaporPressureKPa(tMin);
+  const saturationAtMax = saturationVaporPressureKPa(tMax);
+  const saturationVaporPressure = (saturationAtMin + saturationAtMax) * 0.5;
+  const actualVaporPressure = saturationVaporPressure * relativeHumidity;
+  const vaporPressureDeficitKPa = Math.max(0, saturationVaporPressure - actualVaporPressure);
+  const netShortwaveRadiation = (1 - 0.23) * solarRadiation;
+  const stefanBoltzmann = 4.903e-9;
+  const cloudinessFactor = clamp(1.35 * Math.min(1, solarRadiation / clearSkyRadiation) - 0.35, 0.05, 1);
+  const netLongwaveRadiation = stefanBoltzmann * (
+    (Math.pow(tMax + 273.16, 4) + Math.pow(tMin + 273.16, 4)) * 0.5
+  ) * (0.34 - 0.14 * Math.sqrt(Math.max(0, actualVaporPressure))) * cloudinessFactor;
+  const netRadiationMjM2Day = Math.max(0, netShortwaveRadiation - netLongwaveRadiation);
+  const slopeVaporPressureCurve = 4098 * saturationVaporPressureKPa(tempC) / Math.pow(tempC + 237.3, 2);
+  const atmosphericPressure = 101.3 * Math.pow((293 - 0.0065 * elevationM) / 293, 5.26);
+  const psychrometricConstant = 0.000665 * atmosphericPressure;
+  const dailyMm = Math.max(0, (
+    0.408 * slopeVaporPressureCurve * netRadiationMjM2Day +
+    psychrometricConstant * (900 / (tempC + 273)) * windSpeedMs * vaporPressureDeficitKPa
+  ) / Math.max(0.001, slopeVaporPressureCurve + psychrometricConstant * (1 + 0.34 * windSpeedMs)));
+
+  return {
+    annualMm: clamp(dailyMm * DAYS_PER_YEAR, 0, 3200),
+    dailyMm,
+    netRadiationMjM2Day,
+    vaporPressureDeficitKPa,
+    extraterrestrialRadiationMjM2Day: extraterrestrialRadiation,
+    method: "FAO-56-Penman-Monteith-with-derived-radiation-and-humidity"
+  };
+}
+
+function saturationVaporPressureKPa(tempC) {
+  return 0.6108 * Math.exp((17.27 * tempC) / (tempC + 237.3));
+}
+
+function nrcsDirectRunoffRatio(curveNumber, stormPrecipitationMm) {
+  const cn = clamp(firstFinite(curveNumber, 75), 30, 98);
+  const precipitationMm = Math.max(0, firstFinite(stormPrecipitationMm, 0));
+  const potentialRetentionMm = Math.max(0, 25400 / cn - 254);
+  const initialAbstractionMm = potentialRetentionMm * 0.2;
+  if (precipitationMm <= initialAbstractionMm || precipitationMm <= 0) return 0;
+  const directRunoffMm = Math.pow(precipitationMm - initialAbstractionMm, 2) /
+    Math.max(0.001, precipitationMm + potentialRetentionMm * 0.8);
+  return clamp(directRunoffMm / precipitationMm, 0, 1);
 }
 
 function inferLandCover(elevation, slope, moisture, warmth, index, seed) {
@@ -21900,12 +22088,17 @@ function clampInteger(value, min, max, fallback) {
 function waterBudgetDiagnostics(input) {
   const landAreaKm2 = input.landCells * input.cellAreaKm2;
   const totalWaterInputM3 = input.precipitationVolumeM3 + input.infrastructureSupplyVolumeM3;
-  const residualStorageOrDeepLossM3 =
+  const accountedStorageOrDeepLossM3 = input.groundwaterRechargeVolumeM3 + input.soilStorageChangeVolumeM3;
+  const independentlyRecomputedResidualM3 =
     input.precipitationVolumeM3 +
     input.infrastructureSupplyVolumeM3 -
     input.infrastructureDemandVolumeM3 -
     input.actualEtVolumeM3 -
-    input.generatedRunoffAnnualM3;
+    input.generatedRunoffAnnualM3 -
+    accountedStorageOrDeepLossM3;
+  const unresolvedResidualM3 = Number.isFinite(input.unresolvedWaterResidualM3)
+    ? input.unresolvedWaterResidualM3
+    : independentlyRecomputedResidualM3;
   return {
     landAreaKm2,
     outletCatchmentAreaKm2: input.outletCatchmentAreaKm2,
@@ -21915,20 +22108,29 @@ function waterBudgetDiagnostics(input) {
     totalWaterInputM3,
     actualEvapotranspirationVolumeM3: input.actualEtVolumeM3,
     infrastructureDemandVolumeM3: input.infrastructureDemandVolumeM3,
+    infrastructureDemandRequestedVolumeM3: input.infrastructureDemandRequestedVolumeM3,
+    infrastructureUnmetDemandVolumeM3: input.infrastructureUnmetDemandVolumeM3,
+    infrastructureDemandSatisfactionRatio: ratio(input.infrastructureDemandVolumeM3, input.infrastructureDemandRequestedVolumeM3),
     generatedRunoffAnnualM3: input.generatedRunoffAnnualM3,
     outletRunoffAnnualM3: input.outletRunoffAnnualM3,
     retainedFlowAnnualM3: input.retainedFlowAnnualM3,
+    groundwaterRechargeVolumeM3: input.groundwaterRechargeVolumeM3,
+    soilStorageChangeVolumeM3: input.soilStorageChangeVolumeM3,
     infrastructureStorageCapacityM3: input.infrastructureStorageCapacityM3,
     surfaceWaterBalanceVolumeM3: input.surfaceWaterBalanceVolumeM3,
-    residualStorageOrDeepLossM3,
-    residualPctOfInput: pctOf(residualStorageOrDeepLossM3, totalWaterInputM3),
+    residualStorageOrDeepLossM3: accountedStorageOrDeepLossM3,
+    unresolvedResidualM3,
+    independentlyRecomputedResidualM3,
+    residualPctOfInput: pctOf(unresolvedResidualM3, totalWaterInputM3),
     outletRunoffCoefficientByVolume: ratio(input.outletRunoffAnnualM3, totalWaterInputM3),
     generatedRunoffCoefficientByVolume: ratio(input.generatedRunoffAnnualM3, totalWaterInputM3),
     outletFractionOfGeneratedRunoff: ratio(input.outletRunoffAnnualM3, input.generatedRunoffAnnualM3),
     evapotranspirationRatio: ratio(input.actualEtVolumeM3, totalWaterInputM3),
     demandRatio: ratio(input.infrastructureDemandVolumeM3, totalWaterInputM3),
     retainedFlowRatioOfGeneratedRunoff: ratio(input.retainedFlowAnnualM3, input.generatedRunoffAnnualM3),
-    closureClass: waterBudgetClosureClass(residualStorageOrDeepLossM3, totalWaterInputM3)
+    closureClass: waterBudgetClosureClass(unresolvedResidualM3, totalWaterInputM3),
+    partitionClosurePct: 100 - Math.abs(pctOf(unresolvedResidualM3, totalWaterInputM3) || 0),
+    method: "precipitation-plus-irrigation-minus-demand-ET-runoff-recharge-storage"
   };
 }
 

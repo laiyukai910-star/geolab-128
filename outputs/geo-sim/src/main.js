@@ -13,6 +13,7 @@ import {
   buildInfrastructureSuitabilityMatrix,
   buildLocalRefinementTile,
   buildPhysicalTimeProgressionSeries,
+  buildPhysicalCouplingReport,
   buildResearchDataAudit,
   buildResearchValidationGateReport,
   buildSpatialAlignmentAudit,
@@ -33,6 +34,7 @@ import {
   makeBuiltEnvironmentRecoveryCSV,
   makeBuiltEnvironmentResilienceAtlasCSV,
   makePhysicalTimeProgressionCSV,
+  makePhysicalCouplingCSV,
   makeTimeProgressionCSV,
   makeGridCSV,
   makeEcologicalIntegrityCSV,
@@ -64,6 +66,7 @@ import {
   runUncertaintyEnsemble,
   updateTemporalModel
 } from "./geoEngine.js";
+import { buildEngineScenePackage } from "./engineInterop.js";
 import { mergeLayerBundle, readLayerFile, readLayerObject, summarizeLayerBundle } from "./dataAdapters.js";
 import {
   buildAcquisitionPlan,
@@ -188,6 +191,7 @@ const wildlifeReleaseBlockId = document.getElementById("wildlifeReleaseBlockId")
 const wildlifeReleaseQueue = document.getElementById("wildlifeReleaseQueue");
 const ecosystemFunctionReadout = document.getElementById("ecosystemFunctionReadout");
 const ecologicalRigorReadout = document.getElementById("ecologicalRigorReadout");
+const physicalCouplingReadout = document.getElementById("physicalCouplingReadout");
 const dataStatus = document.getElementById("dataStatus");
 const cellReadout = document.getElementById("cellReadout");
 const viewMode = document.getElementById("viewMode");
@@ -967,6 +971,10 @@ function bindUi() {
   document.getElementById("exportBuiltRecoveryCSV").addEventListener("click", exportBuiltRecoveryCSV);
   document.getElementById("exportScenarioSynthesis")?.addEventListener("click", exportScenarioSynthesis);
   document.getElementById("exportScenarioBrief")?.addEventListener("click", exportScenarioBrief);
+  document.getElementById("exportPhysicalCoupling")?.addEventListener("click", exportPhysicalCoupling);
+  document.getElementById("exportPhysicalCouplingCSV")?.addEventListener("click", exportPhysicalCouplingCSV);
+  document.getElementById("exportUnityScene")?.addEventListener("click", () => exportEngineScene("unity"));
+  document.getElementById("exportUnrealScene")?.addEventListener("click", () => exportEngineScene("unreal"));
   [scenarioTitle, scenarioPurpose, scenarioNotes].forEach((control) => control?.addEventListener("input", updateScenarioSynthesis));
   window.addEventListener("geolab:localechange", updateScenarioSynthesis);
   window.addEventListener("geolab:localechange", updateEcosystemFunctionReadout);
@@ -2769,6 +2777,7 @@ function updateMetrics() {
   if (typeof globalThis !== "undefined") globalThis.__geoLabModelStats = stats;
   updateWildlifeReleaseReadout();
   updateEcosystemFunctionReadout();
+  updatePhysicalCouplingReadout();
   const climate = CLIMATES[stats.dominantClimate];
   const eventDynamics = stats.hazards?.eventDynamics || null;
   const eventPulses = eventDynamics?.currentYearPulses || null;
@@ -2798,6 +2807,8 @@ function updateMetrics() {
     Number.isFinite(stats.wildlife?.ecologicalIntegrityIndex) ? `<span>生态完整性 ${Math.round(stats.wildlife.ecologicalIntegrityIndex * 100)}%</span>` : "",
     Number.isFinite(stats.wildlife?.hillNumberQ1) ? `<span>有效物种 q1 ${format(stats.wildlife.hillNumberQ1, 1)}</span>` : "",
     Number.isFinite(stats.landscapeNetwork?.mapAreaClosurePct) ? `<span>面积闭合 ${format(stats.landscapeNetwork.mapAreaClosurePct, 1)}%</span>` : "",
+    Number.isFinite(stats.physicalCoupling?.processIntegrityIndex) ? `<span>物理门控 ${Math.round(stats.physicalCoupling.processIntegrityIndex * 100)}%</span>` : "",
+    Number.isFinite(stats.physicalCoupling?.couplingIntegrityIndex) ? `<span>过程联动 ${Math.round(stats.physicalCoupling.couplingIntegrityIndex * 100)}%</span>` : "",
     globalThis.__geoLabGpuStats
       ? `<span>GPU ${globalThis.__geoLabGpuStats.hardwareAccelerated === false ? "兼容" : "硬件"} · ${globalThis.__geoLabGpuStats.webglVersion}</span>`
       : "",
@@ -2934,6 +2945,88 @@ function exportScenarioBrief() {
   if (!report) return;
   download("geolab-128-scenario-brief.md", "text/markdown;charset=utf-8", makeScenarioSynthesisMarkdown(report));
   setStatus("情景简报已导出");
+}
+
+function updatePhysicalCouplingReadout() {
+  if (!physicalCouplingReadout) return;
+  physicalCouplingReadout.replaceChildren();
+  const state = model?.physicalCoupling;
+  const locale = globalThis.__geoLabLocale?.locale === "zh-CN" ? "zh" : "en";
+  if (!state?.summary) {
+    physicalCouplingReadout.textContent = locale === "zh" ? "物理联动将在演算后进行门控。" : "Physical coupling gates will be evaluated after simulation.";
+    return;
+  }
+  const summary = state.summary;
+  const limiting = state.couplings.find((item) => item.id === summary.limitingCouplingId);
+  const heading = document.createElement("strong");
+  heading.textContent = locale === "zh"
+    ? `物理门控 ${Math.round(summary.processIntegrityIndex * 100)}% · 跨系统联动 ${Math.round(summary.couplingIntegrityIndex * 100)}%`
+    : `Physical gates ${Math.round(summary.processIntegrityIndex * 100)}% · Cross-system coupling ${Math.round(summary.couplingIntegrityIndex * 100)}%`;
+  const gateLine = document.createElement("div");
+  gateLine.textContent = locale === "zh"
+    ? `通过 ${summary.passedGateCount} · 复核 ${summary.reviewGateCount} · 失败 ${summary.failedGateCount} · 限制链路 ${localizedCouplingLabel(limiting?.id, locale)}`
+    : `Pass ${summary.passedGateCount} · Review ${summary.reviewGateCount} · Fail ${summary.failedGateCount} · Limiting pathway ${localizedCouplingLabel(limiting?.id, locale)}`;
+  const water = document.createElement("div");
+  water.textContent = locale === "zh"
+    ? `水量未闭合余项 ${format(state.waterPartition?.residualPctOfInput || 0, 3)}% · 地下补给 ${format((state.waterPartition?.groundwaterRechargeVolumeM3 || 0) / 1e6, 1)} 百万 m³/yr`
+    : `Unresolved water residual ${format(state.waterPartition?.residualPctOfInput || 0, 3)}% · Recharge ${format((state.waterPartition?.groundwaterRechargeVolumeM3 || 0) / 1e6, 1)} million m³/yr`;
+  const boundary = document.createElement("small");
+  boundary.textContent = locale === "zh"
+    ? "门控衡量内部约束与联动方向，不代表完成现场校准或专业认证。"
+    : "Gates assess internal constraints and coupling direction; they do not imply field calibration or professional certification.";
+  physicalCouplingReadout.append(heading, gateLine, water, boundary);
+  if (typeof globalThis !== "undefined") globalThis.__geoLabPhysicalCoupling = state;
+}
+
+function localizedCouplingLabel(id, locale) {
+  const labels = {
+    "atmosphere-water": { zh: "大气—水量", en: "atmosphere-water" },
+    "terrain-atmosphere": { zh: "地形—大气", en: "terrain-atmosphere" },
+    "soil-water": { zh: "土壤—产流", en: "soil-water" },
+    "water-subsurface": { zh: "地表水—地下", en: "water-subsurface" },
+    "water-geomorphology": { zh: "水动力—地貌", en: "water-geomorphology" },
+    "ecology-stability": { zh: "生态—稳定性", en: "ecology-stability" },
+    "human-water": { zh: "设施—水量", en: "human-water" },
+    "water-ecology": { zh: "水量—生态", en: "water-ecology" }
+  };
+  return labels[id]?.[locale] || id || (locale === "zh" ? "未识别" : "unresolved");
+}
+
+function exportPhysicalCoupling() {
+  if (!model?.physicalCoupling) return;
+  const report = buildPhysicalCouplingReport(model, params);
+  download("geolab-128-physical-coupling.json", "application/json", JSON.stringify(report, null, 2));
+  setStatus("物理联动报告已导出");
+}
+
+function exportPhysicalCouplingCSV() {
+  if (!model?.physicalCoupling) return;
+  const report = buildPhysicalCouplingReport(model, params);
+  download("geolab-128-physical-coupling.csv", "text/csv;charset=utf-8", makePhysicalCouplingCSV(report));
+  setStatus("物理联动 CSV 已导出");
+}
+
+async function exportEngineScene(engine) {
+  if (!model) return;
+  const engineLabel = engine === "unity" ? "Unity" : "Unreal";
+  setStatus(`${engineLabel} 场景交换包生成中`);
+  await nextFrame();
+  try {
+    const packageResult = buildEngineScenePackage(model, params, { engine });
+    downloadBlob(packageResult.fileName, packageResult.blob);
+    if (typeof globalThis !== "undefined") {
+      globalThis.__geoLabLastEngineExport = {
+        engine,
+        fileName: packageResult.fileName,
+        manifest: packageResult.manifest,
+        files: packageResult.files
+      };
+    }
+    setStatus(`${engineLabel} 场景交换包已导出`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`${engineLabel} 场景交换包生成失败`);
+  }
 }
 
 function updateDataStatus() {
@@ -4512,6 +4605,7 @@ function exportQualityReport() {
     manualInfrastructure: manualInfrastructureCollection(),
     scenarioSynthesis: currentScenarioSynthesis(),
     ecologicalIntegrity: model?.wildlife?.ecologicalIntegrity ? buildEcologicalIntegrityReport(model, params) : null,
+    physicalCoupling: model?.physicalCoupling ? buildPhysicalCouplingReport(model, params) : null,
     derivedLayers: model?.stats
       ? {
           meanWindSpeed: model.stats.meanWindSpeed,
@@ -4540,7 +4634,8 @@ function exportQualityReport() {
           externalSurfacePatches: model.stats.externalSurfacePatches,
           externalInfrastructure: model.stats.externalInfrastructure,
           landscapeNetwork: model.stats.landscapeNetwork,
-          wildlife: model.stats.wildlife
+          wildlife: model.stats.wildlife,
+          physicalCoupling: model.stats.physicalCoupling
         }
       : null,
     pipeline: buildPipelineAudit(),
@@ -4670,6 +4765,16 @@ function buildPipelineAudit() {
   if ((ecologicalIntegrity?.translocation?.blockedReleaseCount || 0) > 0) {
     warnings.push(`${ecologicalIntegrity.translocation.blockedReleaseCount} 个生物投放批次因区域不匹配、缺少可用生境或生态层关闭而被拦截。`);
   }
+  const physicalCoupling = model?.physicalCoupling;
+  if ((physicalCoupling?.summary?.failedGateCount || 0) > 0) {
+    warnings.push(`${physicalCoupling.summary.failedGateCount} 个物理约束门控失败；请先处理失败项，再解释跨系统结果。`);
+  }
+  if ((physicalCoupling?.summary?.reviewGateCount || 0) > 0) {
+    warnings.push(`${physicalCoupling.summary.reviewGateCount} 个物理约束门控需要复核；限制链路为 ${localizedCouplingLabel(physicalCoupling.summary.limitingCouplingId, "zh")}。`);
+  }
+  if (Number.isFinite(physicalCoupling?.summary?.couplingIntegrityIndex) && physicalCoupling.summary.couplingIntegrityIndex < 0.6) {
+    warnings.push(`跨系统联动完整性只有 ${format(physicalCoupling.summary.couplingIntegrityIndex, 2)}；当前情景存在明显断链。`);
+  }
   const hydraulics = model?.stats?.hydraulicDiagnostics;
   if (Number.isFinite(hydraulics?.maxFlowVelocityMs) && hydraulics.maxFlowVelocityMs > 5.5) {
     warnings.push(`最大模型流速为 ${format(hydraulics.maxFlowVelocityMs, 2)} m/s；请检查河道坡降、流量尺度、DEM 伪影和水力粗糙度。`);
@@ -4733,7 +4838,8 @@ function buildPipelineAudit() {
       "将城镇、乡村、道路、水库、大坝、渠道等人造设施栅格化为下垫面反馈场",
       "生成或融合 DEM，并计算坡度、坡向、地形湿润指数",
       "按地形暴露、冠层粗糙度和外部气象边界场推导逐栅格局地风场",
-      "按土壤 HSG、土地覆盖、植被覆盖、LAI、冠层和气候场计算径流系数",
+      "按 FAO-56 Penman-Monteith 结构估算参考蒸散，并显式记录辐射、湿度、风速和高程约束",
+      "以 NRCS 曲线数事件响应约束产流倾向，再将年可分配水量拆分为径流、地下补给和土壤储量",
       "Priority-Flood 洼地处理、D8/MFD/D∞ 流向与分流、汇流面积与河网提取",
       "估算河道/坡面流速、剪切应力、水流功率、输沙能力、侵蚀风险和淤积风险",
       "运行洪水、干旱、野火、滑坡/地震触发、累积侵蚀和植被投影的时间与自然灾害情景层",
@@ -4741,20 +4847,21 @@ function buildPipelineAudit() {
       "以地图面积除以栅格点数定义体积与面积统计的支撑面积，同时保留点间距用于坡度、流向和空间距离",
       "按限制因子生态位、物种有效栖息面积、功能连通性、干扰死亡、猎物生物量支持和迁徙阻力演算种群分布",
       "计算 P/PET 干湿度分区、气候—植被一致性、核心生境代理、Shannon/Hill 多样性与透明生态完整性筛查",
+      "运行水量闭合、蒸散上限、能量项、降坡汇流、贡献面积、地形降水、面积和种群容量物理门控",
       "应用校准偏差、径流倍率和观测流量偏差诊断",
       "运行可导出的参数扰动集合，量化降水、温度、土壤、水文阈值、植被和人造设施反馈敏感性",
       "综合地形、气候、水文、生态、地下、设施、灾害与证据八个系统，分离计算系统覆盖和证据覆盖，并生成联动链路与验证优先事项",
-      "输出 GeoJSON、CSV、参数和质量报告"
+      "输出 GeoJSON、CSV、参数、质量报告，以及 Unity Terrain / Unreal Landscape 场景交换包"
     ],
     algorithms: {
       hydrology: "Priority-Flood + 可选 D8/MFD/D∞ 汇流；D8 最陡降河道骨架、MFD 与 D∞ 分流贡献面积成河提取，以及可选外部 flowline 提升/叠加",
       sediment: "Manning 风格河道与坡面流诊断，用流速、水深/水宽、边界剪切、单位水流功率、输沙能力和植被根系调节的侵蚀/淤积风险进行筛查",
       vectorImport: "GeoJSON Polygon/MultiPolygon 结合 bbox/CRS 元数据栅格化；LineString/MultiLineString 河网投影到本地网格并标记来源河段",
       surfacePatches: "自定义点/线/面地表情景叠加土地覆盖、HSG、植被、LAI、冠层、根深、Ksat、AWC、不透水率、粗糙度、降水、温度和风场，不替换已导入栅格",
-      runoff: "土地覆盖曲线数 + 土壤 HSG/Ksat/AWC/根深入渗 + 不透水率 + 坡度 + 降水 + LAI/根系蓄水 + 蒸散损失",
+      runoff: "NRCS 曲线数事件响应约束 + 土壤 HSG/Ksat/AWC/根深入渗 + 不透水率 + 坡度 + 前期湿润度；曲线数不被误作连续入渗方程",
       infrastructure: "自定义 GeoJSON 城镇、乡村、交通、大坝、水库、渠道、堤防改变不透水率、粗糙度、径流、滞留、灌溉水、用水需求、植被和局地热岛温度",
-      waterBudget: "对降水、人造设施供水、蒸散、取水、产流、出口径流、滞留水和余项储存/深层损失执行年体积审计",
-      climate: "地形抬升/雨影近似，并可由标量、栅格或栅格时间序列气象边界场覆盖",
+      waterBudget: "按 P + 灌溉 = 取水 + 实际蒸散 + 产流 + 地下补给 + 土壤储量 + 未闭合余项执行逐格与全域年体积审计；设施滞留仅扣减本地产流",
+      climate: "FAO-56 Penman-Monteith 参考蒸散结构 + 地形辐射修正 + 地形抬升/雨影近似，并可由标量、栅格或栅格时间序列气象边界场覆盖",
       calibration: "观测流量标量或时间序列聚合，包含 cfs 到 m3/s 换算、年均值、流量历时分位数、站点元数据、流域面积可比性和站点到河道空间匹配",
       hazards: "情景灾害层把径流、湿润度、汇流、入渗、蓄水/滞留、温度、水量平衡、风、坡度、剪切应力、根系固结和植被合成为洪水、干旱、野火与滑坡风险场",
       time: "时间进程报告选定年限内演替、干旱、野火、洪水和滑坡扰动后的累积侵蚀与植被投影",
@@ -4767,7 +4874,9 @@ function buildPipelineAudit() {
       ecologicalIntegrity: "以可展开的生境、连通性、核心生境、气候—植被一致性、Shannon/Hill 多样性、功能群和营养资源分项构成筛查指数，并保留专业解释边界",
       proceduralAssets: "109 类语义程序化资产工厂，以曲线、挤压、旋转体、桁架、肋板、非规则多面体和多部件装配构造自然物件、人造设施与动物解剖",
       continentTemplates: "15 套全球与区域模板联动地貌、气候、风、水文、植被、生态区系和随机种子",
-      scenarioSynthesis: "八系统情景综合分离系统覆盖与证据覆盖，汇总跨域联动链路、目的相关验证优先事项，并输出结构化 JSON 与可读 Markdown 简报"
+      scenarioSynthesis: "八系统情景综合分离系统覆盖与证据覆盖，汇总跨域联动链路、目的相关验证优先事项，并输出结构化 JSON 与可读 Markdown 简报",
+      physicalCoupling: "八项独立物理门控 + 八条跨系统联动账本；以几何平均暴露限制环节，并保留方法来源、采样尺度和解释边界",
+      engineInterop: "Unity 2^n+1 高度场与 Unreal 推荐 Landscape 尺寸的 16 位原生高度导出，附 8 位地表权重图、ENU 米制矢量、轴向/尺度/高程编码清单和物理诊断"
     },
     warnings
   };
@@ -4793,6 +4902,17 @@ function download(filename, type, content) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 function nextFrame() {

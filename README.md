@@ -82,11 +82,11 @@ For research, planning, or engineering work, use quality-controlled source data,
 | --- | --- |
 | Spatial domain | Square study areas from 4 to 512 km; terrain resolution options up to 4096 × 4096 cells; surface, transect, solid-subsurface, and volume-ledger representations. |
 | Terrain and geomorphology | Procedural terrain, editable landform operations, continental templates, elevation up to 10,000 m, and terrain-derived exposure and roughness. |
-| Climate and wind | Editable temperature, humidity, latitude, lapse rate, wind direction, wind speed, and terrain-exposure conditions with orographic and rain-shadow approximations. |
-| Water and landform response | Priority-Flood handling, D8/MFD/D∞ routing, river extraction, runoff, erosion, deposition, and screening-level flood, drought, wildfire, and slope-risk indicators. |
+| Climate and wind | Editable temperature, humidity, latitude, lapse rate, wind direction, and wind speed; terrain exposure and rain shadow; FAO-56 structured reference-ET diagnostics with explicit derived-input limits. |
+| Water and landform response | Priority-Flood handling, D8/MFD/D∞ routing, NRCS event-response-constrained runoff partition, explicit recharge and soil storage, erosion, deposition, and screening-level hazards. |
 | Ecology | Area-closed habitat blocks, limiting-factor niches, effective-habitat carrying capacity, biomass-aware trophic support, functional connectivity, diversity diagnostics, and screened wildlife-release scenarios. |
 | Built environment | Area-aware placement of buildings, transport, utilities, water infrastructure, civic facilities, and landmarks with environmental-suitability and land-surface feedback. |
-| Evidence and interchange | Selected data imports plus GeoJSON, CSV, parameters, source audits, quality gates, diagnostics, and scenario exports. |
+| Evidence and interchange | Selected data imports plus GeoJSON, CSV, parameters, source audits, physical gates, scenario exports, and native-heightfield Unity Terrain / Unreal Landscape packages. |
 | Scenario synthesis | A purpose-aware cross-system overview covering terrain, climate, water, ecology, subsurface, infrastructure, hazards, and evidence, with explicit coupling pathways and prioritized next actions. |
 
 ## Scenario Synthesis
@@ -100,6 +100,34 @@ The **Export** drawer includes a live scenario-synthesis workspace that turns th
 - **Portable handoff:** the same state can be exported as structured JSON or a human-readable Markdown brief with assumptions and professional boundaries attached.
 
 The implementation lives in [`outputs/geo-sim/src/scenarioSynthesis.js`](outputs/geo-sim/src/scenarioSynthesis.js) and is tested independently from the interface so future validation rules can evolve without coupling them to rendering code.
+
+## Physical Coupling And Conservation Gates
+
+GeoLab now records the annual surface-water partition explicitly instead of hiding unassigned water inside a generic residual:
+
+`precipitation + irrigation = demand + actual ET + runoff + groundwater recharge + soil storage change + unresolved residual`
+
+- Reference evapotranspiration follows the FAO-56 Penman-Monteith structure. When measured radiation, humidity, or daily temperature range is absent, GeoLab derives bounded screening inputs and states that limitation in the report.
+- The NRCS curve-number equation constrains representative storm response. It is not used as a continuous infiltration equation; annual available water is partitioned separately through cover, soil, slope, imperviousness, and antecedent-wetness controls.
+- Infrastructure retention now applies only to runoff generated at the affected cell. Upstream routed water is no longer repeatedly reduced as it crosses multiple retention cells.
+- Recharge and soil-storage changes are explicit raster terms and volume totals. Requested, allocated, and unmet infrastructure demand are separated, and the unresolved water-budget residual is independently reported rather than relabeling recharge or a demand deficit as error.
+- Eight physical gates test local mass closure, ET bounds, energy-demand bounds, depression-resolved downslope routing, accumulation continuity, raster-area closure, orographic response, and wildlife carrying-capacity limits.
+- Eight coupling ledgers expose atmosphere-water, terrain-atmosphere, soil-water, surface-subsurface, hydraulic-geomorphic, ecology-stability, human-water, and water-ecology relationships. A geometric mean prevents a weak link from disappearing behind strong unrelated components.
+
+The structure is informed by [FAO Irrigation and Drainage Paper 56](https://www.fao.org/4/X0490E/x0490e00.htm), the [USDA NRCS direct-runoff handbook](https://directives.nrcs.usda.gov/sites/default/files2/1754923466/Subpart%20H%20%E2%80%93%20Estimation%20of%20Direct%20Runoff%20from%20Storm%20Rainfall.pdf), and [USGS channel-stability guidance on shear stress and stream power](https://pubs.usgs.gov/publication/sir20235145/full). These references constrain model direction and reporting; they do not constitute site calibration.
+
+## Unity And Unreal Interchange
+
+The **Export** drawer can build self-contained ZIP packages for two production engines:
+
+| Package | Native terrain payload | Included context |
+| --- | --- | --- |
+| Unity Terrain | Little-endian 16-bit RAW at a Unity-supported `33` to `4097` heightmap resolution | Terrain size and base elevation, 8-bit TGA surface masks, local ENU vectors, axis mapping, provenance, and physical-coupling report. |
+| Unreal Landscape | Little-endian 16-bit R16 at a recommended `127` to `4033` Landscape resolution, plus RAW JSON sidecar | Calculated XY/Z scale and actor elevation, 8-bit R8 weight layers, local ENU vectors, axis mapping, provenance, and physical-coupling report. |
+
+Heightfields are bilinearly resampled only at export time, preserving interactive model resolution. Rows are written south-to-north to follow the declared positive northing axis, raw values map linearly to the reported elevation range, and the manifest records pixel semantics, byte order, local extent, engine origin, coordinate anchor, and vertical-scale math. This follows [Unity's supported Terrain heightmap resolutions](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/TerrainData-heightmapResolution.html) and [Epic's Landscape size and 16-bit heightmap guidance](https://dev.epicgames.com/documentation/unreal-engine/landscape-technical-guide-in-unreal-engine?lang=en-US).
+
+The packages are interchange assets, not generated Unity projects or Unreal levels. Materials, collision settings, world partitioning, vegetation instancing, geodetic CRS, vertical datum, and production validation remain the importing team's responsibility.
 
 ## Ecological And Geographic Rigor
 
@@ -121,6 +149,7 @@ The method references are the [UNCCD aridity-zone definition](https://www.unccd.
 
 - The offline Three.js scene and Electron desktop runtime operate without an online model service.
 - `109/109` internal procedural-asset factories build successfully.
+- Deterministic tests verify annual water-partition closure, physical gate/report structure, engine-valid terrain dimensions, R16/RAW byte counts, weight-map payloads, manifests, and ZIP signatures.
 - Browser checks cover source loading, language switching, and desktop/mobile horizontal overflow.
 - Source audits and quality gates record when important data constraints or calibration inputs are absent.
 
@@ -129,6 +158,8 @@ The method references are the [UNCCD aridity-zone definition](https://www.unccd.
 - A procedural DEM is not a surveyed landscape.
 - Climate, hydrology, erosion, ecology, and hazard responses are not calibrated forecasts.
 - D∞ routing is a continuous-slope approximation, not a complete two-dimensional hydraulic model.
+- Derived FAO-56 forcing is not equivalent to measured radiation, humidity, or station-quality daily meteorology.
+- Unity and Unreal packages preserve geometry and metadata but do not certify scale, CRS, vertical datum, materials, collision, or gameplay readiness.
 - Facility suitability and wildlife dynamics are scenario heuristics, not approvals, population assessments, or management recommendations.
 
 Detailed algorithms, input formats, and quality-gate behavior are documented in the [technical guide](outputs/geo-sim/README.md).
@@ -139,6 +170,8 @@ Detailed algorithms, input formats, and quality-gate behavior are documented in 
 | --- | --- |
 | `outputs/geo-sim/` | Offline-capable browser application, geographic engines, renderers, adapters, and technical documentation. |
 | `outputs/geo-sim/src/scenarioSynthesis.js` | Pure cross-system synthesis, coupling, priority, JSON, and Markdown-report logic. |
+| `outputs/geo-sim/src/physicalCoupling.js` | Conservation gates, cross-system process ledger, method references, and JSON/CSV reporting. |
+| `outputs/geo-sim/src/engineInterop.js` | Unity Terrain and Unreal Landscape heightfield, mask, vector, manifest, and ZIP generation. |
 | `outputs/geo-sim/tests/` | Deterministic model-report tests executed by CI. |
 | `outputs/geo-sim-desktop/` | Electron runtime and local packaging workflow. |
 | `.github/workflows/ci.yml` | Static integrity checks for source syntax, dependencies, and required entry points. |
