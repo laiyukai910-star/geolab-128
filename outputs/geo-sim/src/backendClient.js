@@ -104,7 +104,78 @@ export function buildBackendScenario(model, params = {}, options = {}) {
       irrigationMm: sample(model.infrastructureInfluence?.irrigationMm, 0, 0, 5_000),
       requestedDemandMm: sample(model.infrastructureInfluence?.waterDemandMm, 0, 0, 10_000)
     },
+    routing: {
+      method: "multiple-flow-direction",
+      mfdExponent: 1.1
+    },
+    subsurface: buildSubsurfaceInput(model, resolution, sample),
+    geomorphology: {
+      soilErodibilityFactor: [],
+      supportPracticeFactor: [],
+      rainfallErosivityMjMmHaHYear: null,
+      transportCapacityCoefficient: 0.035
+    },
+    ecology: {
+      barrierFraction: sample(model.infrastructureInfluence?.buildingDensity, 0, 0, 1),
+      preferredTemperatureC: 15,
+      temperatureToleranceC: 16,
+      preferredMoistureIndex: 0.85,
+      moistureTolerance: 0.7,
+      maximumSlopeDegrees: 38,
+      habitatThreshold: 0.55
+    },
+    control: {
+      durationDays: 365,
+      timestepDays: 30
+    },
     includeLayers: Boolean(options.includeLayers)
+  };
+}
+
+function buildSubsurfaceInput(model, targetResolution, sampleSurface) {
+  const soilDepthM = sampleSurface(model.surface?.rootDepthM, 1, 0.05, 100);
+  const volume = model.subsurface;
+  const sourceResolution = clampInteger(volume?.gridN, 1, 4096);
+  const expectedLength = sourceResolution * sourceResolution;
+  const hasColumns = volume?.columnBedrockDepthM?.length === expectedLength &&
+    volume?.columnWaterTableDepthM?.length === expectedLength;
+  if (!hasColumns) {
+    return {
+      soilDepthM,
+      aquiferThicknessM: [],
+      specificYieldFraction: [],
+      initialStorageFraction: [],
+      annualBaseflowRecessionFraction: 0.22
+    };
+  }
+  const bedrockDepthM = sampleLayer(
+    volume.columnBedrockDepthM,
+    sourceResolution,
+    targetResolution,
+    finite(volume.depthM, 40) * 0.65,
+    0.1,
+    5_000
+  );
+  const waterTableDepthM = sampleLayer(
+    volume.columnWaterTableDepthM,
+    sourceResolution,
+    targetResolution,
+    finite(volume.depthM, 40) * 0.5,
+    0,
+    5_000
+  );
+  const aquiferThicknessM = bedrockDepthM.map((depth, index) =>
+    clamp(depth - soilDepthM[index], 0.1, 5_000)
+  );
+  const initialStorageFraction = aquiferThicknessM.map((thickness, index) =>
+    clamp(1 - Math.max(0, waterTableDepthM[index] - soilDepthM[index]) / Math.max(0.1, thickness), 0, 1)
+  );
+  return {
+    soilDepthM,
+    aquiferThicknessM,
+    specificYieldFraction: [],
+    initialStorageFraction,
+    annualBaseflowRecessionFraction: 0.22
   };
 }
 
@@ -147,7 +218,13 @@ function buildComparison(model, report) {
     browserWaterResidualPercent: finite(browserWater.residualPctOfInput, null),
     rustWaterResidualPercent: finite(rustWater.residualPercentOfInput, null),
     browserMeanReferenceEtMm: finite(model.stats?.meanPotentialEvapotranspiration, null),
-    rustMeanReferenceEtMm: finite(report.summary?.meanReferenceEvapotranspirationMm, null)
+    rustMeanReferenceEtMm: finite(report.summary?.meanReferenceEvapotranspirationMm, null),
+    browserMeanWaterTableDepthM: finite(model.stats?.subsurface?.meanWaterTableDepthM, null),
+    rustMeanWaterTableDepthM: finite(report.subsurfaceBudget?.meanWaterTableDepthM, null),
+    rustGroundwaterResidualPercent: finite(report.subsurfaceBudget?.residualPercentOfInput, null),
+    rustSedimentResidualPercent: finite(report.sedimentBudget?.residualPercentOfDetachment, null),
+    browserHabitatConnectivity: finite(model.stats?.landscapeNetwork?.meanConnectivity, null),
+    rustHabitatConnectivity: finite(report.ecology?.meanResistanceConnectivity, null)
   };
 }
 

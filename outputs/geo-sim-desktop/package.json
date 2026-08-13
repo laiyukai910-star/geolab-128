@@ -1,8 +1,8 @@
 {
   "name": "geolab-128-local",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "GeoLab 128 desktop runtime with the interactive 3D client and bundled Rust computation service",
+  "description": "Interactive 3D geographic systems laboratory with a bundled Rust process-verification core",
   "main": "main.cjs",
   "scripts": {
     "vendor": "node build-local.mjs --vendor-only",

@@ -69,6 +69,10 @@ jobs:
           test -f engine/Cargo.toml
           test -f engine/Cargo.lock
           test -f engine/geolab-core/src/lib.rs
+          test -f engine/geolab-core/src/routing.rs
+          test -f engine/geolab-core/src/subsurface.rs
+          test -f engine/geolab-core/src/sediment.rs
+          test -f engine/geolab-core/src/ecology.rs
           test -f engine/geolab-server/src/lib.rs
           test -f engine/geolab-server/src/main.rs
           test -f LICENSE

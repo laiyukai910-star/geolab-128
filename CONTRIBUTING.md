@@ -49,6 +49,8 @@ For changes involving terrain, climate, hydrology, hazards, ecology, or data ada
 
 Keep point spacing, cell support area, projected coordinates, and vertical units distinct. A change to one of these contracts must include an area/volume closure test and an interoperability note.
 
+Routing changes must demonstrate acyclic topology, per-cell fraction closure, and map-area closure at outlets. Groundwater and sediment changes must preserve their independent storage or mass ledgers. Habitat changes must keep suitability/connectivity bounded and patch assignment complete. A desirable environmental outcome is not a substitute for a passing numerical-process gate.
+
 Avoid adding claims of accuracy without a documented validation method and representative evidence.
 
 ## Documentation Style

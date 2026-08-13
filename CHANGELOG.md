@@ -6,6 +6,37 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-13
+
+### Added
+
+- Added backward-compatible Rust contracts for routing method, simulation duration and timestep, subsurface state, geomorphology, and habitat preferences/barriers; omitted routing controls retain historical D8 behavior while the current browser audit explicitly selects MFD.
+- Added Freeman-style multiple-flow-direction routing with sparse per-cell target fractions, a dominant-receiver compatibility layer, graph-topological area and flux accumulation, and D8 fallback.
+- Added a time-stepped distributed groundwater reservoir with an analytical constant-inflow step solution, explicit initial storage, recharge, baseflow, capacity overflow, final storage, inferred saturation/water-table layers, independent mass closure, and timestep-stability tests.
+- Added RUSLE-structured gross detachment, runoff/slope/cover-sensitive transport capacity, routed deposition and outlet export, sediment delivery ratio, and an independent sediment mass ledger.
+- Added climate-, moisture-, slope-, vegetation-, imperviousness-, and barrier-constrained habitat suitability, connected patch labeling, resistance-weighted local connectivity, barrier-edge pressure, and corridor bottleneck diagnostics.
+- Expanded the Rust report from six to twelve process gates, including flow-fraction closure, outlet-area closure, groundwater and sediment closure, transport capacity, habitat accounting, and ecology bounds.
+- Added period and annualized discharge layers plus sparse flow-target, groundwater, sediment, and habitat output layers.
+- Added deterministic tests for MFD fractions, D8 compatibility, period scaling, routed runoff/baseflow closure, zero initial groundwater storage, sediment closure, habitat patch accounting, and invalid process controls.
+
+### Changed
+
+- Expanded the desktop/browser verification request to carry MFD controls, terrain-derived subsurface state, infrastructure barriers, process defaults, and a declared one-year/30-day audit period.
+- Expanded the Rust verification readout and exported comparison with groundwater residual, sediment residual, water-table depth, and habitat connectivity.
+- Strengthened desktop smoke verification to require the MFD audit path and zero failed Rust gates while recording coupled-process residuals and habitat connectivity.
+- Rewrote the Rust engine documentation around units, optional-layer semantics, numerical sequence, ledgers, sparse routing, and honest method boundaries.
+- Replaced the browser subproject's long mixed-language development record with a concise English runtime, architecture, input, export, and interpretation guide.
+- Updated public documentation to present the Rust core as an independent coupled-process verifier rather than a GPU or hydrology-only feature.
+
+### Fixed
+
+- Fixed duration-aware outputs by separating period discharge from annualized discharge and scaling precipitation, irrigation, demand, and evapotranspiration to the declared simulation period.
+- Fixed explicit zero-valued initial groundwater storage being replaced by a derived default.
+- Fixed browser-to-Rust subsurface resampling so lower-resolution subsurface columns use their own grid dimension instead of the terrain grid dimension.
+- Replaced the D8-only downstream accumulation gate with MFD-valid fraction and outlet-area conservation checks.
+- Fixed sediment transport capacity to use routed surface runoff rather than incorrectly including groundwater baseflow.
+- Normalized floating-point closure noise inside declared tolerances so the UI no longer presents signed negative zero as a physical residual.
+
 ## [0.2.0] - 2026-08-13
 
 ### Added
@@ -74,6 +105,7 @@ This section is the preserved release history for the `v0.1.0` tag. It is not a 
 - This release establishes the public **teaching and exploratory prototype** baseline.
 - It does not claim calibrated or validated predictive performance.
 
-[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/laiyukai910-star/geolab-128/releases/tag/v0.1.0

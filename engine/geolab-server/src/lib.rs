@@ -48,9 +48,9 @@ struct CapabilitiesResponse {
     engine: &'static str,
     max_api_cells: usize,
     max_core_cells: usize,
-    routing: [&'static str; 1],
-    processes: [&'static str; 6],
-    output_layers: [&'static str; 11],
+    routing: [&'static str; 2],
+    processes: [&'static str; 10],
+    output_layers: [&'static str; 25],
 }
 
 #[derive(Debug, Serialize)]
@@ -170,27 +170,45 @@ async fn capabilities() -> Json<CapabilitiesResponse> {
         engine: ENGINE_NAME,
         max_api_cells: MAX_API_CELLS,
         max_core_cells: MAX_CORE_CELLS,
-        routing: ["priority-flood-d8"],
+        routing: ["priority-flood-d8", "priority-flood-freeman-mfd"],
         processes: [
             "input-validation",
             "terrain-derivatives",
             "depression-resolution",
-            "topological-flow-accumulation",
+            "fractional-topological-flow-accumulation",
             "hydroclimate-water-partition",
+            "time-stepped-groundwater-reservoir",
+            "baseflow-routing",
+            "transport-limited-sediment-budget",
+            "resistance-weighted-habitat-connectivity",
             "independent-process-gates",
         ],
         output_layers: [
             "filled-elevation",
             "fill-depth",
             "slope",
-            "flow-receiver",
+            "dominant-flow-receiver",
+            "fractional-flow-targets",
             "contributing-area",
-            "discharge",
+            "period-discharge",
+            "annualized-discharge",
             "reference-et",
             "actual-et",
             "runoff",
             "groundwater-recharge",
             "soil-storage-change",
+            "groundwater-storage",
+            "groundwater-saturation",
+            "groundwater-baseflow",
+            "groundwater-residual",
+            "water-table-depth",
+            "gross-sediment-detachment",
+            "sediment-deposition",
+            "sediment-outflow",
+            "sediment-transport-capacity",
+            "habitat-suitability",
+            "habitat-connectivity",
+            "habitat-patch-id",
         ],
     })
 }
@@ -283,6 +301,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn capabilities_publish_coupled_processes() {
+        let response = app(AppState::new(1))
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/capabilities")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(
+            value["routing"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("priority-flood-freeman-mfd"))
+        );
+        assert!(
+            value["processes"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("transport-limited-sediment-budget"))
+        );
+        assert!(
+            value["outputLayers"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("habitat-connectivity"))
+        );
+    }
+
+    #[tokio::test]
     async fn simulation_endpoint_runs_the_core() {
         let layer = vec![900.0; 9];
         let payload = serde_json::json!({
@@ -329,6 +381,21 @@ mod tests {
         let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(value["report"]["engine"], ENGINE_NAME);
         assert_eq!(value["report"]["summary"]["failedGateCount"], 0);
+        assert_eq!(value["report"]["terrain"]["routingMethod"], "d8");
+        assert!(
+            value["report"]["subsurfaceBudget"]["residualPercentOfInput"]
+                .as_f64()
+                .unwrap()
+                .abs()
+                < 1e-9
+        );
+        assert!(
+            value["report"]["sedimentBudget"]["residualPercentOfDetachment"]
+                .as_f64()
+                .unwrap()
+                .abs()
+                < 1e-9
+        );
     }
 
     #[tokio::test]

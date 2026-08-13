@@ -23,7 +23,14 @@ const model = {
   },
   infrastructureInfluence: {
     irrigationMm: Float32Array.from({ length }, () => 0),
-    waterDemandMm: Float32Array.from({ length }, () => 0)
+    waterDemandMm: Float32Array.from({ length }, () => 0),
+    buildingDensity: Float32Array.from({ length }, (_, index) => index === 5 ? 0.8 : 0)
+  },
+  subsurface: {
+    gridN: 2,
+    depthM: 40,
+    columnBedrockDepthM: Float32Array.from([22, 24, 26, 28]),
+    columnWaterTableDepthM: Float32Array.from([4, 6, 8, 10])
   },
   stats: { waterBudget: { residualPctOfInput: 0 }, meanPotentialEvapotranspiration: 900 },
   physicalCoupling: { summary: { processIntegrityIndex: 0.99 } }
@@ -39,6 +46,13 @@ assert.equal(request.grid.elevationM.length, length);
 assert.equal(request.grid.pointSpacingM, 8_000 / 3);
 assert.equal(request.grid.cellSupportAreaM2, 4_000_000);
 assert.equal(request.grid.cellSupportAreaM2 * length, 64_000_000);
+assert.equal(request.routing.method, "multiple-flow-direction");
+assert.equal(request.subsurface.aquiferThicknessM.length, length);
+assert.equal(request.subsurface.aquiferThicknessM[0], 21);
+assert.equal(request.subsurface.initialStorageFraction.length, length);
+assert.ok(request.subsurface.initialStorageFraction.every((value) => value >= 0 && value <= 1));
+assert.equal(request.ecology.barrierFraction.length, length);
+assert.equal(request.control.durationDays, 365);
 
 const fetchImpl = async (url, init = {}) => {
   if (url.endsWith("/health")) return jsonResponse({ status: "ready", engine: "geolab-core-rust", apiVersion: "1.0" });
@@ -58,6 +72,9 @@ const fetchImpl = async (url, init = {}) => {
         reviewGateCount: 0
       },
       waterBudget: { residualPercentOfInput: 0 },
+      subsurfaceBudget: { residualPercentOfInput: 0, meanWaterTableDepthM: 12 },
+      sedimentBudget: { residualPercentOfDetachment: 0 },
+      ecology: { meanResistanceConnectivity: 0.73 },
       grid: { width: body.grid.width, height: body.grid.height }
     }
   });
@@ -71,6 +88,7 @@ const verification = await runBackendVerification(model, params, "http://127.0.0
 });
 assert.equal(verification.report.engine, "geolab-core-rust");
 assert.equal(verification.comparison.rustProcessIntegrityIndex, 1);
+assert.equal(verification.comparison.rustHabitatConnectivity, 0.73);
 assert.equal(verification.sample.auditResolution, 4);
 
 console.log("Rust backend client tests passed");

@@ -1,9 +1,19 @@
 use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BinaryHeap, VecDeque};
+use std::collections::BinaryHeap;
 use std::error::Error;
 use std::f64::consts::PI;
 use std::fmt::{Display, Formatter};
+
+mod ecology;
+mod routing;
+mod sediment;
+mod subsurface;
+
+use ecology::simulate_ecology;
+use routing::{FlowNetwork, build_flow_network, route_accumulation};
+use sediment::simulate_sediment;
+use subsurface::simulate_subsurface;
 
 pub const API_VERSION: &str = "1.0";
 pub const ENGINE_NAME: &str = "geolab-core-rust";
@@ -19,6 +29,16 @@ pub struct ScenarioInput {
     pub surface: SurfaceInput,
     #[serde(default)]
     pub management: ManagementInput,
+    #[serde(default)]
+    pub routing: RoutingInput,
+    #[serde(default)]
+    pub subsurface: SubsurfaceInput,
+    #[serde(default)]
+    pub geomorphology: GeomorphologyInput,
+    #[serde(default)]
+    pub ecology: EcologyInput,
+    #[serde(default)]
+    pub control: SimulationControl,
     #[serde(default)]
     pub include_layers: bool,
 }
@@ -65,6 +85,187 @@ pub struct ManagementInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RoutingInput {
+    #[serde(default)]
+    pub method: RoutingMethod,
+    #[serde(default = "default_mfd_exponent")]
+    pub mfd_exponent: f64,
+}
+
+impl Default for RoutingInput {
+    fn default() -> Self {
+        Self {
+            method: RoutingMethod::default(),
+            mfd_exponent: default_mfd_exponent(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RoutingMethod {
+    #[default]
+    D8,
+    MultipleFlowDirection,
+}
+
+impl RoutingMethod {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::D8 => "d8",
+            Self::MultipleFlowDirection => "multiple-flow-direction",
+        }
+    }
+}
+
+fn default_mfd_exponent() -> f64 {
+    1.1
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsurfaceInput {
+    #[serde(default)]
+    pub soil_depth_m: Vec<f64>,
+    #[serde(default)]
+    pub aquifer_thickness_m: Vec<f64>,
+    #[serde(default)]
+    pub specific_yield_fraction: Vec<f64>,
+    #[serde(default)]
+    pub initial_storage_fraction: Vec<f64>,
+    #[serde(default = "default_baseflow_recession")]
+    pub annual_baseflow_recession_fraction: f64,
+}
+
+impl Default for SubsurfaceInput {
+    fn default() -> Self {
+        Self {
+            soil_depth_m: Vec::new(),
+            aquifer_thickness_m: Vec::new(),
+            specific_yield_fraction: Vec::new(),
+            initial_storage_fraction: Vec::new(),
+            annual_baseflow_recession_fraction: default_baseflow_recession(),
+        }
+    }
+}
+
+fn default_baseflow_recession() -> f64 {
+    0.22
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeomorphologyInput {
+    #[serde(default)]
+    pub soil_erodibility_factor: Vec<f64>,
+    #[serde(default)]
+    pub support_practice_factor: Vec<f64>,
+    #[serde(default)]
+    pub rainfall_erosivity_mj_mm_ha_h_year: Option<f64>,
+    #[serde(default = "default_transport_capacity")]
+    pub transport_capacity_coefficient: f64,
+}
+
+impl Default for GeomorphologyInput {
+    fn default() -> Self {
+        Self {
+            soil_erodibility_factor: Vec::new(),
+            support_practice_factor: Vec::new(),
+            rainfall_erosivity_mj_mm_ha_h_year: None,
+            transport_capacity_coefficient: default_transport_capacity(),
+        }
+    }
+}
+
+fn default_transport_capacity() -> f64 {
+    0.035
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EcologyInput {
+    #[serde(default)]
+    pub barrier_fraction: Vec<f64>,
+    #[serde(default = "default_preferred_temperature")]
+    pub preferred_temperature_c: f64,
+    #[serde(default = "default_temperature_tolerance")]
+    pub temperature_tolerance_c: f64,
+    #[serde(default = "default_preferred_moisture")]
+    pub preferred_moisture_index: f64,
+    #[serde(default = "default_moisture_tolerance")]
+    pub moisture_tolerance: f64,
+    #[serde(default = "default_maximum_slope")]
+    pub maximum_slope_degrees: f64,
+    #[serde(default = "default_habitat_threshold")]
+    pub habitat_threshold: f64,
+}
+
+impl Default for EcologyInput {
+    fn default() -> Self {
+        Self {
+            barrier_fraction: Vec::new(),
+            preferred_temperature_c: default_preferred_temperature(),
+            temperature_tolerance_c: default_temperature_tolerance(),
+            preferred_moisture_index: default_preferred_moisture(),
+            moisture_tolerance: default_moisture_tolerance(),
+            maximum_slope_degrees: default_maximum_slope(),
+            habitat_threshold: default_habitat_threshold(),
+        }
+    }
+}
+
+fn default_preferred_temperature() -> f64 {
+    15.0
+}
+
+fn default_temperature_tolerance() -> f64 {
+    16.0
+}
+
+fn default_preferred_moisture() -> f64 {
+    0.85
+}
+
+fn default_moisture_tolerance() -> f64 {
+    0.7
+}
+
+fn default_maximum_slope() -> f64 {
+    38.0
+}
+
+fn default_habitat_threshold() -> f64 {
+    0.55
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SimulationControl {
+    #[serde(default = "default_duration_days")]
+    pub duration_days: u32,
+    #[serde(default = "default_timestep_days")]
+    pub timestep_days: u16,
+}
+
+impl Default for SimulationControl {
+    fn default() -> Self {
+        Self {
+            duration_days: default_duration_days(),
+            timestep_days: default_timestep_days(),
+        }
+    }
+}
+
+fn default_duration_days() -> u32 {
+    365
+}
+
+fn default_timestep_days() -> u16 {
+    30
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SimulationReport {
     pub api_version: String,
     pub engine: String,
@@ -72,6 +273,9 @@ pub struct SimulationReport {
     pub grid: GridSummary,
     pub terrain: TerrainSummary,
     pub water_budget: WaterBudget,
+    pub subsurface_budget: SubsurfaceBudget,
+    pub sediment_budget: SedimentBudget,
+    pub ecology: EcologySummary,
     pub gates: Vec<ProcessGate>,
     pub summary: SimulationSummary,
     pub layers: Option<SimulationLayers>,
@@ -99,6 +303,8 @@ pub struct TerrainSummary {
     pub maximum_fill_depth_m: f64,
     pub outlet_count: usize,
     pub maximum_contributing_area_km2: f64,
+    pub routing_method: String,
+    pub divergent_cell_fraction: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +322,50 @@ pub struct WaterBudget {
     pub unresolved_residual_m3: f64,
     pub residual_percent_of_input: f64,
     pub outlet_discharge_m3: f64,
+    pub surface_runoff_outlet_m3: f64,
+    pub baseflow_outlet_m3: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsurfaceBudget {
+    pub initial_storage_m3: f64,
+    pub recharge_m3: f64,
+    pub baseflow_m3: f64,
+    pub capacity_overflow_m3: f64,
+    pub final_storage_m3: f64,
+    pub unresolved_residual_m3: f64,
+    pub residual_percent_of_input: f64,
+    pub mean_saturation_fraction: f64,
+    pub mean_water_table_depth_m: f64,
+    pub timestep_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SedimentBudget {
+    pub gross_detachment_kg: f64,
+    pub deposited_kg: f64,
+    pub outlet_export_kg: f64,
+    pub unresolved_residual_kg: f64,
+    pub residual_percent_of_detachment: f64,
+    pub sediment_delivery_ratio: f64,
+    pub mean_soil_loss_t_ha_period: f64,
+    pub maximum_transport_capacity_kg: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EcologySummary {
+    pub suitable_habitat_area_km2: f64,
+    pub effective_habitat_area_km2: f64,
+    pub patch_count: usize,
+    pub largest_patch_area_km2: f64,
+    pub largest_patch_fraction: f64,
+    pub mean_habitat_suitability: f64,
+    pub mean_resistance_connectivity: f64,
+    pub barrier_edge_fraction: f64,
+    pub corridor_bottleneck_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,6 +398,9 @@ pub struct SimulationSummary {
     pub mean_runoff_depth_mm: f64,
     pub mean_recharge_depth_mm: f64,
     pub maximum_absolute_cell_residual_mm: f64,
+    pub subsurface_residual_percent: f64,
+    pub sediment_residual_percent: f64,
+    pub habitat_connectivity_index: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,13 +410,29 @@ pub struct SimulationLayers {
     pub fill_depth_m: Vec<f64>,
     pub slope_degrees: Vec<f64>,
     pub flow_receiver: Vec<i64>,
+    pub flow_target_offsets: Vec<usize>,
+    pub flow_target_indices: Vec<usize>,
+    pub flow_target_fractions: Vec<f64>,
     pub contributing_area_m2: Vec<f64>,
+    pub discharge_m3_period: Vec<f64>,
     pub discharge_m3_year: Vec<f64>,
     pub reference_evapotranspiration_mm: Vec<f64>,
     pub actual_evapotranspiration_mm: Vec<f64>,
     pub runoff_depth_mm: Vec<f64>,
     pub groundwater_recharge_mm: Vec<f64>,
     pub soil_storage_change_mm: Vec<f64>,
+    pub groundwater_storage_mm: Vec<f64>,
+    pub groundwater_saturation_fraction: Vec<f64>,
+    pub groundwater_baseflow_mm: Vec<f64>,
+    pub groundwater_residual_mm: Vec<f64>,
+    pub water_table_depth_m: Vec<f64>,
+    pub gross_detachment_kg: Vec<f64>,
+    pub sediment_deposition_kg: Vec<f64>,
+    pub sediment_outflow_kg: Vec<f64>,
+    pub sediment_transport_capacity_kg: Vec<f64>,
+    pub habitat_suitability: Vec<f64>,
+    pub habitat_connectivity: Vec<f64>,
+    pub habitat_patch_id: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,6 +602,124 @@ pub fn validate_scenario(input: &ScenarioInput) -> Result<(), ModelError> {
         0.0,
         10_000.0,
     )?;
+    validate_scalar("routing.mfdExponent", input.routing.mfd_exponent, 0.1, 10.0)?;
+    validate_optional_layer(
+        "subsurface.soilDepthM",
+        &input.subsurface.soil_depth_m,
+        cell_count,
+        0.05,
+        100.0,
+    )?;
+    validate_optional_layer(
+        "subsurface.aquiferThicknessM",
+        &input.subsurface.aquifer_thickness_m,
+        cell_count,
+        0.1,
+        5_000.0,
+    )?;
+    validate_optional_layer(
+        "subsurface.specificYieldFraction",
+        &input.subsurface.specific_yield_fraction,
+        cell_count,
+        0.001,
+        0.6,
+    )?;
+    validate_optional_layer(
+        "subsurface.initialStorageFraction",
+        &input.subsurface.initial_storage_fraction,
+        cell_count,
+        0.0,
+        1.0,
+    )?;
+    validate_scalar(
+        "subsurface.annualBaseflowRecessionFraction",
+        input.subsurface.annual_baseflow_recession_fraction,
+        0.0001,
+        0.9999,
+    )?;
+    validate_optional_layer(
+        "geomorphology.soilErodibilityFactor",
+        &input.geomorphology.soil_erodibility_factor,
+        cell_count,
+        0.0,
+        1.0,
+    )?;
+    validate_optional_layer(
+        "geomorphology.supportPracticeFactor",
+        &input.geomorphology.support_practice_factor,
+        cell_count,
+        0.0,
+        2.0,
+    )?;
+    if let Some(erosivity) = input.geomorphology.rainfall_erosivity_mj_mm_ha_h_year {
+        validate_scalar(
+            "geomorphology.rainfallErosivityMjMmHaHYear",
+            erosivity,
+            0.0,
+            50_000.0,
+        )?;
+    }
+    validate_scalar(
+        "geomorphology.transportCapacityCoefficient",
+        input.geomorphology.transport_capacity_coefficient,
+        0.0001,
+        1.0,
+    )?;
+    validate_optional_layer(
+        "ecology.barrierFraction",
+        &input.ecology.barrier_fraction,
+        cell_count,
+        0.0,
+        1.0,
+    )?;
+    validate_scalar(
+        "ecology.preferredTemperatureC",
+        input.ecology.preferred_temperature_c,
+        -80.0,
+        65.0,
+    )?;
+    validate_scalar(
+        "ecology.temperatureToleranceC",
+        input.ecology.temperature_tolerance_c,
+        0.1,
+        100.0,
+    )?;
+    validate_scalar(
+        "ecology.preferredMoistureIndex",
+        input.ecology.preferred_moisture_index,
+        0.0,
+        10.0,
+    )?;
+    validate_scalar(
+        "ecology.moistureTolerance",
+        input.ecology.moisture_tolerance,
+        0.01,
+        10.0,
+    )?;
+    validate_scalar(
+        "ecology.maximumSlopeDegrees",
+        input.ecology.maximum_slope_degrees,
+        0.1,
+        90.0,
+    )?;
+    validate_scalar(
+        "ecology.habitatThreshold",
+        input.ecology.habitat_threshold,
+        0.0,
+        1.0,
+    )?;
+    if input.control.duration_days == 0 || input.control.duration_days > 36_500 {
+        return Err(ModelError::new(
+            "control.durationDays",
+            "must be within 1..=36500",
+        ));
+    }
+    if input.control.timestep_days == 0 || input.control.timestep_days > 365 {
+        return Err(ModelError::new(
+            "control.timestepDays",
+            "must be within 1..=365; the final step is clipped to the remaining duration",
+        ));
+    }
     Ok(())
 }
 
@@ -340,6 +727,7 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
     validate_scenario(input)?;
     let cell_count = input.grid.width * input.grid.height;
     let cell_area_m2 = input.grid.cell_support_area_m2;
+    let period_fraction = input.control.duration_days as f64 / 365.0;
     let (filled, flood_parent) =
         priority_flood(&input.grid.elevation_m, input.grid.width, input.grid.height);
     let fill_depth: Vec<f64> = filled
@@ -353,13 +741,15 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
         input.grid.height,
         input.grid.point_spacing_m,
     );
-    let receivers = d8_receivers(
+    let network = build_flow_network(
         &filled,
         &flood_parent,
         input.grid.width,
         input.grid.height,
         input.grid.point_spacing_m,
-    );
+        input.routing.method,
+        input.routing.mfd_exponent,
+    )?;
 
     let mut reference_et = vec![0.0; cell_count];
     let mut actual_et = vec![0.0; cell_count];
@@ -372,9 +762,11 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
     let mut local_runoff_m3 = vec![0.0; cell_count];
 
     for index in 0..cell_count {
-        let precipitation = input.climate.annual_precipitation_mm[index];
-        let irrigation = optional_value(&input.management.irrigation_mm, index);
-        let requested_demand = optional_value(&input.management.requested_demand_mm, index);
+        let annual_precipitation = input.climate.annual_precipitation_mm[index];
+        let precipitation = annual_precipitation * period_fraction;
+        let irrigation = optional_value(&input.management.irrigation_mm, index) * period_fraction;
+        let requested_demand =
+            optional_value(&input.management.requested_demand_mm, index) * period_fraction;
         let total_input = precipitation + irrigation;
         let demand = requested_demand.min(total_input);
         let remaining_after_demand = (total_input - demand).max(0.0);
@@ -385,8 +777,8 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
             input.climate.relative_humidity_fraction,
             input.climate.wind_speed_m_s,
             input.climate.day_of_year,
-            precipitation,
-        );
+            annual_precipitation,
+        ) * period_fraction;
         let vegetation = input.surface.vegetation_fraction[index];
         let impervious = input.surface.impervious_fraction[index];
         let conductivity = input.surface.hydraulic_conductivity_mm_h[index];
@@ -434,10 +826,23 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
         local_runoff_m3[index] = runoff_depth / 1_000.0 * cell_area_m2;
     }
 
-    let (contributing_area, discharge) =
-        route_accumulation(&receivers, cell_area_m2, &local_runoff_m3)?;
+    let subsurface = simulate_subsurface(input, &recharge, cell_area_m2);
+    let local_baseflow_m3: Vec<f64> = subsurface
+        .baseflow_mm
+        .iter()
+        .map(|depth| depth / 1_000.0 * cell_area_m2)
+        .collect();
+    let (contributing_area, surface_discharge) =
+        route_accumulation(&network, cell_area_m2, &local_runoff_m3);
+    let (_, baseflow_discharge) = route_accumulation(&network, cell_area_m2, &local_baseflow_m3);
+    let discharge: Vec<f64> = surface_discharge
+        .iter()
+        .zip(&baseflow_discharge)
+        .map(|(surface, baseflow)| surface + baseflow)
+        .collect();
     let water_budget = summarize_water(
         input,
+        period_fraction,
         cell_area_m2,
         &allocated_demand,
         &unmet_demand,
@@ -446,18 +851,30 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
         &recharge,
         &storage,
         &residual,
-        &receivers,
-        &discharge,
+        &network,
+        &surface_discharge,
+        &baseflow_discharge,
     );
-    let gates = build_gates(
+    let sediment = simulate_sediment(
         input,
-        &filled,
-        &receivers,
+        &network,
+        &slopes,
         &contributing_area,
-        &reference_et,
-        &actual_et,
-        &residual,
+        &surface_discharge,
     );
+    let ecology = simulate_ecology(input, &slopes, &reference_et);
+    let gates = build_gates(GateContext {
+        input,
+        filled: &filled,
+        network: &network,
+        contributing_area: &contributing_area,
+        reference_et: &reference_et,
+        actual_et: &actual_et,
+        residual: &residual,
+        subsurface: &subsurface,
+        sediment: &sediment,
+        ecology: &ecology,
+    });
     let process_integrity_index = geometric_mean(gates.iter().map(|gate| gate.score));
     let summary = SimulationSummary {
         process_integrity_index,
@@ -481,6 +898,9 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
             .iter()
             .map(|value| value.abs())
             .fold(0.0, f64::max),
+        subsurface_residual_percent: subsurface.budget.residual_percent_of_input,
+        sediment_residual_percent: sediment.budget.residual_percent_of_detachment,
+        habitat_connectivity_index: ecology.summary.mean_resistance_connectivity,
     };
     let terrain = TerrainSummary {
         minimum_elevation_m: input
@@ -497,22 +917,49 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
             .fold(f64::NEG_INFINITY, f64::max),
         mean_slope_degrees: mean(&slopes),
         maximum_fill_depth_m: fill_depth.iter().copied().fold(0.0, f64::max),
-        outlet_count: receivers.iter().filter(|receiver| **receiver < 0).count(),
+        outlet_count: network.outlet_count(),
         maximum_contributing_area_km2: contributing_area.iter().copied().fold(0.0, f64::max)
             / 1_000_000.0,
+        routing_method: input.routing.method.id().to_string(),
+        divergent_cell_fraction: network.divergent_cell_fraction(),
     };
+    let (flow_target_offsets, flow_target_indices, flow_target_fractions) =
+        network.flattened_targets();
     let layers = input.include_layers.then(|| SimulationLayers {
         filled_elevation_m: filled,
         fill_depth_m: fill_depth,
         slope_degrees: slopes,
-        flow_receiver: receivers.iter().map(|receiver| *receiver as i64).collect(),
+        flow_receiver: network
+            .dominant_receivers
+            .iter()
+            .map(|receiver| *receiver as i64)
+            .collect(),
+        flow_target_offsets,
+        flow_target_indices,
+        flow_target_fractions,
         contributing_area_m2: contributing_area,
-        discharge_m3_year: discharge,
+        discharge_m3_period: discharge.clone(),
+        discharge_m3_year: discharge
+            .iter()
+            .map(|value| value / period_fraction.max(f64::EPSILON))
+            .collect(),
         reference_evapotranspiration_mm: reference_et,
         actual_evapotranspiration_mm: actual_et,
         runoff_depth_mm: runoff,
         groundwater_recharge_mm: recharge,
         soil_storage_change_mm: storage,
+        groundwater_storage_mm: subsurface.storage_mm,
+        groundwater_saturation_fraction: subsurface.saturation_fraction,
+        groundwater_baseflow_mm: subsurface.baseflow_mm,
+        groundwater_residual_mm: subsurface.residual_mm,
+        water_table_depth_m: subsurface.water_table_depth_m,
+        gross_detachment_kg: sediment.gross_detachment_kg,
+        sediment_deposition_kg: sediment.deposition_kg,
+        sediment_outflow_kg: sediment.outflow_kg,
+        sediment_transport_capacity_kg: sediment.transport_capacity_kg,
+        habitat_suitability: ecology.habitat_suitability,
+        habitat_connectivity: ecology.connectivity,
+        habitat_patch_id: ecology.patch_id,
     });
 
     Ok(SimulationReport {
@@ -529,6 +976,9 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
         },
         terrain,
         water_budget,
+        subsurface_budget: subsurface.budget,
+        sediment_budget: sediment.budget,
+        ecology: ecology.summary,
         gates,
         summary,
         layers,
@@ -536,7 +986,10 @@ pub fn simulate(input: &ScenarioInput) -> Result<SimulationReport, ModelError> {
         limitations: vec![
             "The Rust core is an independent screening kernel, not a calibrated forecast.".to_string(),
             "Reference ET uses derived radiation and temperature range when station observations are absent.".to_string(),
-            "Version 1 routing is depression-resolved D8, not a two-dimensional hydraulic solver.".to_string(),
+            "Depression-resolved D8 or Freeman-style MFD routing is terrain routing, not a two-dimensional hydraulic solver.".to_string(),
+            "Groundwater is a spatially distributed linear-reservoir screening model; it does not solve three-dimensional saturated flow.".to_string(),
+            "Sediment results use RUSLE-structured detachment and transport-capacity accounting, not a calibrated RUSLE2 implementation.".to_string(),
+            "Habitat connectivity is a resistance-weighted raster graph diagnostic, not a population-genetic or full circuit-theory solve.".to_string(),
         ],
     })
 }
@@ -686,83 +1139,6 @@ fn horn_slopes(elevation: &[f64], width: usize, height: usize, cell_size_m: f64)
     slopes
 }
 
-fn d8_receivers(
-    filled: &[f64],
-    flood_parent: &[isize],
-    width: usize,
-    height: usize,
-    cell_size_m: f64,
-) -> Vec<isize> {
-    let mut receivers = vec![-1; filled.len()];
-    for index in 0..filled.len() {
-        let x = index % width;
-        let y = index / width;
-        if x == 0 || y == 0 || x + 1 == width || y + 1 == height {
-            continue;
-        }
-        let mut best_receiver = -1;
-        let mut best_slope = 0.0;
-        for neighbor in neighbors(index, width, height) {
-            let dx = (neighbor % width) as isize - x as isize;
-            let dy = (neighbor / width) as isize - y as isize;
-            let distance = (dx as f64).hypot(dy as f64) * cell_size_m;
-            let slope = (filled[index] - filled[neighbor]) / distance.max(0.1);
-            if slope > best_slope + 1e-12 {
-                best_slope = slope;
-                best_receiver = neighbor as isize;
-            }
-        }
-        receivers[index] = if best_receiver >= 0 {
-            best_receiver
-        } else {
-            flood_parent[index]
-        };
-    }
-    receivers
-}
-
-fn route_accumulation(
-    receivers: &[isize],
-    cell_area_m2: f64,
-    local_runoff_m3: &[f64],
-) -> Result<(Vec<f64>, Vec<f64>), ModelError> {
-    let mut upstream_count = vec![0usize; receivers.len()];
-    for receiver in receivers {
-        if *receiver >= 0 {
-            upstream_count[*receiver as usize] += 1;
-        }
-    }
-    let mut queue: VecDeque<usize> = upstream_count
-        .iter()
-        .enumerate()
-        .filter_map(|(index, count)| (*count == 0).then_some(index))
-        .collect();
-    let mut area = vec![cell_area_m2; receivers.len()];
-    let mut discharge = local_runoff_m3.to_vec();
-    let mut processed = 0usize;
-    while let Some(index) = queue.pop_front() {
-        processed += 1;
-        let receiver = receivers[index];
-        if receiver < 0 {
-            continue;
-        }
-        let target = receiver as usize;
-        area[target] += area[index];
-        discharge[target] += discharge[index];
-        upstream_count[target] -= 1;
-        if upstream_count[target] == 0 {
-            queue.push_back(target);
-        }
-    }
-    if processed != receivers.len() {
-        return Err(ModelError::new(
-            "routing",
-            "receiver graph contains a cycle",
-        ));
-    }
-    Ok((area, discharge))
-}
-
 fn reference_evapotranspiration(
     temperature_c: f64,
     latitude_degrees: f64,
@@ -842,6 +1218,7 @@ fn nrcs_event_runoff_ratio(curve_number: f64, precipitation_mm: f64) -> f64 {
 #[allow(clippy::too_many_arguments)]
 fn summarize_water(
     input: &ScenarioInput,
+    period_fraction: f64,
     cell_area_m2: f64,
     allocated_demand: &[f64],
     unmet_demand: &[f64],
@@ -850,15 +1227,20 @@ fn summarize_water(
     recharge: &[f64],
     storage: &[f64],
     residual: &[f64],
-    receivers: &[isize],
-    discharge: &[f64],
+    network: &FlowNetwork,
+    surface_discharge: &[f64],
+    baseflow_discharge: &[f64],
 ) -> WaterBudget {
     let depth_to_volume = |values: &[f64]| values.iter().sum::<f64>() / 1_000.0 * cell_area_m2;
-    let precipitation_m3 = depth_to_volume(&input.climate.annual_precipitation_mm);
-    let irrigation_m3 = depth_to_volume(&input.management.irrigation_mm);
-    let requested_demand_m3 = depth_to_volume(&input.management.requested_demand_mm);
+    let precipitation_m3 =
+        depth_to_volume(&input.climate.annual_precipitation_mm) * period_fraction;
+    let irrigation_m3 = depth_to_volume(&input.management.irrigation_mm) * period_fraction;
+    let requested_demand_m3 =
+        depth_to_volume(&input.management.requested_demand_mm) * period_fraction;
     let unresolved_residual_m3 = depth_to_volume(residual);
     let total_input = precipitation_m3 + irrigation_m3;
+    let surface_runoff_outlet_m3 = network.outlet_sum(surface_discharge);
+    let baseflow_outlet_m3 = network.outlet_sum(baseflow_discharge);
     WaterBudget {
         precipitation_m3,
         irrigation_m3,
@@ -875,23 +1257,38 @@ fn summarize_water(
         } else {
             0.0
         },
-        outlet_discharge_m3: receivers
-            .iter()
-            .enumerate()
-            .filter_map(|(index, receiver)| (*receiver < 0).then_some(discharge[index]))
-            .sum(),
+        outlet_discharge_m3: surface_runoff_outlet_m3 + baseflow_outlet_m3,
+        surface_runoff_outlet_m3,
+        baseflow_outlet_m3,
     }
 }
 
-fn build_gates(
-    input: &ScenarioInput,
-    filled: &[f64],
-    receivers: &[isize],
-    contributing_area: &[f64],
-    reference_et: &[f64],
-    actual_et: &[f64],
-    residual: &[f64],
-) -> Vec<ProcessGate> {
+struct GateContext<'a> {
+    input: &'a ScenarioInput,
+    filled: &'a [f64],
+    network: &'a FlowNetwork,
+    contributing_area: &'a [f64],
+    reference_et: &'a [f64],
+    actual_et: &'a [f64],
+    residual: &'a [f64],
+    subsurface: &'a subsurface::SubsurfaceResult,
+    sediment: &'a sediment::SedimentResult,
+    ecology: &'a ecology::EcologyResult,
+}
+
+fn build_gates(context: GateContext<'_>) -> Vec<ProcessGate> {
+    let GateContext {
+        input,
+        filled,
+        network,
+        contributing_area,
+        reference_et,
+        actual_et,
+        residual,
+        subsurface,
+        sediment,
+        ecology,
+    } = context;
     let cell_count = filled.len();
     let maximum_residual = residual.iter().map(|value| value.abs()).fold(0.0, f64::max);
     let maximum_input = input
@@ -918,38 +1315,62 @@ fn build_gates(
         .filter(|(actual, reference)| **actual <= **reference * 1.08 + 0.01 && actual.is_finite())
         .count() as f64
         / cell_count as f64;
-    let mut routing_checks = 0usize;
+    let mut routed_cells = 0usize;
+    let mut fraction_passes = 0usize;
+    let mut routing_edges = 0usize;
     let mut routing_passes = 0usize;
-    let mut accumulation_passes = 0usize;
-    for (index, receiver) in receivers.iter().enumerate() {
-        if *receiver < 0 {
+    for (index, targets) in network.targets.iter().enumerate() {
+        if targets.is_empty() {
             continue;
         }
-        routing_checks += 1;
-        let target = *receiver as usize;
-        if filled[target] <= filled[index] + 1e-9 {
-            routing_passes += 1;
+        routed_cells += 1;
+        let fraction_sum: f64 = targets.iter().map(|target| target.fraction).sum();
+        if (fraction_sum - 1.0).abs() <= 1e-10
+            && targets
+                .iter()
+                .all(|target| target.fraction.is_finite() && target.fraction > 0.0)
+        {
+            fraction_passes += 1;
         }
-        if contributing_area[target] + 1e-6 >= contributing_area[index] {
-            accumulation_passes += 1;
+        for target in targets {
+            routing_edges += 1;
+            if filled[target.index] <= filled[index] + 1e-9 {
+                routing_passes += 1;
+            }
         }
     }
-    let routing_score = if routing_checks > 0 {
-        routing_passes as f64 / routing_checks as f64
+    let routing_score = if routing_edges > 0 {
+        routing_passes as f64 / routing_edges as f64
     } else {
         1.0
     };
-    let accumulation_score = if routing_checks > 0 {
-        accumulation_passes as f64 / routing_checks as f64
+    let fraction_score = if routed_cells > 0 {
+        fraction_passes as f64 / routed_cells as f64
     } else {
         1.0
     };
-    let finite_score = [filled, reference_et, actual_et, residual]
-        .iter()
-        .flat_map(|values| values.iter())
-        .filter(|value| value.is_finite())
-        .count() as f64
-        / (cell_count * 4) as f64;
+    let expected_area = input.grid.cell_support_area_m2 * cell_count as f64;
+    let outlet_area: f64 = network.outlet_sum(contributing_area);
+    let accumulation_score =
+        (1.0 - (outlet_area - expected_area).abs() / expected_area.max(1.0) * 1e9).clamp(0.0, 1.0);
+    let finite_score = [
+        filled,
+        reference_et,
+        actual_et,
+        residual,
+        &subsurface.storage_mm,
+        &sediment.outflow_kg,
+        &ecology.habitat_suitability,
+    ]
+    .iter()
+    .flat_map(|values| values.iter())
+    .filter(|value| value.is_finite())
+    .count() as f64
+        / (cell_count * 7) as f64;
+    let subsurface_score =
+        (1.0 - subsurface.budget.residual_percent_of_input.abs() / 0.000_001).clamp(0.0, 1.0);
+    let sediment_score =
+        (1.0 - sediment.budget.residual_percent_of_detachment.abs() / 0.000_001).clamp(0.0, 1.0);
     vec![
         gate(
             "water-mass-closure",
@@ -971,15 +1392,51 @@ fn build_gates(
         ),
         gate(
             "downslope-routing",
-            "D8 receivers do not route uphill",
+            "Flow targets do not route uphill",
             routing_score,
-            "Every retained receiver follows an equal or lower depression-resolved elevation",
+            "Every retained D8 or MFD target follows an equal or lower depression-resolved elevation",
         ),
         gate(
-            "accumulation-continuity",
-            "Contributing area is non-decreasing downstream",
+            "flow-fraction-closure",
+            "Per-cell routing fractions close",
+            fraction_score,
+            "Every routed cell distributes exactly one unit of flow among positive target fractions",
+        ),
+        gate(
+            "accumulation-area-closure",
+            "Outlet contributing area closes to map support area",
             accumulation_score,
-            "Receiver accumulation includes the complete source contribution",
+            "The sum of fractional contributing area at all outlets equals the represented map area",
+        ),
+        gate(
+            "subsurface-mass-closure",
+            "Groundwater storage and baseflow close",
+            subsurface_score,
+            "Initial storage + recharge = baseflow + capacity overflow + final storage + residual",
+        ),
+        gate(
+            "sediment-mass-closure",
+            "Detachment, deposition, and export close",
+            sediment_score,
+            "Gross detachment = deposition + outlet export + unresolved residual",
+        ),
+        gate(
+            "sediment-transport-capacity",
+            "Sediment outflow respects transport capacity",
+            sediment.capacity_score,
+            "Every cell exports no more sediment than its runoff, slope, cover, and capacity permit",
+        ),
+        gate(
+            "habitat-patch-accounting",
+            "Suitable habitat cells belong to one patch",
+            ecology.accounting_score,
+            "Every cell above the declared suitability threshold is assigned exactly once",
+        ),
+        gate(
+            "ecology-bounds",
+            "Habitat and connectivity layers remain bounded",
+            ecology.bounds_score,
+            "Resistance-weighted suitability and local connectivity remain finite within 0..=1",
         ),
         gate(
             "finite-numerics",
@@ -1059,6 +1516,12 @@ fn method_references() -> Vec<MethodReference> {
             role: "Inspectable drainage topology and contributing area".to_string(),
         },
         MethodReference {
+            id: "freeman-mfd-routing".to_string(),
+            method: "Freeman (1991) slope-weighted multiple-flow-direction routing".to_string(),
+            role: "Divergent hillslope contributing area with mass-closing flow fractions"
+                .to_string(),
+        },
+        MethodReference {
             id: "fao56-reference-et".to_string(),
             method: "FAO-56 Penman-Monteith structure with derived forcing".to_string(),
             role: "Reference atmospheric water demand".to_string(),
@@ -1068,6 +1531,25 @@ fn method_references() -> Vec<MethodReference> {
             method: "NRCS curve-number event-response constraint".to_string(),
             role: "Representative storm runoff tendency, not continuous infiltration".to_string(),
         },
+        MethodReference {
+            id: "linear-groundwater-reservoir".to_string(),
+            method: "Time-stepped linear groundwater reservoir with exact fractional recession"
+                .to_string(),
+            role: "Storage, recharge, baseflow, overflow, and residual accounting".to_string(),
+        },
+        MethodReference {
+            id: "rusle-structured-sediment".to_string(),
+            method: "RUSLE-structured detachment with runoff transport-capacity limiting"
+                .to_string(),
+            role: "Screening sediment detachment, deposition, delivery, and mass closure"
+                .to_string(),
+        },
+        MethodReference {
+            id: "resistance-habitat-graph".to_string(),
+            method: "Resistance-weighted raster habitat graph and connected components".to_string(),
+            role: "Transparent habitat patches, local conductance, barriers, and bottlenecks"
+                .to_string(),
+        },
     ]
 }
 
@@ -1075,7 +1557,7 @@ fn method_references() -> Vec<MethodReference> {
 mod tests {
     use super::*;
 
-    fn scenario() -> ScenarioInput {
+    pub(crate) fn scenario() -> ScenarioInput {
         let width = 7;
         let height = 7;
         let mut elevation = Vec::with_capacity(width * height);
@@ -1113,6 +1595,14 @@ mod tests {
                 vegetation_fraction: vec![0.7; cell_count],
             },
             management: ManagementInput::default(),
+            routing: RoutingInput {
+                method: RoutingMethod::MultipleFlowDirection,
+                ..RoutingInput::default()
+            },
+            subsurface: SubsurfaceInput::default(),
+            geomorphology: GeomorphologyInput::default(),
+            ecology: EcologyInput::default(),
+            control: SimulationControl::default(),
             include_layers: true,
         }
     }
@@ -1126,6 +1616,25 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_process_controls() {
+        let mut input = scenario();
+        input.control.duration_days = 20;
+        input.control.timestep_days = 400;
+        let error = validate_scenario(&input).expect_err("invalid timestep must fail");
+        assert_eq!(error.field, "control.timestepDays");
+
+        let mut input = scenario();
+        input.control.duration_days = 20;
+        input.control.timestep_days = 30;
+        validate_scenario(&input).expect("a final partial timestep is valid");
+
+        let mut input = scenario();
+        input.ecology.barrier_fraction = vec![0.2; input.grid.width * input.grid.height - 1];
+        let error = validate_scenario(&input).expect_err("invalid barrier layer must fail");
+        assert_eq!(error.field, "ecology.barrierFraction");
+    }
+
+    #[test]
     fn resolves_depressions_and_closes_water() {
         let input = scenario();
         let report = simulate(&input).expect("scenario should simulate");
@@ -1133,28 +1642,87 @@ mod tests {
         assert!(report.summary.maximum_absolute_cell_residual_mm < 1e-8);
         assert!(report.water_budget.groundwater_recharge_m3 > 0.0);
         assert!(report.water_budget.generated_runoff_m3 > 0.0);
+        assert!(report.subsurface_budget.baseflow_m3 > 0.0);
+        assert!(report.sediment_budget.gross_detachment_kg > 0.0);
+        assert!(report.ecology.patch_count > 0);
         assert_eq!(report.summary.failed_gate_count, 0);
         assert!(report.summary.process_integrity_index > 0.999);
     }
 
     #[test]
-    fn routed_area_is_monotonic() {
+    fn routed_area_and_flow_fractions_close() {
         let input = scenario();
         let report = simulate(&input).expect("scenario should simulate");
         let layers = report.layers.expect("test requests layers");
-        for (index, receiver) in layers.flow_receiver.iter().enumerate() {
-            if *receiver < 0 {
+        let mut outlet_area = 0.0;
+        for index in 0..layers.flow_receiver.len() {
+            let start = layers.flow_target_offsets[index];
+            let end = layers.flow_target_offsets[index + 1];
+            if start == end {
+                outlet_area += layers.contributing_area_m2[index];
                 continue;
             }
-            assert!(
-                layers.filled_elevation_m[*receiver as usize]
-                    <= layers.filled_elevation_m[index] + 1e-9
-            );
-            assert!(
-                layers.contributing_area_m2[*receiver as usize]
-                    >= layers.contributing_area_m2[index]
-            );
+            let fraction_sum: f64 = layers.flow_target_fractions[start..end].iter().sum();
+            assert!((fraction_sum - 1.0).abs() < 1e-10);
+            for target in &layers.flow_target_indices[start..end] {
+                assert!(
+                    layers.filled_elevation_m[*target] <= layers.filled_elevation_m[index] + 1e-9
+                );
+            }
         }
+        let expected_area =
+            input.grid.cell_support_area_m2 * (input.grid.width * input.grid.height) as f64;
+        assert!((outlet_area - expected_area).abs() / expected_area < 1e-12);
+    }
+
+    #[test]
+    fn d8_remains_available_for_compatibility() {
+        let mut input = scenario();
+        input.routing.method = RoutingMethod::D8;
+        let report = simulate(&input).expect("D8 scenario");
+        let layers = report.layers.expect("layers");
+        for index in 0..layers.flow_receiver.len() {
+            let target_count =
+                layers.flow_target_offsets[index + 1] - layers.flow_target_offsets[index];
+            assert!(target_count <= 1);
+        }
+        assert_eq!(report.terrain.routing_method, "d8");
+    }
+
+    #[test]
+    fn period_scaling_and_routed_fluxes_close() {
+        let annual_input = scenario();
+        let annual = simulate(&annual_input).expect("annual scenario");
+        let mut monthly_input = scenario();
+        monthly_input.control.duration_days = 30;
+        monthly_input.control.timestep_days = 10;
+        let monthly = simulate(&monthly_input).expect("monthly scenario");
+        assert!(
+            (monthly.water_budget.precipitation_m3 / annual.water_budget.precipitation_m3
+                - 30.0 / 365.0)
+                .abs()
+                < 1e-12
+        );
+        assert!(
+            (monthly.water_budget.groundwater_recharge_m3 - monthly.subsurface_budget.recharge_m3)
+                .abs()
+                < 1e-6
+        );
+        assert!(
+            (monthly.ecology.mean_habitat_suitability - annual.ecology.mean_habitat_suitability)
+                .abs()
+                < 1e-12
+        );
+        assert!(
+            (annual.water_budget.surface_runoff_outlet_m3
+                - annual.water_budget.generated_runoff_m3)
+                .abs()
+                < 1e-6
+        );
+        assert!(
+            (annual.water_budget.baseflow_outlet_m3 - annual.subsurface_budget.baseflow_m3).abs()
+                < 1e-6
+        );
     }
 
     #[test]

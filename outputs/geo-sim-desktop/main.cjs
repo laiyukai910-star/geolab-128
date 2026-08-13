@@ -301,7 +301,14 @@ async function runSmokeTest(window, localUrl, externalRequests) {
         requestId: globalThis.__geoLabRustBackend.requestId || null,
         engine: globalThis.__geoLabRustBackend.report?.engine || null,
         processIntegrityIndex: globalThis.__geoLabRustBackend.report?.summary?.processIntegrityIndex ?? null,
+        passedGateCount: globalThis.__geoLabRustBackend.report?.summary?.passedGateCount ?? null,
+        reviewGateCount: globalThis.__geoLabRustBackend.report?.summary?.reviewGateCount ?? null,
         failedGateCount: globalThis.__geoLabRustBackend.report?.summary?.failedGateCount ?? null,
+        routingMethod: globalThis.__geoLabRustBackend.report?.terrain?.routingMethod || null,
+        waterResidualPercent: globalThis.__geoLabRustBackend.report?.waterBudget?.residualPercentOfInput ?? null,
+        groundwaterResidualPercent: globalThis.__geoLabRustBackend.report?.subsurfaceBudget?.residualPercentOfInput ?? null,
+        sedimentResidualPercent: globalThis.__geoLabRustBackend.report?.sedimentBudget?.residualPercentOfDetachment ?? null,
+        habitatConnectivityIndex: globalThis.__geoLabRustBackend.report?.ecology?.meanResistanceConnectivity ?? null,
         auditResolution: globalThis.__geoLabRustBackend.sample?.auditResolution || null
       } : null,
       render: globalThis.__geoLabRenderLoadStats || null,
@@ -312,7 +319,11 @@ async function runSmokeTest(window, localUrl, externalRequests) {
       wildlife: globalThis.__geoLabWildlife3DStats || null,
       title: document.title
     }))()`);
-    const rustReady = computeBackend?.status !== "ready" || pageState?.rustBackend?.engine === "geolab-core-rust";
+    const rustReady = computeBackend?.status !== "ready" || (
+      pageState?.rustBackend?.engine === "geolab-core-rust" &&
+      pageState?.rustBackend?.routingMethod === "multiple-flow-direction" &&
+      pageState?.rustBackend?.failedGateCount === 0
+    );
     if (pageState?.ready && pageState?.render?.completed && pageState?.gpuPipelineWarmup?.status === "ready" && pageState?.systemPriority?.highPriorityProcessCount >= 3 && rustReady) break;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -325,7 +336,11 @@ async function runSmokeTest(window, localUrl, externalRequests) {
       pageState?.ready &&
       pageState?.render?.completed &&
       pageState?.gpuPipelineWarmup?.status === "ready" &&
-      (computeBackend?.status !== "ready" || pageState?.rustBackend?.engine === "geolab-core-rust") &&
+      (computeBackend?.status !== "ready" || (
+        pageState?.rustBackend?.engine === "geolab-core-rust" &&
+        pageState?.rustBackend?.routingMethod === "multiple-flow-direction" &&
+        pageState?.rustBackend?.failedGateCount === 0
+      )) &&
       priorityReady &&
       externalRequests.length === 0
     ),

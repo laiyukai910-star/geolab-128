@@ -3144,11 +3144,15 @@ function updateRustBackendReadout() {
   water.textContent = locale === "zh"
     ? `水量残差 ${format(report.waterBudget.residualPercentOfInput, 6)}% · 最大格点余项 ${format(summary.maximumAbsoluteCellResidualMm, 6)} mm`
     : `Water residual ${format(report.waterBudget.residualPercentOfInput, 6)}% · maximum cell residual ${format(summary.maximumAbsoluteCellResidualMm, 6)} mm`;
+  const processes = document.createElement("div");
+  processes.textContent = locale === "zh"
+    ? `${report.terrain.routingMethod === "multiple-flow-direction" ? "MFD 多流向" : "D8"} · 地下水余项 ${format(report.subsurfaceBudget.residualPercentOfInput, 6)}% · 泥沙余项 ${format(report.sedimentBudget.residualPercentOfDetachment, 6)}% · 生境连通 ${format(report.ecology.meanResistanceConnectivity * 100, 1)}%`
+    : `${report.terrain.routingMethod === "multiple-flow-direction" ? "MFD routing" : "D8 routing"} · groundwater residual ${format(report.subsurfaceBudget.residualPercentOfInput, 6)}% · sediment residual ${format(report.sedimentBudget.residualPercentOfDetachment, 6)}% · habitat connectivity ${format(report.ecology.meanResistanceConnectivity * 100, 1)}%`;
   const boundary = document.createElement("small");
   boundary.textContent = locale === "zh"
-    ? "Rust 使用独立 D8 内核复核约束，不以数值吻合替代现场校准。"
-    : "Rust uses an independent D8 kernel; numerical agreement does not replace field calibration.";
-  rustBackendReadout.append(heading, gates, water, boundary);
+    ? "Rust 使用独立水文、地下水、泥沙和生境内核复核约束；数值吻合不能替代现场校准。"
+    : "Rust independently audits hydrology, groundwater, sediment, and habitat constraints; numerical agreement does not replace field calibration.";
+  rustBackendReadout.append(heading, gates, water, processes, boundary);
 }
 
 function exportRustBackendAudit() {

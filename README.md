@@ -10,7 +10,7 @@
 
 GeoLab 128 is an interactive geographic systems laboratory for exploring how a region behaves as a connected whole. Raise a ridge and the wind exposure changes. Change rainfall or vegetation and the water partition shifts. Add roads, housing, reservoirs, or utilities and the model updates runoff, heat, habitat, service demand, and local suitability together.
 
-The application combines a fast browser simulation engine with an independent Rust computation core. The browser engine supports the full authoring and 3D workflow; the Rust core re-runs a bounded terrain and hydroclimate model with typed inputs, strict validation, deterministic routing, and its own conservation gates.
+The application combines a fast browser simulation engine with an independent Rust computation core. The browser engine supports the full authoring and 3D workflow; the Rust core re-runs a bounded terrain, hydroclimate, groundwater, sediment, and habitat model with typed inputs, strict validation, deterministic graph routing, and its own conservation gates.
 
 ## What You Can Explore
 
@@ -45,8 +45,8 @@ flowchart LR
     B --> C["3D scene and analytical layers"]
     B --> D["Rust verification request"]
     D --> E["Typed validation"]
-    E --> F["Priority-Flood and D8 routing"]
-    F --> G["ET, runoff, recharge and storage"]
+    E --> F["Priority-Flood and D8 or MFD routing"]
+    F --> G["Water, groundwater, sediment and habitat"]
     G --> H["Independent process gates"]
     H --> C
     C --> I["Reports, data and engine exports"]
@@ -56,10 +56,13 @@ The Rust workspace provides:
 
 - a typed scenario contract with finite-value, range, unit, shape, and request-size validation;
 - separate point spacing and cell support area, preventing resolution-dependent area inflation;
-- Priority-Flood depression resolution, Horn slope, acyclic D8 receivers, and topological contributing-area/discharge accumulation;
+- Priority-Flood depression resolution, Horn slope, compatible D8 routing, Freeman-style MFD fractions, sparse flow targets, and topological area/flux accumulation;
 - FAO-56 Penman-Monteith structured reference ET and an NRCS curve-number event-response constraint;
-- explicit annual allocation across demand, actual ET, runoff, groundwater recharge, soil-storage change, and unresolved residual;
-- independent gates for water closure, depression resolution, ET bounds, downslope routing, accumulation continuity, and finite numerics;
+- period-scaled allocation across demand, actual ET, runoff, groundwater recharge, soil-storage change, and unresolved residual;
+- a time-stepped groundwater reservoir that reports initial and final storage, baseflow, overflow, inferred water-table depth, and an independent mass residual;
+- RUSLE-structured gross detachment followed by transport-capacity-limited deposition and export with a separate sediment ledger;
+- climate, moisture, slope, vegetation, imperviousness, and barrier-constrained habitat patches with resistance-weighted connectivity and bottleneck diagnostics;
+- twelve independent gates covering water, routing fractions, outlet area, groundwater, sediment, habitat accounting, bounded ecology, and finite numerics;
 - a loopback-only Axum API with bounded payloads, bounded concurrency, execution timeout, versioned endpoints, and deterministic reports.
 
 The desktop application starts and stops this service automatically. Static-browser mode remains available without it.
@@ -113,15 +116,15 @@ The local API exposes:
 | `GET /health` | Runtime and API-version readiness. |
 | `GET /v1/capabilities` | Grid limits, processes, routing mode, and output layers. |
 | `POST /v1/validate` | Validate a typed scenario without running it. |
-| `POST /v1/simulate` | Run terrain, routing, water partitioning, and process gates. |
+| `POST /v1/simulate` | Run terrain, routing, water, groundwater, sediment, habitat, and process gates. |
 
 Append `?backend=http://127.0.0.1:48129` to the static application URL to attach a manually started service. The complete contract is documented in [engine/README.md](engine/README.md).
 
 ## Method And Validation Boundary
 
-Model structure is informed by [FAO Irrigation and Drainage Paper 56](https://www.fao.org/4/X0490E/x0490e00.htm), the [USDA NRCS direct-runoff handbook](https://directives.nrcs.usda.gov/sites/default/files2/1754923466/Subpart%20H%20%E2%80%93%20Estimation%20of%20Direct%20Runoff%20from%20Storm%20Rainfall.pdf), [UNCCD aridity definitions](https://www.unccd.int/sites/default/files/sessions/documents/ICCD_CRIC6_3_Add.1/3add1eng.pdf), and [USGS stream-power guidance](https://pubs.usgs.gov/publication/sir20235145/full). Engine exports follow [Unity Terrain heightmap constraints](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/TerrainData-heightmapResolution.html) and [Unreal Landscape technical guidance](https://dev.epicgames.com/documentation/unreal-engine/landscape-technical-guide-in-unreal-engine?lang=en-US).
+Model structure is informed by [FAO Irrigation and Drainage Paper 56](https://www.fao.org/4/X0490E/x0490e00.htm), the [USDA NRCS direct-runoff handbook](https://directives.nrcs.usda.gov/sites/default/files2/1754923466/Subpart%20H%20%E2%80%93%20Estimation%20of%20Direct%20Runoff%20from%20Storm%20Rainfall.pdf), [Freeman's multiple-flow-direction formulation](https://doi.org/10.1016/0098-3004(91)90048-I), the [USGS PRMS groundwater reservoir](https://pubs.usgs.gov/of/2002/ofr02362/htdocs/gwflow/gwflow_prms_min.htm), [USDA RUSLE2 process documentation](https://www.ars.usda.gov/southeast-area/oxford-ms/national-sedimentation-laboratory/watershed-physical-processes-research/research/rusle2/revised-universal-soil-loss-equation-2-how-rusle2-computes-rill-and-interrill-erosion/), [McRae's isolation-by-resistance framework](https://doi.org/10.1111/j.0014-3820.2006.tb00500.x), [UNCCD aridity definitions](https://www.unccd.int/sites/default/files/sessions/documents/ICCD_CRIC6_3_Add.1/3add1eng.pdf), and [USGS stream-power guidance](https://pubs.usgs.gov/publication/sir20235145/full). Engine exports follow [Unity Terrain heightmap constraints](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/TerrainData-heightmapResolution.html) and [Unreal Landscape technical guidance](https://dev.epicgames.com/documentation/unreal-engine/landscape-technical-guide-in-unreal-engine?lang=en-US).
 
-GeoLab 128 is a teaching and exploratory prototype under active validation development. It is not a calibrated weather, flood, groundwater, erosion, ecosystem, or engineering forecast. Procedural terrain is not surveyed terrain; derived meteorological forcing is not station data; D8/MFD/D∞ routing is not a two-dimensional hydraulic solver. Use quality-controlled inputs, calibration, uncertainty analysis, and qualified domain review before applying any workflow to a real decision.
+GeoLab 128 is a teaching and exploratory prototype under active validation development. It is not a calibrated weather, flood, groundwater, erosion, ecosystem, or engineering forecast. Procedural terrain is not surveyed terrain; derived meteorological forcing is not station data; D8/MFD/D∞ routing is not a two-dimensional hydraulic solver; the Rust groundwater, sediment, and habitat modules are bounded screening formulations, not complete replicas of PRMS, RUSLE2, or Circuitscape. Use quality-controlled inputs, calibration, uncertainty analysis, and qualified domain review before applying any workflow to a real decision.
 
 ## Repository
 
