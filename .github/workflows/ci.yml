@@ -42,3 +42,10 @@ jobs:
           test -f outputs/geo-sim/src/localization.js
           test -f outputs/geo-sim-desktop/package.json
           test -f LICENSE
+
+      - name: Verify canonical changelog
+        shell: bash
+        run: |
+          mapfile -t changelogs < <(git ls-files | grep -Ei '(^|/)CHANGELOG\.md$')
+          test "${#changelogs[@]}" -eq 1
+          test "${changelogs[0]}" = "CHANGELOG.md"

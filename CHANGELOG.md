@@ -1,8 +1,10 @@
 # Changelog
 
-All notable changes to GeoLab 128 are documented here. The project follows semantic versioning while pre-1.0.
+This is the **single canonical changelog** for GeoLab 128. Application, renderer, desktop-runtime, documentation, and validation changes are consolidated here; subsystem changelogs are not maintained separately.
 
-## [Unreleased]
+All notable changes to GeoLab 128 are documented here. The project follows semantic versioning while pre-1.0. The latest consolidation was completed on **2026-08-13**.
+
+## [Unreleased] - Updated 2026-08-13
 
 ### Added
 
@@ -13,6 +15,7 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 ### Changed
 
 - Reframed and expanded the project documentation around GeoLab 128 as a local-first geographic systems laboratory, with explicit modeling vocabulary, coupled scenario workflow, design principles, repository map, and professional boundaries.
+- Consolidated project-wide release notes into this root changelog and established it as the only maintained changelog in the repository.
 - Rebalanced 3D vegetation, wildlife, and built-asset proportions using meter-based visual scales, shared geometry reuse, frustum culling, and bounded animation updates.
 - Aligned the documented study-area range and observed-data controls with the application's supported 4–512 km square domains.
 - Bound recovery controls before the first terrain build so startup failures remain visible and diagnosable.
@@ -29,6 +32,8 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 - Reproducible benchmark cases, calibration workflows, uncertainty reporting, and broader regression coverage.
 
 ## [0.1.0] - 2026-08-11
+
+This section is the preserved release history for the `v0.1.0` tag. It is not a second or stale changelog.
 
 ### Added
 

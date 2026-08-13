@@ -112,7 +112,7 @@ Detailed algorithms, input formats, and quality-gate behavior are documented in 
 | `outputs/geo-sim-desktop/` | Electron runtime and local packaging workflow. |
 | `.github/workflows/ci.yml` | Static integrity checks for source syntax, dependencies, and required entry points. |
 | `CONTRIBUTING.md` | Contribution expectations, validation boundaries, and development workflow. |
-| `CHANGELOG.md` | User-visible additions, behavior changes, fixes, and planned validation work. |
+| `CHANGELOG.md` | The repository's single canonical record of user-visible additions, behavior changes, fixes, and planned validation work. |
 
 ## Quick Start
 
