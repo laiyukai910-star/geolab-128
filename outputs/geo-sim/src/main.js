@@ -460,6 +460,7 @@ function setupControlDrawers() {
   };
   const openDrawer = (nextDrawer = activeDrawer) => {
     selectDrawer(nextDrawer);
+    drawer.inert = false;
     shell.classList.add("drawer-open");
     drawer.setAttribute("aria-hidden", "false");
     if (scrim) scrim.hidden = false;
@@ -469,6 +470,7 @@ function setupControlDrawers() {
     const selectedTab = tabs.find((tab) => tab.dataset.drawerTarget === activeDrawer);
     if (drawer.contains(document.activeElement)) selectedTab?.focus();
     shell.classList.remove("drawer-open");
+    drawer.inert = true;
     drawer.setAttribute("aria-hidden", "true");
     tabs.forEach((tab) => tab.setAttribute("aria-selected", "false"));
     if (scrim) scrim.hidden = true;
@@ -607,12 +609,26 @@ writeParams(params);
 writeAoi(aoi);
 setupControlDrawers();
 boot();
+window.addEventListener("pagehide", disposeApplication, { capture: true });
 
 async function boot() {
   modelWorker = createModelWorker();
   renderer = new TerrainRenderer(sceneNode);
   await rebuildTerrain();
   bindUi();
+}
+
+function disposeApplication(event) {
+  if (event?.persisted) return;
+  clearTimeout(runTimer);
+  if (timePlayTimer) clearInterval(timePlayTimer);
+  timePlayTimer = null;
+  modelJobSerial += 1;
+  workerRequests.clear();
+  modelWorker?.terminate?.();
+  modelWorker = null;
+  renderer?.dispose?.();
+  renderer = null;
 }
 
 function createModelWorker() {
@@ -1480,7 +1496,9 @@ function finishInfrastructureRegionSelection(event) {
   const point = pointerToLocalKm(event);
   infrastructureRegionSelection.current = point;
   infrastructureRegionSelection.dragging = false;
-  applyInfrastructureSelectionToForm(selectionBoundsFromPoints(infrastructureRegionSelection.start, point), true);
+  const bounds = selectionBoundsFromPoints(infrastructureRegionSelection.start, point);
+  applyInfrastructureSelectionToForm(bounds, true);
+  renderer?.focusRegion?.(bounds, { mode: "infrastructure-selection" });
   setInfrastructureRegionSelectionMode(false, { keepBounds: true, silent: true });
 }
 

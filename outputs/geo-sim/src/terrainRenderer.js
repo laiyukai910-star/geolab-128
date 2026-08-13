@@ -13,6 +13,7 @@ import {
   createProceduralGeometry as createAssetGeometry,
   createSemanticAssetGeometry,
   proceduralAssetDiagnostics,
+  semanticAssetKind,
   wildlifeProceduralKind
 } from "./proceduralAssets.js";
 
@@ -49,7 +50,7 @@ function terrainCameraFocusY(model, params = {}) {
   return (meanElevationM / 1000) * (Number(params.verticalScale) || 1) + 0.08;
 }
 
-const BUILDING_HEIGHT_VISUAL_SCALE = 1.55;
+const BUILDING_HEIGHT_VISUAL_SCALE = 1.08;
 const MAX_BUILDING_INSTANCES = 90000;
 const MAX_BUILDING_DIAGNOSTIC_INSTANCES = 6000;
 const MAX_FACILITY_INSTANCES = 52000;
@@ -63,6 +64,7 @@ const DEFERRED_DETAIL_LAYER_NAMES = Object.freeze(["subsurface", "terrain-detail
 const TEMPORAL_VIEW_MODES = new Set(["hazard", "flood", "drought", "wildfire", "landslide", "builtDamage", "timechange"]);
 const SUBSURFACE_3D_VIEW_MODES = new Set(["subsurface", "aquifer", "geostress", "subsurfaceConfidence", "undergroundRisk"]);
 const HAZARD_3D_VIEW_MODES = new Set(["hazard", "flood", "drought", "wildfire", "landslide", "timechange"]);
+const WILDLIFE_ANIMATION_INTERVAL_MS = 1000 / 30;
 const INDUSTRIAL_SILHOUETTE_TYPES = new Set([
   "industrial", "logistics", "airport", "port", "greenhouse", "quarry",
   "data_center", "flood_pump_station", "desalination_plant", "hydropower_plant",
@@ -434,8 +436,8 @@ export class TerrainRenderer {
   constructor(container) {
     this.container = container;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0d1514);
-    this.scene.fog = new THREE.FogExp2(0x0d1514, 0.035 * (20 / MAP_SIZE_KM));
+    this.scene.background = new THREE.Color(0x081210);
+    this.scene.fog = new THREE.FogExp2(0x081210, 0.035 * (20 / MAP_SIZE_KM));
 
     this.camera = new THREE.PerspectiveCamera(54, 1, 0.01, Math.max(160, MAP_SIZE_KM * 10));
     const home = cameraHome(MAP_SIZE_KM);
@@ -450,8 +452,11 @@ export class TerrainRenderer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.06;
+    this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = false;
+    this.parallelShaderCompileSupported = Boolean(
+      this.renderer.getContext().getExtension("KHR_parallel_shader_compile")
+    );
     this.container.appendChild(this.renderer.domElement);
     this.gpuStats = gpuCapabilitySnapshot(this.renderer);
     if (typeof globalThis !== "undefined") globalThis.__geoLabGpuStats = this.gpuStats;
@@ -481,8 +486,15 @@ export class TerrainRenderer {
       : "animation-frame-fallback";
     this.renderLoadStats = null;
     this.blockDetailAtlasCache = new WeakMap();
+    this.sharedGeometryCache = new Map();
     this.gpuPipelineWarmupStats = { status: "idle", phases: [] };
     this.sceneDiagnosticsDirty = true;
+    this.disposed = false;
+    this.isDocumentVisible = !document.hidden;
+    this.lastWildlifeAnimationAt = 0;
+    this.renderContextState = { status: "ready", lossCount: 0, restoredCount: 0 };
+    this.contextRecovery = null;
+    if (typeof globalThis !== "undefined") globalThis.__geoLabRenderContextState = this.renderContextState;
     this.terrainDetailGroup = new THREE.Group();
     this.terrainDetailGroup.name = "精细地表构件";
     this.subsurfaceGroup = new THREE.Group();
@@ -496,6 +508,14 @@ export class TerrainRenderer {
     this.hazardGroup.name = "时间灾害叠加";
     this.windGroup = new THREE.Group();
     this.windGroup.name = "局地风矢量";
+    [
+      this.subsurfaceGroup,
+      this.terrainDetailGroup,
+      this.infrastructureGroup,
+      this.wildlifeGroup,
+      this.hazardGroup,
+      this.windGroup
+    ].forEach((group) => bindSharedGeometryCache(group, this.sharedGeometryCache));
     this.scene.add(this.terrainTileGroup);
     this.scene.add(this.subsurfaceGroup);
     this.scene.add(this.terrainDetailGroup);
@@ -504,12 +524,15 @@ export class TerrainRenderer {
     this.scene.add(this.hazardGroup);
     this.scene.add(this.windGroup);
 
-    const hemi = new THREE.HemisphereLight(0xd8f2ff, 0x425047, 2.45);
+    const hemi = new THREE.HemisphereLight(0xd8f2ff, 0x405246, 1.4);
     this.scene.add(hemi);
-    this.scene.add(new THREE.AmbientLight(0xd0e2d9, 0.58));
-    const sun = new THREE.DirectionalLight(0xfff0cf, 2.7);
+    this.scene.add(new THREE.AmbientLight(0xc8d8d1, 0.28));
+    const sun = new THREE.DirectionalLight(0xfff0cf, 2.5);
     sun.position.set(-12, 18, 10);
     this.scene.add(sun);
+    const skyFill = new THREE.DirectionalLight(0x9fc8dd, 0.82);
+    skyFill.position.set(14, 7, -11);
+    this.scene.add(skyFill);
 
     this.grid = null;
     this.gridSizeKm = 0;
@@ -517,6 +540,14 @@ export class TerrainRenderer {
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
+    this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
+    this.handleWebGLContextLost = this.handleWebGLContextLost.bind(this);
+    this.handleWebGLContextRestored = this.handleWebGLContextRestored.bind(this);
+    this.handleTerrainDoubleClick = this.handleTerrainDoubleClick.bind(this);
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    this.renderer.domElement.addEventListener("webglcontextlost", this.handleWebGLContextLost, false);
+    this.renderer.domElement.addEventListener("webglcontextrestored", this.handleWebGLContextRestored, false);
+    this.renderer.domElement.addEventListener("dblclick", this.handleTerrainDoubleClick);
     this.resize();
     this.animate = this.animate.bind(this);
     this.frame = requestAnimationFrame(this.animate);
@@ -572,6 +603,7 @@ export class TerrainRenderer {
       completedLayerNames: [...FIRST_PHASE_LAYER_NAMES],
       pendingLayerNames: [...DEFERRED_DETAIL_LAYER_NAMES],
       stageTimings,
+      startedAtMs: loadStart,
       firstPhaseMs: roundDiagnostic(performance.now() - loadStart),
       totalMs: roundDiagnostic(performance.now() - loadStart)
     };
@@ -633,7 +665,7 @@ export class TerrainRenderer {
     };
   }
 
-  scheduleDeferredDetailLayers(token, loadStart) {
+  scheduleDeferredDetailLayers(token, loadStart, startIndex = 0) {
     const layers = [
       { name: "subsurface", build: () => this.buildSubsurface3D() },
       { name: "terrain-details", build: () => this.buildTerrainDetails() },
@@ -656,6 +688,21 @@ export class TerrainRenderer {
           globalThis.__geoLabStartupStats.totalReadyMs = roundDiagnostic(performance.now() - globalThis.__geoLabStartupStats.bootStartedAtMs);
           globalThis.__geoLabStartupStats.completed = true;
         }
+        if (this.renderContextState.status === "restoring") {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (this.disposed || token !== this.detailBuildToken || this.renderContextState.status !== "restoring") return;
+              this.renderContextState = {
+                ...this.renderContextState,
+                status: "ready",
+                readyAtMs: performance.now()
+              };
+              if (typeof globalThis !== "undefined") globalThis.__geoLabRenderContextState = this.renderContextState;
+              this.warmGpuPipelines(token, "full-scene");
+            });
+          });
+          return;
+        }
         this.warmGpuPipelines(token, "full-scene");
         return;
       }
@@ -673,7 +720,7 @@ export class TerrainRenderer {
         runLayer(index + 1);
       });
     };
-    runLayer(0);
+    runLayer(startIndex);
   }
 
   publishRenderLoadStats() {
@@ -687,19 +734,13 @@ export class TerrainRenderer {
     const phaseRecord = { phase, status: "running", ms: 0 };
     this.gpuPipelineWarmupStats = {
       status: "running",
-      method: typeof this.renderer.compileAsync === "function" ? "parallel-shader-compile" : "synchronous-compile-fallback",
+      method: this.parallelShaderCompileSupported && typeof this.renderer.compileAsync === "function"
+        ? "parallel-shader-compile"
+        : "synchronous-compile-fallback",
       token,
       phases: [...(this.gpuPipelineWarmupStats?.phases || []).filter((item) => item.phase !== phase), phaseRecord]
     };
     if (typeof globalThis !== "undefined") globalThis.__geoLabGpuPipelineWarmupStats = this.gpuPipelineWarmupStats;
-    let compileTask;
-    try {
-      compileTask = typeof this.renderer.compileAsync === "function"
-        ? this.renderer.compileAsync(this.scene, this.camera)
-        : Promise.resolve(this.renderer.compile(this.scene, this.camera));
-    } catch (error) {
-      compileTask = Promise.reject(error);
-    }
     const updateWarmupStatus = () => {
       const phases = this.gpuPipelineWarmupStats?.phases || [];
       const fullScene = phases.find((item) => item.phase === "full-scene");
@@ -711,19 +752,37 @@ export class TerrainRenderer {
         this.gpuPipelineWarmupStats.status = "ready";
       }
     };
-    Promise.resolve(compileTask).then(() => {
-      if (token !== this.detailBuildToken) return;
-      phaseRecord.status = "ready";
-      phaseRecord.ms = roundDiagnostic(performance.now() - startedAt);
-      updateWarmupStatus();
-      if (typeof globalThis !== "undefined") globalThis.__geoLabGpuPipelineWarmupStats = this.gpuPipelineWarmupStats;
-    }).catch((error) => {
-      if (token !== this.detailBuildToken) return;
-      phaseRecord.status = "error";
-      phaseRecord.ms = roundDiagnostic(performance.now() - startedAt);
-      phaseRecord.error = error?.message || String(error);
-      updateWarmupStatus();
-      if (typeof globalThis !== "undefined") globalThis.__geoLabGpuPipelineWarmupStats = this.gpuPipelineWarmupStats;
+    requestAnimationFrame(() => {
+      if (this.disposed || token !== this.detailBuildToken) return;
+      if (this.renderContextState.status === "lost") {
+        phaseRecord.status = "deferred-context-lost";
+        phaseRecord.ms = roundDiagnostic(performance.now() - startedAt);
+        updateWarmupStatus();
+        if (typeof globalThis !== "undefined") globalThis.__geoLabGpuPipelineWarmupStats = this.gpuPipelineWarmupStats;
+        return;
+      }
+      let compileTask;
+      try {
+        compileTask = this.parallelShaderCompileSupported && typeof this.renderer.compileAsync === "function"
+          ? this.renderer.compileAsync(this.scene, this.camera)
+          : Promise.resolve(this.renderer.compile(this.scene, this.camera));
+      } catch (error) {
+        compileTask = Promise.reject(error);
+      }
+      Promise.resolve(compileTask).then(() => {
+        if (this.disposed || token !== this.detailBuildToken) return;
+        phaseRecord.status = "ready";
+        phaseRecord.ms = roundDiagnostic(performance.now() - startedAt);
+        updateWarmupStatus();
+        if (typeof globalThis !== "undefined") globalThis.__geoLabGpuPipelineWarmupStats = this.gpuPipelineWarmupStats;
+      }).catch((error) => {
+        if (this.disposed || token !== this.detailBuildToken) return;
+        phaseRecord.status = "error";
+        phaseRecord.ms = roundDiagnostic(performance.now() - startedAt);
+        phaseRecord.error = error?.message || String(error);
+        updateWarmupStatus();
+        if (typeof globalThis !== "undefined") globalThis.__geoLabGpuPipelineWarmupStats = this.gpuPipelineWarmupStats;
+      });
     });
   }
 
@@ -872,6 +931,58 @@ export class TerrainRenderer {
     this.camera.position.set(home.x, home.y + focusY, home.z);
     this.controls.target.set(0, focusY, 0);
     this.controls.update();
+    if (typeof globalThis !== "undefined") {
+      globalThis.__geoLabCameraFocusState = { mode: "full-map", sizeKm, target: [0, focusY, 0] };
+    }
+  }
+
+  focusRegion(bounds = {}, options = {}) {
+    if (!this.model) return null;
+    const sizeKm = modelSizeKm(this.model);
+    const centerXKm = Number.isFinite(Number(bounds.centerXKm))
+      ? Number(bounds.centerXKm)
+      : (Number(bounds.x0) + Number(bounds.x1)) / 2;
+    const centerYKm = Number.isFinite(Number(bounds.centerYKm))
+      ? Number(bounds.centerYKm)
+      : (Number(bounds.y0) + Number(bounds.y1)) / 2;
+    const xKm = THREE.MathUtils.clamp(Number.isFinite(centerXKm) ? centerXKm : sizeKm / 2, 0, sizeKm);
+    const yKm = THREE.MathUtils.clamp(Number.isFinite(centerYKm) ? centerYKm : sizeKm / 2, 0, sizeKm);
+    const cellKm = this.model.cellSizeKm || sizeKm / Math.max(1, this.model.n - 1);
+    const widthKm = Math.max(0, Number(bounds.widthKm) || Math.abs(Number(bounds.x1) - Number(bounds.x0)) || 0);
+    const heightKm = Math.max(0, Number(bounds.heightKm) || Math.abs(Number(bounds.y1) - Number(bounds.y0)) || 0);
+    const spanKm = Math.max(widthKm, heightKm, Number(options.minimumSpanKm) || cellKm * 1.25, sizeKm * 0.002);
+    const target = new THREE.Vector3(
+      xKm - sizeKm / 2,
+      terrainSurfaceYAtLocalKm(this.model, this.params, xKm, yKm),
+      yKm - sizeKm / 2
+    );
+    const verticalFov = THREE.MathUtils.degToRad(this.camera.fov);
+    const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * Math.max(0.2, this.camera.aspect));
+    const fitDistance = Math.max(
+      spanKm / (2 * Math.tan(verticalFov / 2)),
+      spanKm / (2 * Math.tan(horizontalFov / 2))
+    ) * 1.75;
+    const distance = THREE.MathUtils.clamp(
+      Math.max(fitDistance, cellKm * 2.2, this.controls.minDistance * 1.1),
+      this.controls.minDistance,
+      this.controls.maxDistance
+    );
+    const offsetDirection = this.camera.position.clone().sub(this.controls.target);
+    if (offsetDirection.lengthSq() < 0.0001) offsetDirection.set(0.7, 0.55, 0.7);
+    offsetDirection.normalize();
+    this.controls.target.copy(target);
+    this.camera.position.copy(target).addScaledVector(offsetDirection, distance);
+    this.controls.update();
+    const focusState = {
+      mode: options.mode || "region",
+      xKm: roundDiagnostic(xKm),
+      yKm: roundDiagnostic(yKm),
+      spanKm: roundDiagnostic(spanKm),
+      distance: roundDiagnostic(distance),
+      target: target.toArray().map(roundDiagnostic)
+    };
+    if (typeof globalThis !== "undefined") globalThis.__geoLabCameraFocusState = focusState;
+    return focusState;
   }
 
   updateSceneScale(shouldResetCamera = false) {
@@ -879,7 +990,7 @@ export class TerrainRenderer {
     this.scene.fog.density = 0.035 * (20 / sizeKm);
     this.camera.far = Math.max(160, sizeKm * 10);
     this.camera.updateProjectionMatrix();
-    this.controls.minDistance = Math.max(0.35, sizeKm * 0.035);
+    this.controls.minDistance = Math.max(0.05, sizeKm * 0.0025);
     this.controls.maxDistance = Math.max(68, sizeKm * 3.4);
     this.updateGrid(sizeKm);
     if (shouldResetCamera) {
@@ -919,10 +1030,94 @@ export class TerrainRenderer {
     this.renderer.setSize(width, height, false);
   }
 
+  handleVisibilityChange() {
+    this.isDocumentVisible = !document.hidden;
+    if (this.isDocumentVisible) this.lastWildlifeAnimationAt = 0;
+  }
+
+  handleWebGLContextLost(event) {
+    event.preventDefault();
+    this.contextRecovery = this.renderLoadStats && !this.renderLoadStats.completed
+      ? {
+          token: this.detailBuildToken,
+          startedAtMs: this.renderLoadStats.startedAtMs || performance.now(),
+          pendingLayerNames: [...(this.renderLoadStats.pendingLayerNames || [])]
+        }
+      : null;
+    this.cancelDeferredDetailBuild();
+    this.renderContextState = {
+      ...this.renderContextState,
+      status: "lost",
+      lossCount: this.renderContextState.lossCount + 1,
+      lostAtMs: performance.now()
+    };
+    if (typeof globalThis !== "undefined") globalThis.__geoLabRenderContextState = this.renderContextState;
+  }
+
+  handleWebGLContextRestored() {
+    this.renderContextState = {
+      ...this.renderContextState,
+      status: "restoring",
+      restoredCount: this.renderContextState.restoredCount + 1,
+      restoredAtMs: performance.now()
+    };
+    this.sceneDiagnosticsDirty = true;
+    if (typeof globalThis !== "undefined") globalThis.__geoLabRenderContextState = this.renderContextState;
+    const recovery = this.contextRecovery;
+    this.contextRecovery = null;
+    if (recovery?.pendingLayerNames?.length && this.renderLoadStats && recovery.token === this.detailBuildToken) {
+      const startIndex = DEFERRED_DETAIL_LAYER_NAMES.indexOf(recovery.pendingLayerNames[0]);
+      this.renderLoadStats.cancelled = false;
+      this.renderLoadStats.pendingLayerNames = [...recovery.pendingLayerNames];
+      this.publishRenderLoadStats();
+      this.scheduleDeferredDetailLayers(
+        recovery.token,
+        recovery.startedAtMs,
+        Math.max(0, startIndex)
+      );
+      return;
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (this.disposed || this.renderContextState.status !== "restoring") return;
+        this.renderContextState = { ...this.renderContextState, status: "ready", readyAtMs: performance.now() };
+        if (typeof globalThis !== "undefined") globalThis.__geoLabRenderContextState = this.renderContextState;
+        this.warmGpuPipelines(this.detailBuildToken, "context-restored");
+      });
+    });
+  }
+
+  handleTerrainDoubleClick(event) {
+    if (!this.model || !this.terrainTileGroup?.children?.length) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const pointer = new THREE.Vector2(
+      ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
+      -((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(pointer, this.camera);
+    const hit = raycaster.intersectObjects(this.terrainTileGroup.children, false)[0];
+    if (!hit) return;
+    const sizeKm = modelSizeKm(this.model);
+    const cellKm = this.model.cellSizeKm || sizeKm / Math.max(1, this.model.n - 1);
+    this.focusRegion({
+      centerXKm: hit.point.x + sizeKm / 2,
+      centerYKm: hit.point.z + sizeKm / 2,
+      widthKm: Math.max(cellKm * 1.5, sizeKm * 0.004),
+      heightKm: Math.max(cellKm * 1.5, sizeKm * 0.004)
+    }, { mode: "terrain-double-click" });
+  }
+
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
     this.cancelDeferredDetailBuild();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
+    document.removeEventListener("visibilitychange", this.handleVisibilityChange);
+    this.renderer.domElement.removeEventListener("webglcontextlost", this.handleWebGLContextLost, false);
+    this.renderer.domElement.removeEventListener("webglcontextrestored", this.handleWebGLContextRestored, false);
+    this.renderer.domElement.removeEventListener("dblclick", this.handleTerrainDoubleClick);
     if (this.terrainDetailGroup) disposeObjectTree(this.terrainDetailGroup);
     if (this.subsurfaceGroup) disposeObjectTree(this.subsurfaceGroup);
     if (this.infrastructureGroup) disposeObjectTree(this.infrastructureGroup);
@@ -937,22 +1132,35 @@ export class TerrainRenderer {
     if (this.vegetation) {
       disposeObjectTree(this.vegetation);
     }
+    disposeSharedGeometryCache(this.sharedGeometryCache);
+    this.controls.dispose();
     this.renderer.dispose();
   }
 
   animate() {
+    this.frame = requestAnimationFrame(this.animate);
+    if (!this.isDocumentVisible || this.renderContextState.status !== "ready") return;
     this.controls.update();
-    const t = performance.now() * 0.001;
-    this.windGroup.children.forEach((arrow, index) => {
-      arrow.position.y = arrow.userData.baseY + Math.sin(t * 1.6 + index) * 0.018;
-    });
-    animateWildlifeRenderSets(this.wildlifeRenderSets, t);
+    const now = performance.now();
+    const t = now * 0.001;
+    if (this.windGroup.visible) {
+      this.windGroup.children.forEach((arrow, index) => {
+        arrow.position.y = arrow.userData.baseY + Math.sin(t * 1.6 + index) * 0.018;
+      });
+    }
+    if (
+      this.wildlifeGroup.visible &&
+      this.wildlifeRenderSets.length &&
+      now - this.lastWildlifeAnimationAt >= WILDLIFE_ANIMATION_INTERVAL_MS
+    ) {
+      animateWildlifeRenderSets(this.wildlifeRenderSets, t);
+      this.lastWildlifeAnimationAt = now;
+    }
     this.renderer.render(this.scene, this.camera);
     if (this.sceneDiagnosticsDirty) {
       this.publishSceneComplexityStats();
       this.sceneDiagnosticsDirty = false;
     }
-    this.frame = requestAnimationFrame(this.animate);
   }
 
   publishSceneComplexityStats() {
@@ -963,6 +1171,7 @@ export class TerrainRenderer {
     let objectCount = 0;
     let meshCount = 0;
     let instancedMeshCount = 0;
+    let frustumCulledInstancedMeshCount = 0;
     let instanceCount = 0;
     let proceduralInstanceCount = 0;
     this.scene.traverseVisible((object) => {
@@ -971,7 +1180,10 @@ export class TerrainRenderer {
       meshCount += 1;
       const geometryType = object.geometry?.type || "UnknownGeometry";
       const instances = object.isInstancedMesh ? object.count : 1;
-      if (object.isInstancedMesh) instancedMeshCount += 1;
+      if (object.isInstancedMesh) {
+        instancedMeshCount += 1;
+        if (object.frustumCulled !== false) frustumCulledInstancedMeshCount += 1;
+      }
       instanceCount += instances;
       geometryMeshCounts[geometryType] = (geometryMeshCounts[geometryType] || 0) + 1;
       geometryInstanceCounts[geometryType] = (geometryInstanceCounts[geometryType] || 0) + instances;
@@ -1003,8 +1215,13 @@ export class TerrainRenderer {
       objectCount,
       meshCount,
       instancedMeshCount,
+      frustumCulledInstancedMeshCount,
       instanceCount,
       materialCount: materials.size,
+      sharedGeometryCache: {
+        entryCount: this.sharedGeometryCache.size,
+        keys: Array.from(this.sharedGeometryCache.keys()).sort()
+      },
       geometryMeshCounts,
       geometryInstanceCounts,
       proceduralModeling: {
@@ -1420,6 +1637,7 @@ export class TerrainRenderer {
 
     const group = new THREE.Group();
     group.name = "多层植被群落";
+    bindSharedGeometryCache(group, this.sharedGeometryCache);
     const budgetPlan = this.activeDetailBudgetPlan || detailBudgetPlan(model);
     group.userData.assetQuality = budgetPlan.quality;
     const stride = budgetPlan.vegetationStride;
@@ -1470,8 +1688,8 @@ export class TerrainRenderer {
       const typeColor = vegetationTypeColor(vegetationType, landCover, cover);
 
       if (isWetlandLandCover(landCover) || vegetationType === 7 || wetness > 10.5) {
-        const reedHeight = Math.max(0.025, Math.min(0.105, height * 0.62 + cover * 0.032));
-        const reedWidth = Math.max(cell * 0.018, reedHeight * 0.2, 0.016);
+        const reedHeight = Math.max(0.001, Math.min(0.0045, height * 0.18 + cover * 0.0008));
+        const reedWidth = Math.max(0.00045, Math.min(0.0024, reedHeight * 0.45));
         buckets.reeds.push({
           x: wx,
           y: wy + reedHeight / 2,
@@ -1487,9 +1705,9 @@ export class TerrainRenderer {
             x: wx + (hash01(x, y, seed + 211) - 0.5) * cell * 0.28,
             y: wy + reedHeight * 0.25,
             z: wz + (hash01(y, x, seed + 223) - 0.5) * cell * 0.28,
-            sx: Math.max(cell * 0.055, reedHeight * 1.3),
-            sy: Math.max(0.012, reedHeight * 0.32),
-            sz: Math.max(cell * 0.045, reedHeight * 1.05),
+            sx: Math.max(0.0015, Math.min(0.008, reedHeight * 1.6)),
+            sy: Math.max(0.0008, Math.min(0.003, reedHeight * 0.62)),
+            sz: Math.max(0.0012, Math.min(0.006, reedHeight * 1.25)),
             ry: angle + Math.PI * 0.18,
             color: 0x6fae72
           });
@@ -1498,14 +1716,14 @@ export class TerrainRenderer {
       }
 
       if (vegetationType === 6 || landCover === 82) {
-        const rowHeight = Math.max(0.01, Math.min(0.055, height * 0.32 + cover * 0.014));
+        const rowHeight = Math.max(0.0004, Math.min(0.0022, height * 0.06 + cover * 0.00025));
         buckets.cropRows.push({
           x: wx,
           y: wy + rowHeight / 2,
           z: wz,
           sx: Math.max(cell * 0.5, rowHeight * 7),
           sy: rowHeight,
-          sz: Math.max(cell * 0.045, rowHeight * 1.4),
+          sz: Math.max(0.0012, Math.min(0.008, cell * 0.012), rowHeight * 1.8),
           ry: angle,
           color: typeColor
         });
@@ -1514,9 +1732,9 @@ export class TerrainRenderer {
             x: wx + (hash01(x, y, seed + 349) - 0.5) * cell * 0.36,
             y: wy + rowHeight * 0.72,
             z: wz + (hash01(y, x, seed + 353) - 0.5) * cell * 0.36,
-            sx: Math.max(cell * 0.04, rowHeight * 1.25),
+            sx: Math.max(0.0008, Math.min(0.0035, rowHeight * 1.5)),
             sy: rowHeight * 1.2,
-            sz: Math.max(cell * 0.035, rowHeight),
+            sz: Math.max(0.0007, Math.min(0.003, rowHeight * 1.2)),
             ry: angle + Math.PI * 0.5,
             color: 0xc4b45b
           });
@@ -1525,24 +1743,24 @@ export class TerrainRenderer {
       }
 
       if (canopy > 4.5 && !isShrubOrGrassLandCover(landCover) && vegetationType !== 5 && vegetationType !== 9) {
-        const trunkHeight = Math.max(0.025, height * 0.5);
+        const trunkHeight = Math.max(0.0025, height * 0.55);
         buckets.trunks.push({
           x: wx,
           y: wy + trunkHeight / 2,
           z: wz,
-          sx: Math.max(cell * 0.016, crown * 0.34, 0.014),
+          sx: Math.max(0.00035, Math.min(0.0025, crown * 0.16)),
           sy: trunkHeight,
-          sz: Math.max(cell * 0.016, crown * 0.34, 0.014),
+          sz: Math.max(0.00035, Math.min(0.0025, crown * 0.16)),
           ry: angle,
           color: 0x9b6a43
         });
         if (vegetationType === 2 || (vegetationType !== 1 && (isConiferLandCover(landCover) || hash01(x, y, seed + 509) < 0.42))) {
           buckets.conifers.push({
             x: wx,
-            y: wy + trunkHeight + Math.max(0.02, height * 0.27),
+            y: wy + trunkHeight + Math.max(0.0015, height * 0.27),
             z: wz,
             sx: crown * 1.34,
-            sy: Math.max(0.05, height * 0.62),
+            sy: Math.max(0.003, height * 0.62),
             sz: crown * 1.34,
             ry: angle,
             color: typeColor
@@ -1553,35 +1771,35 @@ export class TerrainRenderer {
             y: wy + trunkHeight + crown * 0.42,
             z: wz,
             sx: crown * (1.35 + cover * 0.4),
-            sy: Math.max(0.035, crown * 0.9),
+            sy: Math.max(0.0025, crown * 0.9),
             sz: crown * (1.15 + hash01(y, x, seed + 919) * 0.5),
             ry: angle,
             color: typeColor
           });
         }
         if (biomass > 2.4 && cover > 0.62 && hash01(x, y, seed + 607) < 0.62) {
-          const underHeight = Math.max(0.018, Math.min(0.075, height * 0.16 + cover * 0.018));
+          const underHeight = Math.max(0.001, Math.min(0.006, height * 0.12 + cover * 0.0008));
           buckets.understory.push({
             x: wx + (hash01(x, y, seed + 613) - 0.5) * crown,
             y: wy + underHeight / 2,
             z: wz + (hash01(y, x, seed + 617) - 0.5) * crown,
-            sx: Math.max(cell * 0.028, underHeight * 1.9),
+            sx: Math.max(0.0015, Math.min(0.012, underHeight * 1.9)),
             sy: underHeight,
-            sz: Math.max(cell * 0.026, underHeight * 1.5),
+            sz: Math.max(0.0012, Math.min(0.01, underHeight * 1.5)),
             ry: angle + hash01(x, y, seed + 619) * Math.PI,
             color: vegetationColor(landCover, cover * 0.8, 0x5e9a55)
           });
         }
       } else {
-        const shrubHeight = Math.max(0.012, Math.min(0.08, height * 0.44 + cover * 0.018));
+        const shrubHeight = Math.max(0.0008, Math.min(0.0055, height * 0.35 + cover * 0.0008));
         const bucket = vegetationType === 5 || landCover === 71 || landCover === 81 ? buckets.grassTufts : buckets.shrubs;
         bucket.push({
           x: wx,
           y: wy + shrubHeight / 2,
           z: wz,
-          sx: Math.max(cell * 0.02, shrubHeight * 1.6),
+          sx: Math.max(0.0012, Math.min(0.009, shrubHeight * 1.6)),
           sy: shrubHeight,
-          sz: Math.max(cell * 0.018, shrubHeight * 1.3),
+          sz: Math.max(0.001, Math.min(0.0075, shrubHeight * 1.3)),
           ry: angle,
           color: typeColor
         });
@@ -3864,7 +4082,7 @@ function balanceBuildingPrism(type, width, depth, visualHeight, cell) {
 
 function visualBuildingHeight(heightM, verticalScale) {
   const scaled = (Math.max(0, heightM) / 1000) * Math.max(0.1, verticalScale) * BUILDING_HEIGHT_VISUAL_SCALE;
-  return Math.max(0.026, scaled);
+  return Math.max(0.003, scaled);
 }
 
 function towerPlanWidth(visualHeight, cell, minPlan = 0.045, maxAspect = 7) {
@@ -3961,20 +4179,25 @@ function updateTerrainTileMesh(tile, model, params, viewMode, options = {}) {
     }
   }
   if (updateHeights) {
-    if (positions.updateRange) {
-      positions.updateRange.offset = 0;
-      positions.updateRange.count = positions.count * 3;
-    }
+    positions.clearUpdateRanges?.();
+    positions.addUpdateRange?.(0, positions.count * 3);
     positions.needsUpdate = true;
     geometry.computeVertexNormals();
   }
   if (updateColors) {
-    if (colors.updateRange) {
-      colors.updateRange.offset = 0;
-      colors.updateRange.count = colors.count * 3;
-    }
+    colors.clearUpdateRanges?.();
+    colors.addUpdateRange?.(0, colors.count * 3);
     colors.needsUpdate = true;
   }
+}
+
+function terrainSurfaceYAtLocalKm(model, params, xKm, yKm) {
+  const sizeKm = modelSizeKm(model);
+  const n = Math.max(2, model?.n || 2);
+  const gx = THREE.MathUtils.clamp(Math.round((xKm / Math.max(0.0001, sizeKm)) * (n - 1)), 0, n - 1);
+  const gy = THREE.MathUtils.clamp(Math.round((yKm / Math.max(0.0001, sizeKm)) * (n - 1)), 0, n - 1);
+  const heightM = Number(model?.height?.[gy * n + gx]) || 0;
+  return (heightM / 1000) * Math.max(0.1, Number(params?.verticalScale) || 1);
 }
 
 function terrainTileStats(tiles, touchedTiles, model, dirtyRange) {
@@ -4365,16 +4588,16 @@ function terrainRockColor(elevation, maxElevation, noise) {
 }
 
 function visualCanopyHeight(canopyM, cover, verticalScale) {
-  const canopy = Math.max(0, Number(canopyM) || 0);
-  const scale = Math.max(0.75, Math.min(1.8, Number(verticalScale) || 1));
-  const symbolicHeight = (canopy / 1000) * (4.2 + scale * 1.8) + clamp01(cover) * 0.035;
-  return Math.max(0.03, Math.min(0.32, symbolicHeight));
+  const observedCanopyM = Math.max(0, Number(canopyM) || 0);
+  const inferredCanopyM = observedCanopyM > 0 ? observedCanopyM : 1.5 + clamp01(cover) * 6;
+  const scale = Math.max(0.1, Math.min(5, Number(verticalScale) || 1));
+  return Math.max(0.001, Math.min(0.08, (inferredCanopyM / 1000) * scale));
 }
 
 function vegetationCrownRadius(height, cover, cell) {
   const ideal = height * (0.38 + clamp01(cover) * 0.22);
-  const minimum = Math.max(0.028, cell * 0.035);
-  const maximum = Math.max(0.115, cell * 0.24);
+  const minimum = Math.max(0.0015, Math.min(0.006, cell * 0.008));
+  const maximum = Math.max(minimum * 2, Math.min(0.035, cell * 0.09));
   return Math.max(minimum, Math.min(maximum, ideal));
 }
 
@@ -6485,7 +6708,7 @@ function wildlifeAgentRenderState(model, params, agent, species, visualScale) {
   const verticalScale = Math.max(0.1, Number(params?.verticalScale) || 1);
   const waterSurface = Number(params?.seaLevel) || 0;
   const surfaceHeightM = Math.max(Number(model.height?.[index]) || 0, species.aquaticAffinity >= 0.5 ? waterSurface : 0);
-  const bodySize = Math.max(0.018, Math.min(0.105, cell * 0.12)) * visualScale * Math.max(0.35, Number(agent.scale) || 1);
+  const bodySize = Math.max(0.0007, Math.min(0.006, 0.0024 * Math.max(0.35, Number(agent.scale) || 1))) * visualScale;
   const flying = (species.geometryClass === "bird" || species.geometryClass === "raptor") && species.id !== "cassowary";
   return {
     baseX: Number(agent.xKm) - sizeKm / 2,
@@ -6728,7 +6951,11 @@ function wildlifePartPlan(species) {
 
 function addWildlifeInstancedBatch(group, batch, renderDetailQuality = "ultra") {
   if (!batch?.entries?.length) return null;
-  const geometry = createAssetGeometry(batch.kind, renderDetailQuality);
+  const geometry = sharedGeometry(
+    group,
+    `wildlife:${renderDetailQuality}:${batch.kind}`,
+    () => createAssetGeometry(batch.kind, renderDetailQuality)
+  );
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     roughness: 0.82,
@@ -6740,7 +6967,6 @@ function addWildlifeInstancedBatch(group, batch, renderDetailQuality = "ultra") 
   const mesh = new THREE.InstancedMesh(geometry, material, batch.entries.length);
   mesh.name = `动物程序化部件 · ${batch.kind}`;
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  mesh.frustumCulled = false;
   const color = new THREE.Color();
   const white = new THREE.Color(0xffffff);
   batch.entries.forEach((entry, index) => {
@@ -6749,12 +6975,12 @@ function addWildlifeInstancedBatch(group, batch, renderDetailQuality = "ultra") 
     mesh.setColorAt(index, color);
   });
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  writeWildlifeBatchMatrices(mesh, batch.entries, 0);
+  writeWildlifeBatchMatrices(mesh, batch.entries, 0, true);
   group.add(mesh);
   return mesh;
 }
 
-function writeWildlifeBatchMatrices(mesh, entries, timeSeconds) {
+function writeWildlifeBatchMatrices(mesh, entries, timeSeconds, refreshBounds = false) {
   for (let i = 0; i < entries.length; i += 1) {
     const { state, part } = entries[i];
     const stride = Math.sin(timeSeconds * state.motionRate + state.phase);
@@ -6788,6 +7014,14 @@ function writeWildlifeBatchMatrices(mesh, entries, timeSeconds) {
     mesh.setMatrixAt(i, WILDLIFE_MATRIX_DUMMY.matrix);
   }
   mesh.instanceMatrix.needsUpdate = true;
+  if (refreshBounds) {
+    const padding = entries.reduce((max, entry) => Math.max(
+      max,
+      Number(entry.state?.travelRadius) || 0,
+      (Number(entry.state?.bodySize) || 0) * 0.8
+    ), 0);
+    updateInstancedMeshBounds(mesh, padding);
+  }
 }
 
 function animateWildlifeRenderSets(renderSets, timeSeconds) {
@@ -6838,17 +7072,23 @@ function addWildlifeMigrationCorridors(group, model, params, migrationLinks) {
 function addInstancedBox(group, name, transforms, fallbackColor, options = {}) {
   if (!transforms.length) return;
   const assetQuality = options.quality || group?.userData?.assetQuality || "high";
-  const geometry = options.geometryFactory?.() || options.geometry || createSemanticAssetGeometry(name, assetQuality) || new THREE.BoxGeometry(1, 1, 1);
+  const semanticKind = semanticAssetKind(name);
+  const geometry = options.geometry || sharedGeometry(
+    group,
+    options.geometryKey || `box:${assetQuality}:${semanticKind || name}`,
+    () => options.geometryFactory?.() || createSemanticAssetGeometry(name, assetQuality) || new THREE.BoxGeometry(1, 1, 1)
+  );
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     roughness: options.roughness ?? 0.76,
     metalness: options.metalness ?? 0.02,
     transparent: options.transparent ?? false,
     opacity: options.opacity ?? 1,
-    emissive: options.emissive ?? fallbackColor,
-    emissiveIntensity: options.emissiveIntensity ?? 0.22,
+    emissive: options.emissive ?? subduedEmissive(fallbackColor),
+    emissiveIntensity: options.emissiveIntensity ?? 0.42,
     side: options.side ?? THREE.FrontSide,
-    vertexColors: true
+    vertexColors: true,
+    dithering: true
   });
   const mesh = new THREE.InstancedMesh(geometry, material, transforms.length);
   mesh.name = name;
@@ -6859,16 +7099,22 @@ function addInstancedBox(group, name, transforms, fallbackColor, options = {}) {
 function addInstancedCylinder(group, name, transforms, fallbackColor, options = {}) {
   if (!transforms.length) return;
   const assetQuality = options.quality || group?.userData?.assetQuality || "high";
-  const geometry = options.geometryFactory?.() || options.geometry || createSemanticAssetGeometry(name, assetQuality) || new THREE.CylinderGeometry(0.5, 0.5, 1, options.radiusSegments || 10);
+  const semanticKind = semanticAssetKind(name);
+  const geometry = options.geometry || sharedGeometry(
+    group,
+    options.geometryKey || `cylinder:${assetQuality}:${semanticKind || name}:${options.radiusSegments || 10}`,
+    () => options.geometryFactory?.() || createSemanticAssetGeometry(name, assetQuality) || new THREE.CylinderGeometry(0.5, 0.5, 1, options.radiusSegments || 10)
+  );
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     roughness: options.roughness ?? 0.62,
     metalness: options.metalness ?? 0.04,
     transparent: options.transparent ?? false,
     opacity: options.opacity ?? 1,
-    emissive: options.emissive ?? fallbackColor,
-    emissiveIntensity: options.emissiveIntensity ?? 0.22,
-    vertexColors: true
+    emissive: options.emissive ?? subduedEmissive(fallbackColor),
+    emissiveIntensity: options.emissiveIntensity ?? 0.42,
+    vertexColors: true,
+    dithering: true
   });
   const mesh = new THREE.InstancedMesh(geometry, material, transforms.length);
   mesh.name = name;
@@ -6879,16 +7125,26 @@ function addInstancedCylinder(group, name, transforms, fallbackColor, options = 
 function addInstancedTorus(group, name, transforms, fallbackColor, options = {}) {
   if (!transforms.length) return;
   const assetQuality = options.quality || group?.userData?.assetQuality || "high";
-  const semanticGeometry = options.geometryFactory?.() || options.geometry || createSemanticAssetGeometry(name, assetQuality);
-  const geometry = semanticGeometry || new THREE.TorusGeometry(0.5, 0.12, 8, 20);
-  if (!semanticGeometry) geometry.rotateX(Math.PI / 2);
+  const semanticKind = semanticAssetKind(name);
+  const geometry = options.geometry || sharedGeometry(
+    group,
+    options.geometryKey || `torus:${assetQuality}:${semanticKind || name}`,
+    () => {
+      const semanticGeometry = options.geometryFactory?.() || createSemanticAssetGeometry(name, assetQuality);
+      if (semanticGeometry) return semanticGeometry;
+      const torus = new THREE.TorusGeometry(0.5, 0.12, 8, 20);
+      torus.rotateX(Math.PI / 2);
+      return torus;
+    }
+  );
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     roughness: 0.78,
     metalness: 0.03,
-    emissive: fallbackColor,
-    emissiveIntensity: 0.22,
-    vertexColors: true
+    emissive: subduedEmissive(fallbackColor),
+    emissiveIntensity: 0.42,
+    vertexColors: true,
+    dithering: true
   });
   const mesh = new THREE.InstancedMesh(geometry, material, transforms.length);
   mesh.name = name;
@@ -6910,17 +7166,51 @@ function writeInstanceTransforms(mesh, transforms, fallbackColor = 0xffffff) {
   });
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  updateInstancedMeshBounds(mesh);
 }
 
 function disposeObjectTree(root) {
   root.traverse((child) => {
-    if (child.geometry) child.geometry.dispose();
+    if (child.geometry && !child.geometry.userData?.sharedGeometryCacheOwned) child.geometry.dispose();
     if (child.material) {
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       materials.forEach((material) => material.dispose?.());
     }
   });
   root.clear();
+}
+
+function bindSharedGeometryCache(group, cache) {
+  if (group) group.userData.sharedGeometryCache = cache;
+  return group;
+}
+
+function sharedGeometry(group, key, factory) {
+  const cache = group?.userData?.sharedGeometryCache;
+  if (!cache) return factory();
+  if (cache.has(key)) return cache.get(key);
+  const geometry = factory();
+  if (!geometry) return geometry;
+  geometry.userData.sharedGeometryCacheOwned = true;
+  geometry.userData.sharedGeometryCacheKey = key;
+  cache.set(key, geometry);
+  return geometry;
+}
+
+function disposeSharedGeometryCache(cache) {
+  if (!cache) return;
+  for (const geometry of cache.values()) geometry?.dispose?.();
+  cache.clear();
+}
+
+function updateInstancedMeshBounds(mesh, padding = 0) {
+  mesh.computeBoundingBox?.();
+  mesh.computeBoundingSphere?.();
+  if (mesh.boundingSphere && padding > 0) mesh.boundingSphere.radius += padding;
+}
+
+function subduedEmissive(colorHex) {
+  return new THREE.Color(colorHex ?? 0xffffff).multiplyScalar(0.24);
 }
 
 function clamp01(value) {
