@@ -478,6 +478,189 @@ input[type="range"] {
   margin-bottom: 12px;
 }
 
+.scenario-synthesis-title {
+  margin-top: 0;
+}
+
+.scenario-metadata-grid input[type="text"] {
+  font-size: 12px;
+}
+
+.scenario-score-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.scenario-score-strip > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #18211d;
+}
+
+.scenario-score-strip span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.scenario-score-strip strong {
+  display: block;
+  margin: 3px 0 6px;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.score-track {
+  height: 4px;
+  overflow: hidden;
+  background: #0d1210;
+}
+
+.score-track i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 180ms ease;
+}
+
+.scenario-score-boundary {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+#scenarioEvidenceBar {
+  background: var(--accent-2);
+}
+
+.scenario-synthesis-readout {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.scenario-domain-row {
+  min-width: 0;
+  padding: 8px 9px;
+  border-left: 3px solid var(--line);
+  background: #141a18;
+}
+
+.scenario-domain-row[data-status="evidence_constrained"] {
+  border-left-color: var(--accent);
+}
+
+.scenario-domain-row[data-status="procedural_baseline"],
+.scenario-domain-row[data-status="inactive_baseline"] {
+  border-left-color: var(--accent-2);
+}
+
+.scenario-domain-row[data-status="attention_required"] {
+  border-left-color: var(--warning);
+}
+
+.scenario-domain-row > div:first-child,
+.scenario-domain-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scenario-domain-row strong {
+  font-size: 12px;
+}
+
+.scenario-domain-row > div:first-child > span,
+.scenario-domain-metrics {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.scenario-domain-metrics {
+  justify-content: flex-start;
+  margin-top: 4px;
+}
+
+.scenario-domain-row p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.scenario-coupling-title {
+  margin-top: 12px;
+  margin-bottom: 7px;
+}
+
+.scenario-priority-title {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.scenario-coupling-readout {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.scenario-coupling-readout > div {
+  display: grid;
+  gap: 3px;
+  padding: 7px 9px;
+  background: #141a18;
+}
+
+.scenario-coupling-readout strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.scenario-coupling-readout span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.scenario-priority-row {
+  display: grid;
+  gap: 4px;
+}
+
+.scenario-priority-row + .scenario-priority-row {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.scenario-priority-row strong {
+  color: var(--warning);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.scenario-priority-row[data-priority="medium"] strong {
+  color: var(--accent-2);
+}
+
+.scenario-priority-row[data-priority="low"] strong {
+  color: var(--muted);
+}
+
+.scenario-priority-row span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .infrastructure-placement-strip {
   display: block;
   padding: 9px 10px;

@@ -8,6 +8,9 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 
 ### Added
 
+- Added a purpose-aware cross-system scenario synthesis spanning terrain, climate, water, ecology, subsurface, infrastructure, hazards, and evidence.
+- Added separate system-coverage and evidence-coverage diagnostics, explicit coupling pathways, prioritized follow-up actions, and visible interpretation boundaries.
+- Added portable scenario-synthesis JSON and Markdown brief exports plus deterministic CI tests for report structure, evidence scoring, intervention feedback, and failure handling.
 - Added terrain and infrastructure-region camera focus so local selections can be inspected in context instead of remaining disconnected from the 3D scene.
 - Added renderer lifecycle diagnostics, WebGL context-loss recovery, visibility-aware animation, and deferred shader warm-up reporting.
 - Added accessible application-owned file pickers whose labels and selection states follow the English / Simplified Chinese interface setting.

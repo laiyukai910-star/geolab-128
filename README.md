@@ -87,6 +87,19 @@ For research, planning, or engineering work, use quality-controlled source data,
 | Ecology | Habitat and block conditions, functional guilds, carrying-capacity proxies, movement corridors, food-web relationships, and batch wildlife-release scenarios. |
 | Built environment | Area-aware placement of buildings, transport, utilities, water infrastructure, civic facilities, and landmarks with environmental-suitability and land-surface feedback. |
 | Evidence and interchange | Selected data imports plus GeoJSON, CSV, parameters, source audits, quality gates, diagnostics, and scenario exports. |
+| Scenario synthesis | A purpose-aware cross-system overview covering terrain, climate, water, ecology, subsurface, infrastructure, hazards, and evidence, with explicit coupling pathways and prioritized next actions. |
+
+## Scenario Synthesis
+
+The **Export** drawer includes a live scenario-synthesis workspace that turns the model's distributed diagnostics into one inspectable account of the current run.
+
+- **Eight system views:** terrain; climate and wind; water and sediment; ecology and wildlife; subsurface; built environment; time and hazards; evidence and validation.
+- **Two deliberately separate scores:** system coverage records whether each domain is represented, while evidence coverage records how strongly observed or imported data constrain it. Neither score represents predictive accuracy.
+- **Coupling pathways:** the report exposes active terrain-to-water, climate-to-water-balance, surface-to-ecology, subsurface-to-water, time-to-hazard, and infrastructure-to-land-and-water relationships.
+- **Purpose-aware priorities:** users can identify the run as systems learning, hypothesis exploration, intervention comparison, risk communication, or validation design; the report then highlights relevant missing evidence or follow-up work.
+- **Portable handoff:** the same state can be exported as structured JSON or a human-readable Markdown brief with assumptions and professional boundaries attached.
+
+The implementation lives in [`outputs/geo-sim/src/scenarioSynthesis.js`](outputs/geo-sim/src/scenarioSynthesis.js) and is tested independently from the interface so future validation rules can evolve without coupling them to rendering code.
 
 ## What Has Been Demonstrated
 
@@ -109,6 +122,8 @@ Detailed algorithms, input formats, and quality-gate behavior are documented in 
 | Path | Purpose |
 | --- | --- |
 | `outputs/geo-sim/` | Offline-capable browser application, geographic engines, renderers, adapters, and technical documentation. |
+| `outputs/geo-sim/src/scenarioSynthesis.js` | Pure cross-system synthesis, coupling, priority, JSON, and Markdown-report logic. |
+| `outputs/geo-sim/tests/` | Deterministic model-report tests executed by CI. |
 | `outputs/geo-sim-desktop/` | Electron runtime and local packaging workflow. |
 | `.github/workflows/ci.yml` | Static integrity checks for source syntax, dependencies, and required entry points. |
 | `CONTRIBUTING.md` | Contribution expectations, validation boundaries, and development workflow. |

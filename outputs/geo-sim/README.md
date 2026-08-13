@@ -55,7 +55,20 @@ python -m http.server 5179 --bind 127.0.0.1
 - 自然条件表单：除地形笔刷半径与力度外，气候、水文、地形和生态公式参数均以完整展开的数值表单呈现，不使用折叠式滑动面板。
 - 界面汉化：主要按钮、下拉项、实时状态、校准顾问、时间灾害控制、局部精细化导出和质量报告审计提示已切换为中文；CSV/JSON 字段名仍保留英文以便 GIS、脚本和既有测试兼容。
 - 高分辨率执行：模型演算通过 Web Worker 后台执行，网格选项已扩展到 1536²、2048²、3072² 和 4096²。
-- 导出：河网 GeoJSON、流域圈定 JSON、流域格网 CSV、科研数据适配审计 JSON/CSV、科研验证门控 JSON/CSV、人造设施影响图谱 JSON/CSV、格网 CSV、局部精细 CSV、灾害事件 JSON、时间序列 CSV、物理时间进程 JSON/CSV、参数 JSON 和质量报告。
+- 导出：跨系统情景综合 JSON、情景简报 Markdown、河网 GeoJSON、流域圈定 JSON、流域格网 CSV、科研数据适配审计 JSON/CSV、科研验证门控 JSON/CSV、人造设施影响图谱 JSON/CSV、格网 CSV、局部精细 CSV、灾害事件 JSON、时间序列 CSV、物理时间进程 JSON/CSV、参数 JSON 和质量报告。
+
+## Cross-System Scenario Synthesis
+
+The Export drawer now begins with a live synthesis of the current run rather than presenting only a long list of disconnected files. It combines eight domains: terrain, climate and wind, water and sediment, ecology and wildlife, subsurface, built environment, time and hazards, and evidence and validation.
+
+The synthesis keeps two concepts separate:
+
+- `coveragePct` records whether a system is actively represented by the current model state.
+- `evidencePct` records the degree to which imported or observed sources constrain that system.
+
+These values are completeness and provenance diagnostics. They are **not** accuracy, calibration, certification, or professional-fitness scores. A fully represented procedural domain can therefore show high coverage and low evidence at the same time.
+
+The report also records explicit coupling pathways and purpose-aware priorities. Selecting systems learning, hypothesis exploration, intervention comparison, risk communication, or validation design changes which gaps are emphasized. JSON export preserves structured metrics and bilingual labels; Markdown export produces a concise handoff brief with the prototype boundary and assumptions included.
 
 ## 真实数据格式
 

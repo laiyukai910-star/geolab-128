@@ -77,6 +77,7 @@ import {
   getContinentTemplate
 } from "./continentTemplates.js";
 import { setupLocalization } from "./localization.js";
+import { buildScenarioSynthesis, makeScenarioSynthesisMarkdown } from "./scenarioSynthesis.js";
 
 setupLocalization();
 
@@ -164,6 +165,18 @@ const windLabel = document.getElementById("windLabel");
 const riverLabel = document.getElementById("riverLabel");
 const hazardLabel = document.getElementById("hazardLabel");
 const runtimeLabel = document.getElementById("runtimeLabel");
+const scenarioTitle = document.getElementById("scenarioTitle");
+const scenarioPurpose = document.getElementById("scenarioPurpose");
+const scenarioNotes = document.getElementById("scenarioNotes");
+const scenarioCoverageScore = document.getElementById("scenarioCoverageScore");
+const scenarioEvidenceScore = document.getElementById("scenarioEvidenceScore");
+const scenarioCoverageBar = document.getElementById("scenarioCoverageBar");
+const scenarioEvidenceBar = document.getElementById("scenarioEvidenceBar");
+const scenarioSynthesisReadout = document.getElementById("scenarioSynthesisReadout");
+const scenarioCouplingReadout = document.getElementById("scenarioCouplingReadout");
+const scenarioCouplingCount = document.getElementById("scenarioCouplingCount");
+const scenarioPriorityReadout = document.getElementById("scenarioPriorityReadout");
+const scenarioPriorityCount = document.getElementById("scenarioPriorityCount");
 const terrainPresetStatus = document.getElementById("terrainPresetStatus");
 const continentTemplateStatus = document.getElementById("continentTemplateStatus");
 const wildlifeReleaseSpecies = document.getElementById("wildlifeReleaseSpecies");
@@ -947,6 +960,10 @@ function bindUi() {
   document.getElementById("exportBuiltResilienceCSV").addEventListener("click", exportBuiltResilienceCSV);
   document.getElementById("exportBuiltRecovery").addEventListener("click", exportBuiltRecovery);
   document.getElementById("exportBuiltRecoveryCSV").addEventListener("click", exportBuiltRecoveryCSV);
+  document.getElementById("exportScenarioSynthesis")?.addEventListener("click", exportScenarioSynthesis);
+  document.getElementById("exportScenarioBrief")?.addEventListener("click", exportScenarioBrief);
+  [scenarioTitle, scenarioPurpose, scenarioNotes].forEach((control) => control?.addEventListener("input", updateScenarioSynthesis));
+  window.addEventListener("geolab:localechange", updateScenarioSynthesis);
   document.getElementById("exportSettings").addEventListener("click", () => {
     download(
       "geolab-128-settings.json",
@@ -959,6 +976,7 @@ function bindUi() {
           meteorologySummaries: externalLayers?.metSummary || [],
           osmInfrastructure,
           manualSurfacePatches: manualSurfaceCollection(),
+          scenarioSynthesis: currentScenarioSynthesis(),
           generatedAt: new Date().toISOString()
         },
         null,
@@ -2754,6 +2772,88 @@ function updateMetrics() {
       : `${Math.round(model.runtimeMs)} ms${modelWorker ? " · 后台线程" : ""}`;
   updateTerrainPresetStatus();
   updateDataStatus();
+  updateScenarioSynthesis();
+}
+
+function currentScenarioSynthesis() {
+  if (!model?.stats) return null;
+  return buildScenarioSynthesis(model, params, {
+    title: scenarioTitle?.value,
+    purpose: scenarioPurpose?.value,
+    notes: scenarioNotes?.value
+  });
+}
+
+function updateScenarioSynthesis() {
+  const report = currentScenarioSynthesis();
+  if (!report) return;
+  const locale = globalThis.__geoLabLocale?.locale === "zh-CN" ? "zh" : "en";
+  scenarioCoverageScore.textContent = scenarioScoreLabel(report.overview.coverageScorePct);
+  scenarioEvidenceScore.textContent = scenarioScoreLabel(report.overview.evidenceScorePct);
+  scenarioCoverageBar.style.width = `${report.overview.coverageScorePct}%`;
+  scenarioEvidenceBar.style.width = `${report.overview.evidenceScorePct}%`;
+  scenarioSynthesisReadout.replaceChildren(...report.domains.map((item) => {
+    const row = document.createElement("article");
+    row.className = "scenario-domain-row";
+    row.dataset.status = item.statusCode;
+    const heading = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = item.label[locale];
+    const status = document.createElement("span");
+    status.textContent = item.status[locale];
+    heading.append(title, status);
+    const metrics = document.createElement("div");
+    metrics.className = "scenario-domain-metrics";
+    metrics.innerHTML = `<span>${locale === "zh" ? "覆盖" : "Coverage"} ${format(item.coveragePct, 0)}%</span><span>${locale === "zh" ? "证据" : "Evidence"} ${format(item.evidencePct, 0)}%</span>`;
+    const summary = document.createElement("p");
+    summary.textContent = item.summary[locale];
+    row.append(heading, metrics, summary);
+    return row;
+  }));
+  scenarioCouplingCount.textContent = `${report.couplings.length}`;
+  scenarioCouplingReadout.replaceChildren(...report.couplings.map((item) => {
+    const row = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = item.label[locale];
+    const summary = document.createElement("span");
+    summary.textContent = item.summary[locale];
+    row.append(title, summary);
+    return row;
+  }));
+  scenarioPriorityCount.textContent = `${report.priorities.length}`;
+  scenarioPriorityReadout.replaceChildren(...report.priorities.map((priority) => {
+    const row = document.createElement("div");
+    row.className = "scenario-priority-row";
+    row.dataset.priority = priority.priorityCode;
+    const heading = document.createElement("strong");
+    heading.textContent = `${priority.priority[locale]} · ${priority.domainLabel[locale]}`;
+    const action = document.createElement("span");
+    action.textContent = priority.action[locale];
+    row.append(heading, action);
+    return row;
+  }));
+  if (typeof globalThis !== "undefined") globalThis.__geoLabScenarioSynthesis = report;
+}
+
+function scenarioScoreLabel(value) {
+  const score = Number(value);
+  if (!Number.isFinite(score)) return "--%";
+  if (score > 0 && score < 0.1) return "<0.1%";
+  return `${format(score, score < 10 ? 1 : 0)}%`;
+}
+
+function exportScenarioSynthesis() {
+  const report = currentScenarioSynthesis();
+  if (!report) return;
+  download("geolab-128-scenario-synthesis.json", "application/json", JSON.stringify(report, null, 2));
+  setStatus("情景综合已导出");
+}
+
+function exportScenarioBrief() {
+  const report = currentScenarioSynthesis();
+  if (!report) return;
+  download("geolab-128-scenario-brief.md", "text/markdown;charset=utf-8", makeScenarioSynthesisMarkdown(report));
+  setStatus("情景简报已导出");
 }
 
 function updateDataStatus() {
@@ -4330,6 +4430,7 @@ function exportQualityReport() {
     localRefinement: localRefinementReportSummary(),
     manualSurfacePatches: manualSurfaceCollection(),
     manualInfrastructure: manualInfrastructureCollection(),
+    scenarioSynthesis: currentScenarioSynthesis(),
     derivedLayers: model?.stats
       ? {
           meanWindSpeed: model.stats.meanWindSpeed,
@@ -4545,6 +4646,7 @@ function buildPipelineAudit() {
       "按物种生态位、区块承载力、猎物依赖和迁徙阻力演算种群分布，并生成可动画化的三维动物代理",
       "应用校准偏差、径流倍率和观测流量偏差诊断",
       "运行可导出的参数扰动集合，量化降水、温度、土壤、水文阈值、植被和人造设施反馈敏感性",
+      "综合地形、气候、水文、生态、地下、设施、灾害与证据八个系统，分离计算系统覆盖和证据覆盖，并生成联动链路与验证优先事项",
       "输出 GeoJSON、CSV、参数和质量报告"
     ],
     algorithms: {
@@ -4566,7 +4668,8 @@ function buildPipelineAudit() {
       landscapeConnectivity: "八邻域生态区块图，将地形连续性、水文连续性、植被、土地水体边界、人造扰动与灾害合成为连通度、阻力和跨区通量",
       wildlife: "36 类区域物种生态位 + 区块承载力 + 食物网猎物依赖 + 迁徙阻力网络 + 批量投放存活推演 + 时间种群更新；Three.js 语义解剖部件合批模型表现个体运动与鸟类振翅",
       proceduralAssets: "109 类语义程序化资产工厂，以曲线、挤压、旋转体、桁架、肋板、非规则多面体和多部件装配构造自然物件、人造设施与动物解剖",
-      continentTemplates: "15 套全球与区域模板联动地貌、气候、风、水文、植被、生态区系和随机种子"
+      continentTemplates: "15 套全球与区域模板联动地貌、气候、风、水文、植被、生态区系和随机种子",
+      scenarioSynthesis: "八系统情景综合分离系统覆盖与证据覆盖，汇总跨域联动链路、目的相关验证优先事项，并输出结构化 JSON 与可读 Markdown 简报"
     },
     warnings
   };

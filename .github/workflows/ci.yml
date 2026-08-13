@@ -35,11 +35,16 @@ jobs:
           node --check outputs/geo-sim-desktop/build-local.mjs
           node --check outputs/geo-sim-desktop/main.cjs
 
+      - name: Run model-report tests
+        run: node outputs/geo-sim/tests/scenarioSynthesis.test.mjs
+
       - name: Verify local entry points
         run: |
           test -f outputs/geo-sim/index.html
           test -f outputs/geo-sim/src/main.js
           test -f outputs/geo-sim/src/localization.js
+          test -f outputs/geo-sim/src/scenarioSynthesis.js
+          test -f outputs/geo-sim/tests/scenarioSynthesis.test.mjs
           test -f outputs/geo-sim-desktop/package.json
           test -f LICENSE
 
