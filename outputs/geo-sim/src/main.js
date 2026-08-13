@@ -608,14 +608,50 @@ populateTerrainPresetOptions();
 writeParams(params);
 writeAoi(aoi);
 setupControlDrawers();
-boot();
+setupFilePickers();
+boot().catch(handleBootFailure);
 window.addEventListener("pagehide", disposeApplication, { capture: true });
 
 async function boot() {
   modelWorker = createModelWorker();
   renderer = new TerrainRenderer(sceneNode);
-  await rebuildTerrain();
   bindUi();
+  await rebuildTerrain();
+}
+
+function handleBootFailure(error) {
+  const message = error instanceof Error ? error.message : String(error || "Unknown error");
+  console.error("GeoLab startup failed", error);
+  setStatus(`启动失败：${message}`);
+  if (typeof globalThis !== "undefined") {
+    globalThis.__geoLabStartupStats = {
+      ...(globalThis.__geoLabStartupStats || {}),
+      completed: false,
+      failed: true,
+      error: message
+    };
+  }
+}
+
+function setupFilePickers() {
+  for (const button of document.querySelectorAll("[data-file-picker-for]")) {
+    const inputId = button.dataset.filePickerFor;
+    const input = document.getElementById(inputId);
+    const status = document.querySelector(`[data-file-status-for="${inputId}"]`);
+    if (!input || !status) continue;
+    const update = () => {
+      const files = Array.from(input.files || []);
+      status.textContent = files.length === 0
+        ? "未选择文件"
+        : files.length === 1
+          ? `已选择：${files[0].name}`
+          : `已选择 ${files.length} 个文件`;
+      status.title = files.map((file) => file.name).join(", ");
+    };
+    button.addEventListener("click", () => input.click());
+    input.addEventListener("change", update);
+    update();
+  }
 }
 
 function disposeApplication(event) {
@@ -1465,14 +1501,11 @@ function setInfrastructureRegionSelectionMode(active, options = {}) {
     button.setAttribute("aria-pressed", String(infrastructureRegionSelection.active));
     button.textContent = infrastructureRegionSelection.active ? "选区中" : "设施选区";
   }
-  if (button) button.textContent = infrastructureRegionSelection.active ? "\u9009\u533a\u4e2d" : "\u8bbe\u65bd\u9009\u533a";
   canvas.classList.toggle("selecting-infrastructure", infrastructureRegionSelection.active);
   if (!infrastructureRegionSelection.active && !options.keepBounds) hideInfrastructureSelectionOverlay();
   updateInfrastructureSelectionReadout();
   if (options.silent) return;
-  setStatus(infrastructureRegionSelection.active ? "\u8bbe\u65bd\u9009\u533a\u5df2\u542f\u7528\uff1a\u5728\u5206\u6790\u56fe\u62d6\u62fd\u9501\u5b9a\u8303\u56f4" : "\u8bbe\u65bd\u9009\u533a\u5df2\u5173\u95ed");
-  return;
-  setStatus(infrastructureRegionSelection.active ? "设施选区已启用" : "设施选区已关闭");
+  setStatus(infrastructureRegionSelection.active ? "设施选区已启用：在分析图拖拽锁定范围" : "设施选区已关闭");
 }
 
 function beginInfrastructureRegionSelection(event) {
@@ -1563,9 +1596,6 @@ function applyInfrastructureSelectionToForm(bounds, final) {
   const sizeText = isRegion
     ? `${format(bounds.widthKm, 2)} × ${format(bounds.heightKm, 2)} km`
     : `${format(bounds.centerXKm, 2)}, ${format(bounds.centerYKm, 2)} km`;
-  setStatus(final ? `\u8bbe\u65bd\u9009\u533a\u5df2\u9501\u5b9a\uff1a${sizeText}` : `\u8bbe\u65bd\u9009\u533a\uff1a${sizeText}`);
-  return;
-  setStatus(final ? `设施选区已锁定：${sizeText}` : `设施选区：${sizeText}`);
   setStatus(final ? `设施选区已锁定：${sizeText}` : `设施选区：${sizeText}`);
 }
 

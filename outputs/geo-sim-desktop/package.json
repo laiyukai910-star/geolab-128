@@ -2,7 +2,7 @@
   "name": "geolab-128-local",
   "version": "0.1.0",
   "private": true,
-  "description": "GeoLab 128 offline GPU desktop runtime",
+  "description": "Offline desktop runtime for the GeoLab 128 geographic systems laboratory",
   "main": "main.cjs",
   "scripts": {
     "vendor": "node build-local.mjs --vendor-only",
@@ -48,7 +48,7 @@
           ]
         }
       ],
-      "artifactName": "GeoLab-128-Local-GPU-${version}.${ext}",
+      "artifactName": "GeoLab-128-Local-${version}.${ext}",
       "signAndEditExecutable": false
     }
   }

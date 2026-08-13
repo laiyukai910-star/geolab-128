@@ -72,7 +72,7 @@ button:active {
 
 select,
 input[type="number"],
-input[type="file"] {
+input[type="text"] {
   width: 100%;
   height: 32px;
   padding: 0 8px;
@@ -86,10 +86,11 @@ textarea {
   line-height: 1.35;
 }
 
-input[type="file"] {
-  padding: 5px 8px;
-  color: var(--muted);
-  font-size: 11px;
+input[type="text"] {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #22302a;
+  color: var(--text);
 }
 
 input[type="range"] {
@@ -398,7 +399,7 @@ input[type="range"] {
 }
 
 .field-grid label,
-.file-grid label,
+.file-field > label,
 .brush-bar label {
   display: grid;
   gap: 6px;
@@ -411,6 +412,57 @@ input[type="range"] {
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
+}
+
+.file-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.file-picker {
+  display: grid;
+  grid-template-columns: minmax(104px, auto) minmax(0, 1fr);
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #18211d;
+  overflow: hidden;
+}
+
+.file-picker-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.file-picker button {
+  align-self: stretch;
+  min-height: 32px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: #263a31;
+  white-space: nowrap;
+}
+
+.file-picker-status {
+  min-width: 0;
+  padding: 0 9px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 32px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .data-section {

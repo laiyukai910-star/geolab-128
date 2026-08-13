@@ -201,7 +201,7 @@
             </label>
             <label>
               边长 km
-              <input id="aoiSizeKm" type="number" min="1" max="256" step="1" value="128" />
+              <input id="aoiSizeKm" type="number" min="1" max="512" step="1" value="128" />
             </label>
             <label>
               起始年
@@ -236,42 +236,78 @@
             <button id="findProxyGages">查找 USGS 水文站</button>
           </div>
           <div class="file-grid">
-            <label>
-              DEM GeoTIFF/CSV/JSON，可多选
-              <input id="demFile" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
-            </label>
-            <label>
-              土壤 HSG/属性，可多选
-              <input id="soilFile" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
-            </label>
-            <label>
-              钻孔/地下水位/岩性，可多选
-              <input id="subsurfaceFile" type="file" accept=".csv,.json,.geojson" multiple />
-            </label>
-            <label>
-              土地覆盖/植被，可多选
-              <input id="landCoverFile" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
-            </label>
-            <label>
-              地表/气候情景 GeoJSON
-              <input id="surfacePatchFile" type="file" accept=".json,.geojson" multiple />
-            </label>
-            <label>
-              气象边界场，可多选
-              <input id="metFile" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
-            </label>
-            <label>
-              河网 Flowlines，可多选
-              <input id="flowlineFile" type="file" accept=".json,.geojson" multiple />
-            </label>
-            <label>
-              城镇/乡村/水利设施，可多选
-              <input id="infrastructureFile" type="file" accept=".json,.geojson" multiple />
-            </label>
-            <label>
-              校准数据，可多选
-              <input id="calibrationFile" type="file" accept=".csv,.json" multiple />
-            </label>
+            <div class="file-field">
+              <label for="demFile">DEM GeoTIFF/CSV/JSON，可多选</label>
+              <div class="file-picker">
+                <input id="demFile" class="file-picker-input" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
+                <button type="button" data-file-picker-for="demFile">选择文件</button>
+                <span class="file-picker-status" data-file-status-for="demFile" aria-live="polite">未选择文件</span>
+              </div>
+            </div>
+            <div class="file-field">
+              <label for="soilFile">土壤 HSG/属性，可多选</label>
+              <div class="file-picker">
+                <input id="soilFile" class="file-picker-input" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
+                <button type="button" data-file-picker-for="soilFile">选择文件</button>
+                <span class="file-picker-status" data-file-status-for="soilFile" aria-live="polite">未选择文件</span>
+              </div>
+            </div>
+            <div class="file-field">
+              <label for="subsurfaceFile">钻孔/地下水位/岩性，可多选</label>
+              <div class="file-picker">
+                <input id="subsurfaceFile" class="file-picker-input" type="file" accept=".csv,.json,.geojson" multiple />
+                <button type="button" data-file-picker-for="subsurfaceFile">选择文件</button>
+                <span class="file-picker-status" data-file-status-for="subsurfaceFile" aria-live="polite">未选择文件</span>
+              </div>
+            </div>
+            <div class="file-field">
+              <label for="landCoverFile">土地覆盖/植被，可多选</label>
+              <div class="file-picker">
+                <input id="landCoverFile" class="file-picker-input" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
+                <button type="button" data-file-picker-for="landCoverFile">选择文件</button>
+                <span class="file-picker-status" data-file-status-for="landCoverFile" aria-live="polite">未选择文件</span>
+              </div>
+            </div>
+            <div class="file-field">
+              <label for="surfacePatchFile">地表/气候情景 GeoJSON，可多选</label>
+              <div class="file-picker">
+                <input id="surfacePatchFile" class="file-picker-input" type="file" accept=".json,.geojson" multiple />
+                <button type="button" data-file-picker-for="surfacePatchFile">选择文件</button>
+                <span class="file-picker-status" data-file-status-for="surfacePatchFile" aria-live="polite">未选择文件</span>
+              </div>
+            </div>
+            <div class="file-field">
+              <label for="metFile">气象边界场，可多选</label>
+              <div class="file-picker">
+                <input id="metFile" class="file-picker-input" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
+                <button type="button" data-file-picker-for="metFile">选择文件</button>
+                <span class="file-picker-status" data-file-status-for="metFile" aria-live="polite">未选择文件</span>
+              </div>
+            </div>
+            <div class="file-field">
+              <label for="flowlineFile">河网 Flowlines，可多选</label>
+              <div class="file-picker">
+                <input id="flowlineFile" class="file-picker-input" type="file" accept=".json,.geojson" multiple />
+                <button type="button" data-file-picker-for="flowlineFile">选择文件</button>
+                <span class="file-picker-status" data-file-status-for="flowlineFile" aria-live="polite">未选择文件</span>
+              </div>
+            </div>
+            <div class="file-field">
+              <label for="infrastructureFile">城镇/乡村/水利设施，可多选</label>
+              <div class="file-picker">
+                <input id="infrastructureFile" class="file-picker-input" type="file" accept=".json,.geojson" multiple />
+                <button type="button" data-file-picker-for="infrastructureFile">选择文件</button>
+                <span class="file-picker-status" data-file-status-for="infrastructureFile" aria-live="polite">未选择文件</span>
+              </div>
+            </div>
+            <div class="file-field">
+              <label for="calibrationFile">校准数据，可多选</label>
+              <div class="file-picker">
+                <input id="calibrationFile" class="file-picker-input" type="file" accept=".csv,.json" multiple />
+                <button type="button" data-file-picker-for="calibrationFile">选择文件</button>
+                <span class="file-picker-status" data-file-status-for="calibrationFile" aria-live="polite">未选择文件</span>
+              </div>
+            </div>
             <label>
               校准强度
               <input id="calibrationStrength" type="number" min="0" max="1" step="0.01" value="0.75" />
