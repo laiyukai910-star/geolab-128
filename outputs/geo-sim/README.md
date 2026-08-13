@@ -1,14 +1,10 @@
 # GeoLab 128 地理演算程序
 
-GeoLab 128 是一个本地 GPU 地理演算程序，用于 4-512 km 可变边长沙盘的高自定义地形与地理过程演示。它包含三维地形视图、二维分析图层、地形笔刷、风温湿度参数、水文汇流、河网生成、降水与气候分区、基础侵蚀演化、区块联动、动物生态和数据导出。
+GeoLab 128 是一个用于 4-512 km 区域情景的交互式地理系统实验室。它把三维地形、二维分析、气候、水文、地下结构、生态、动物、人造设施、时间灾害和数据证据放在同一个可编辑状态中，并通过浏览器演算引擎与 Rust 独立复核核心提供两条计算路径。
 
 ## 运行
 
-推荐直接双击 `outputs/启动GeoLab本地版.cmd`，或运行单文件版本：
-
-`outputs/GeoLab-128-Portable/GeoLab-128-Local-GPU-1.0.0.exe`
-
-桌面版内置 Chromium、Three.js、OrbitControls 和 GeoTIFF 解析器，不需要安装 Node.js，不依赖外部网页，也不会在启动或核心演算时请求公网。数据采集计划和“在线检查源”仍作为可选工具保留，只有使用者主动调用时才需要网络。
+开发环境推荐从 `outputs/geo-sim-desktop` 执行 `npm start`。该命令会构建 Rust sidecar 并启动 Electron；发布包则由 `npm run package:win` 或 `npm run package:portable` 生成。桌面运行时内置 Chromium、Three.js、GeoTIFF 解析器和本地 Rust API，核心演算不依赖外部网页。在线数据检查仅在使用者主动调用时联网。
 
 需要调试源码时，也可以在本目录启动静态服务器：
 
@@ -17,6 +13,8 @@ python -m http.server 5179 --bind 127.0.0.1
 ```
 
 然后访问 `http://127.0.0.1:5179/`。
+
+如需在静态模式连接 Rust 核心，可单独运行 `geolab-server`，并在页面 URL 后附加 `?backend=http://127.0.0.1:48129`。Rust 核心使用严格类型输入、独立点间距/支撑面积、Priority-Flood、D8 拓扑汇流、蒸散与水量分配，并输出单独的物理门禁报告。
 
 ## 已实现能力
 

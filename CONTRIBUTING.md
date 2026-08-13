@@ -11,13 +11,15 @@ Thanks for improving GeoLab 128. This project values transparent assumptions, re
 ## Development Setup
 
 ```powershell
+rustup show
+cargo test --manifest-path engine/Cargo.toml --workspace
 cd outputs/geo-sim-desktop
 npm ci
 npm run vendor
 npm run start
 ```
 
-The browser application lives in `outputs/geo-sim`; the Electron wrapper is in `outputs/geo-sim-desktop`.
+The Rust computation core and local API live in `engine`; the browser application lives in `outputs/geo-sim`; the Electron runtime and sidecar lifecycle live in `outputs/geo-sim-desktop`.
 
 ## Pull Requests
 
@@ -27,7 +29,13 @@ The browser application lives in `outputs/geo-sim`; the Electron wrapper is in `
 4. Add or update checks when behavior changes.
 5. Run the relevant local verification before requesting review.
 
-At minimum, validate changed JavaScript files with `node --check <file>`. For UI changes, also check desktop and mobile layouts, interactions, and console errors.
+At minimum, validate changed JavaScript files with `node --check <file>`. Rust changes must pass formatting, Clippy with warnings denied, and workspace tests. For UI changes, also check desktop and mobile layouts, interactions, console errors, and the Rust-backend connection state where relevant.
+
+```powershell
+cargo fmt --manifest-path engine/Cargo.toml --all -- --check
+cargo clippy --manifest-path engine/Cargo.toml --workspace --all-targets -- -D warnings
+cargo test --manifest-path engine/Cargo.toml --workspace
+```
 
 ## Model and Data Changes
 
@@ -38,6 +46,8 @@ For changes involving terrain, climate, hydrology, hazards, ecology, or data ada
 - input units, coordinate-reference expectations, and provenance where relevant;
 - an update to documentation or quality-gate behavior when the interpretation changes;
 - a benchmark, regression case, or a clear reason it cannot yet be supplied.
+
+Keep point spacing, cell support area, projected coordinates, and vertical units distinct. A change to one of these contracts must include an area/volume closure test and an interoperability note.
 
 Avoid adding claims of accuracy without a documented validation method and representative evidence.
 

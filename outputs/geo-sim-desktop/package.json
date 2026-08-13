@@ -1,14 +1,15 @@
 {
   "name": "geolab-128-local",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Offline desktop runtime for the GeoLab 128 geographic systems laboratory",
+  "description": "GeoLab 128 desktop runtime with the interactive 3D client and bundled Rust computation service",
   "main": "main.cjs",
   "scripts": {
     "vendor": "node build-local.mjs --vendor-only",
-    "start": "electron .",
+    "backend:build": "node build-local.mjs --backend-only",
+    "start": "npm run backend:build && electron .",
     "package:win": "node build-local.mjs",
-    "package:portable": "node build-local.mjs --vendor-only && electron-builder --win portable"
+    "package:portable": "node build-local.mjs --prepare-runtime && electron-builder --win portable"
   },
   "devDependencies": {
     "@electron/packager": "latest",
@@ -34,6 +35,13 @@
       {
         "from": "../geo-sim",
         "to": "geo-sim",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "backend",
+        "to": "backend",
         "filter": [
           "**/*"
         ]

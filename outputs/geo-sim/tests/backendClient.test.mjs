@@ -1,0 +1,84 @@
+import assert from "node:assert/strict";
+import {
+  buildBackendScenario,
+  configuredBackendUrl,
+  inspectBackend,
+  runBackendVerification
+} from "../src/backendClient.js";
+
+const n = 4;
+const length = n * n;
+const model = {
+  n,
+  sizeKm: 8,
+  height: Float32Array.from({ length }, (_, index) => 100 + index),
+  precipitation: Float32Array.from({ length }, () => 1_000),
+  temperature: Float32Array.from({ length }, () => 16),
+  surface: {
+    curveNumber: Float32Array.from({ length }, () => 72),
+    hydraulicConductivityMmHr: Float32Array.from({ length }, () => 18),
+    availableWaterCapacityMm: Float32Array.from({ length }, () => 140),
+    imperviousFraction: Float32Array.from({ length }, () => 0.1),
+    vegetation: Float32Array.from({ length }, () => 0.65)
+  },
+  infrastructureInfluence: {
+    irrigationMm: Float32Array.from({ length }, () => 0),
+    waterDemandMm: Float32Array.from({ length }, () => 0)
+  },
+  stats: { waterBudget: { residualPctOfInput: 0 }, meanPotentialEvapotranspiration: 900 },
+  physicalCoupling: { summary: { processIntegrityIndex: 0.99 } }
+};
+const params = { seed: 42, currentYear: 5, humidity: 0.7, windSpeed: 4, latitude: 32, dayOfYear: 183 };
+
+assert.equal(configuredBackendUrl({ search: "?backend=http%3A%2F%2F127.0.0.1%3A48129" }), "http://127.0.0.1:48129");
+assert.equal(configuredBackendUrl({ search: "?backend=https%3A%2F%2Fexample.com" }), null);
+
+const request = buildBackendScenario(model, params, { resolution: 4 });
+assert.equal(request.apiVersion, "1.0");
+assert.equal(request.grid.elevationM.length, length);
+assert.equal(request.grid.pointSpacingM, 8_000 / 3);
+assert.equal(request.grid.cellSupportAreaM2, 4_000_000);
+assert.equal(request.grid.cellSupportAreaM2 * length, 64_000_000);
+
+const fetchImpl = async (url, init = {}) => {
+  if (url.endsWith("/health")) return jsonResponse({ status: "ready", engine: "geolab-core-rust", apiVersion: "1.0" });
+  if (url.endsWith("/v1/capabilities")) return jsonResponse({ apiVersion: "1.0", maxApiCells: 262144 });
+  assert.equal(init.method, "POST");
+  const body = JSON.parse(init.body);
+  return jsonResponse({
+    requestId: "rust-00000001",
+    report: {
+      apiVersion: "1.0",
+      engine: "geolab-core-rust",
+      summary: {
+        processIntegrityIndex: 1,
+        meanReferenceEvapotranspirationMm: 880,
+        failedGateCount: 0,
+        passedGateCount: 6,
+        reviewGateCount: 0
+      },
+      waterBudget: { residualPercentOfInput: 0 },
+      grid: { width: body.grid.width, height: body.grid.height }
+    }
+  });
+};
+
+const status = await inspectBackend("http://127.0.0.1:48129", fetchImpl);
+assert.equal(status.status, "ready");
+const verification = await runBackendVerification(model, params, "http://127.0.0.1:48129", {
+  resolution: 4,
+  fetchImpl
+});
+assert.equal(verification.report.engine, "geolab-core-rust");
+assert.equal(verification.comparison.rustProcessIntegrityIndex, 1);
+assert.equal(verification.sample.auditResolution, 4);
+
+console.log("Rust backend client tests passed");
+
+function jsonResponse(value, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => value
+  };
+}

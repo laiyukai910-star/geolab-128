@@ -18,6 +18,16 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
+      - name: Set up Rust
+        shell: bash
+        run: rustup toolchain install 1.96.0 --profile minimal --component clippy,rustfmt --no-self-update
+
+      - name: Validate Rust computation core
+        run: |
+          cargo +1.96.0 fmt --manifest-path engine/Cargo.toml --all -- --check
+          cargo +1.96.0 clippy --manifest-path engine/Cargo.toml --workspace --all-targets -- -D warnings
+          cargo +1.96.0 test --manifest-path engine/Cargo.toml --workspace
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -40,6 +50,7 @@ jobs:
           node outputs/geo-sim/tests/scenarioSynthesis.test.mjs
           node outputs/geo-sim/tests/landscapeEcology.test.mjs
           node outputs/geo-sim/tests/physicalCouplingInterop.test.mjs
+          node outputs/geo-sim/tests/backendClient.test.mjs
 
       - name: Verify local entry points
         run: |
@@ -49,10 +60,17 @@ jobs:
           test -f outputs/geo-sim/src/scenarioSynthesis.js
           test -f outputs/geo-sim/src/physicalCoupling.js
           test -f outputs/geo-sim/src/engineInterop.js
+          test -f outputs/geo-sim/src/backendClient.js
           test -f outputs/geo-sim/tests/scenarioSynthesis.test.mjs
           test -f outputs/geo-sim/tests/landscapeEcology.test.mjs
           test -f outputs/geo-sim/tests/physicalCouplingInterop.test.mjs
+          test -f outputs/geo-sim/tests/backendClient.test.mjs
           test -f outputs/geo-sim-desktop/package.json
+          test -f engine/Cargo.toml
+          test -f engine/Cargo.lock
+          test -f engine/geolab-core/src/lib.rs
+          test -f engine/geolab-server/src/lib.rs
+          test -f engine/geolab-server/src/main.rs
           test -f LICENSE
 
       - name: Verify canonical changelog

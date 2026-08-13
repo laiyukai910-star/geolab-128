@@ -67,6 +67,11 @@ import {
   updateTemporalModel
 } from "./geoEngine.js";
 import { buildEngineScenePackage } from "./engineInterop.js";
+import {
+  configuredBackendUrl,
+  inspectBackend,
+  runBackendVerification
+} from "./backendClient.js";
 import { mergeLayerBundle, readLayerFile, readLayerObject, summarizeLayerBundle } from "./dataAdapters.js";
 import {
   buildAcquisitionPlan,
@@ -192,6 +197,9 @@ const wildlifeReleaseQueue = document.getElementById("wildlifeReleaseQueue");
 const ecosystemFunctionReadout = document.getElementById("ecosystemFunctionReadout");
 const ecologicalRigorReadout = document.getElementById("ecologicalRigorReadout");
 const physicalCouplingReadout = document.getElementById("physicalCouplingReadout");
+const rustBackendReadout = document.getElementById("rustBackendReadout");
+const runRustBackendAuditButton = document.getElementById("runRustBackendAudit");
+const exportRustBackendAuditButton = document.getElementById("exportRustBackendAudit");
 const dataStatus = document.getElementById("dataStatus");
 const cellReadout = document.getElementById("cellReadout");
 const viewMode = document.getElementById("viewMode");
@@ -363,6 +371,18 @@ let modelWorker = null;
 let workerRequestId = 0;
 let modelJobSerial = 0;
 const workerRequests = new Map();
+const rustBackendEndpoint = configuredBackendUrl();
+let rustBackendState = {
+  status: rustBackendEndpoint ? "connecting" : "unavailable",
+  endpoint: rustBackendEndpoint,
+  health: null,
+  capabilities: null,
+  error: null
+};
+let rustBackendAudit = null;
+let rustBackendAuditSerial = 0;
+let rustBackendAuditTimer = null;
+let rustBackendModelRevision = 0;
 
 function markModelRefreshNeeded(mode = "run") {
   pendingModelRefreshMode = mode === "build" || pendingModelRefreshMode === "build" ? "build" : "run";
@@ -636,7 +656,10 @@ async function boot() {
   modelWorker = createModelWorker();
   renderer = new TerrainRenderer(sceneNode);
   bindUi();
+  const backendConnection = refreshRustBackendConnection();
   await rebuildTerrain();
+  await backendConnection;
+  scheduleRustBackendAudit();
 }
 
 function handleBootFailure(error) {
@@ -973,11 +996,14 @@ function bindUi() {
   document.getElementById("exportScenarioBrief")?.addEventListener("click", exportScenarioBrief);
   document.getElementById("exportPhysicalCoupling")?.addEventListener("click", exportPhysicalCoupling);
   document.getElementById("exportPhysicalCouplingCSV")?.addEventListener("click", exportPhysicalCouplingCSV);
+  runRustBackendAuditButton?.addEventListener("click", () => runRustBackendAudit({ manual: true }));
+  exportRustBackendAuditButton?.addEventListener("click", exportRustBackendAudit);
   document.getElementById("exportUnityScene")?.addEventListener("click", () => exportEngineScene("unity"));
   document.getElementById("exportUnrealScene")?.addEventListener("click", () => exportEngineScene("unreal"));
   [scenarioTitle, scenarioPurpose, scenarioNotes].forEach((control) => control?.addEventListener("input", updateScenarioSynthesis));
   window.addEventListener("geolab:localechange", updateScenarioSynthesis);
   window.addEventListener("geolab:localechange", updateEcosystemFunctionReadout);
+  window.addEventListener("geolab:localechange", updateRustBackendReadout);
   document.getElementById("exportSettings").addEventListener("click", () => {
     download(
       "geolab-128-settings.json",
@@ -2773,11 +2799,13 @@ function pointerToGrid(event) {
 
 function updateMetrics() {
   if (!model) return;
+  rustBackendModelRevision += 1;
   const stats = model.stats;
   if (typeof globalThis !== "undefined") globalThis.__geoLabModelStats = stats;
   updateWildlifeReleaseReadout();
   updateEcosystemFunctionReadout();
   updatePhysicalCouplingReadout();
+  scheduleRustBackendAudit();
   const climate = CLIMATES[stats.dominantClimate];
   const eventDynamics = stats.hazards?.eventDynamics || null;
   const eventPulses = eventDynamics?.currentYearPulses || null;
@@ -3004,6 +3032,129 @@ function exportPhysicalCouplingCSV() {
   const report = buildPhysicalCouplingReport(model, params);
   download("geolab-128-physical-coupling.csv", "text/csv;charset=utf-8", makePhysicalCouplingCSV(report));
   setStatus("物理联动 CSV 已导出");
+}
+
+async function refreshRustBackendConnection() {
+  if (!rustBackendEndpoint) {
+    rustBackendState = { ...rustBackendState, status: "unavailable" };
+    updateRustBackendReadout();
+    return;
+  }
+  rustBackendState = { ...rustBackendState, status: "connecting", error: null };
+  updateRustBackendReadout();
+  try {
+    rustBackendState = await inspectBackend(rustBackendEndpoint);
+    scheduleRustBackendAudit();
+  } catch (error) {
+    rustBackendState = {
+      ...rustBackendState,
+      status: "failed",
+      error: error?.message || String(error)
+    };
+  }
+  updateRustBackendReadout();
+}
+
+function scheduleRustBackendAudit() {
+  clearTimeout(rustBackendAuditTimer);
+  if (!model || rustBackendState.status !== "ready") return;
+  rustBackendAuditTimer = setTimeout(() => runRustBackendAudit({ manual: false }), 450);
+}
+
+async function runRustBackendAudit(options = {}) {
+  if (!model) return;
+  if (rustBackendState.status === "failed" || rustBackendState.status === "unavailable") {
+    await refreshRustBackendConnection();
+  }
+  if (rustBackendState.status !== "ready") return;
+  const serial = ++rustBackendAuditSerial;
+  const modelRevision = rustBackendModelRevision;
+  rustBackendState = { ...rustBackendState, status: "running", error: null };
+  updateRustBackendReadout();
+  if (options.manual) setStatus("Rust 后端复核中");
+  try {
+    const audit = await runBackendVerification(model, params, rustBackendEndpoint, { resolution: 96 });
+    if (serial !== rustBackendAuditSerial) return;
+    if (modelRevision !== rustBackendModelRevision) {
+      rustBackendState = { ...rustBackendState, status: "ready", error: null };
+      updateRustBackendReadout();
+      scheduleRustBackendAudit();
+      return;
+    }
+    rustBackendAudit = audit;
+    rustBackendState = { ...rustBackendState, status: "ready", error: null };
+    if (typeof globalThis !== "undefined") globalThis.__geoLabRustBackend = audit;
+    updateRustBackendReadout();
+    if (options.manual) setStatus("Rust 后端复核完成");
+  } catch (error) {
+    if (serial !== rustBackendAuditSerial) return;
+    rustBackendState = {
+      ...rustBackendState,
+      status: "failed",
+      error: error?.message || String(error)
+    };
+    updateRustBackendReadout();
+    if (options.manual) setStatus("Rust 后端复核失败");
+  }
+}
+
+function updateRustBackendReadout() {
+  if (!rustBackendReadout) return;
+  const locale = globalThis.__geoLabLocale?.locale === "zh-CN" ? "zh" : "en";
+  rustBackendReadout.replaceChildren();
+  const state = rustBackendState.status;
+  rustBackendReadout.dataset.state = rustBackendAudit && state === "ready" ? "verified" : state;
+  runRustBackendAuditButton.disabled = state === "connecting" || state === "running" || !rustBackendEndpoint;
+  exportRustBackendAuditButton.disabled = !rustBackendAudit;
+  if (!rustBackendEndpoint) {
+    rustBackendReadout.textContent = locale === "zh"
+      ? "当前为纯静态模式；桌面运行时会自动附加 Rust 演算核心。"
+      : "Static mode is active; the desktop runtime attaches the Rust computation core automatically.";
+    return;
+  }
+  if (state === "connecting" || state === "running") {
+    rustBackendReadout.textContent = locale === "zh"
+      ? state === "running" ? "Rust 正在独立复算当前情景。" : "正在连接 Rust 演算核心。"
+      : state === "running" ? "Rust is independently recomputing the current scenario." : "Connecting to the Rust computation core.";
+    return;
+  }
+  if (state === "failed") {
+    rustBackendReadout.textContent = locale === "zh"
+      ? `Rust 演算核心不可用：${rustBackendState.error || "未知错误"}`
+      : `Rust computation core unavailable: ${rustBackendState.error || "unknown error"}`;
+    return;
+  }
+  if (!rustBackendAudit) {
+    rustBackendReadout.textContent = locale === "zh"
+      ? `Rust 核心已连接 · API ${rustBackendState.health?.apiVersion || "1.0"}`
+      : `Rust core connected · API ${rustBackendState.health?.apiVersion || "1.0"}`;
+    return;
+  }
+  const report = rustBackendAudit.report;
+  const summary = report.summary;
+  const heading = document.createElement("strong");
+  heading.textContent = locale === "zh"
+    ? `Rust 独立门控 ${Math.round(summary.processIntegrityIndex * 100)}% · ${rustBackendAudit.sample.auditResolution}² 复核格网`
+    : `Rust independent gates ${Math.round(summary.processIntegrityIndex * 100)}% · ${rustBackendAudit.sample.auditResolution}² audit grid`;
+  const gates = document.createElement("div");
+  gates.textContent = locale === "zh"
+    ? `通过 ${summary.passedGateCount} · 复核 ${summary.reviewGateCount} · 失败 ${summary.failedGateCount}`
+    : `Pass ${summary.passedGateCount} · Review ${summary.reviewGateCount} · Fail ${summary.failedGateCount}`;
+  const water = document.createElement("div");
+  water.textContent = locale === "zh"
+    ? `水量残差 ${format(report.waterBudget.residualPercentOfInput, 6)}% · 最大格点余项 ${format(summary.maximumAbsoluteCellResidualMm, 6)} mm`
+    : `Water residual ${format(report.waterBudget.residualPercentOfInput, 6)}% · maximum cell residual ${format(summary.maximumAbsoluteCellResidualMm, 6)} mm`;
+  const boundary = document.createElement("small");
+  boundary.textContent = locale === "zh"
+    ? "Rust 使用独立 D8 内核复核约束，不以数值吻合替代现场校准。"
+    : "Rust uses an independent D8 kernel; numerical agreement does not replace field calibration.";
+  rustBackendReadout.append(heading, gates, water, boundary);
+}
+
+function exportRustBackendAudit() {
+  if (!rustBackendAudit) return;
+  download("geolab-128-rust-backend-verification.json", "application/json", JSON.stringify(rustBackendAudit, null, 2));
+  setStatus("Rust 后端报告已导出");
 }
 
 async function exportEngineScene(engine) {

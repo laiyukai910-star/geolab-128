@@ -478,6 +478,38 @@ input[type="range"] {
   margin-bottom: 12px;
 }
 
+.backend-core-readout {
+  display: grid;
+  gap: 4px;
+  border-left: 3px solid var(--line);
+}
+
+.backend-core-readout[data-state="ready"],
+.backend-core-readout[data-state="verified"] {
+  border-left-color: var(--accent);
+}
+
+.backend-core-readout[data-state="running"] {
+  border-left-color: var(--accent-2);
+}
+
+.backend-core-readout[data-state="failed"],
+.backend-core-readout[data-state="unavailable"] {
+  border-left-color: var(--warning);
+}
+
+.backend-core-readout strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.backend-core-readout div,
+.backend-core-readout small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .scenario-synthesis-title {
   margin-top: 0;
 }

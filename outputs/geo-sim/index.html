@@ -1099,6 +1099,15 @@
             <button id="exportPhysicalCoupling">物理联动 JSON</button>
             <button id="exportPhysicalCouplingCSV">门控账本 CSV</button>
           </div>
+          <div class="section-title sub-title">
+            <h3>Rust 演算核心</h3>
+            <span>独立复核 · 本地 API</span>
+          </div>
+          <div id="rustBackendReadout" class="readout compact-readout backend-core-readout" data-state="connecting" aria-live="polite">正在连接 Rust 演算核心。</div>
+          <div class="button-row">
+            <button id="runRustBackendAudit">运行后端复核</button>
+            <button id="exportRustBackendAudit" disabled>导出后端报告</button>
+          </div>
           <div class="button-row engine-export-row">
             <button id="exportUnityScene">Unity 场景包</button>
             <button id="exportUnrealScene">Unreal 场景包</button>

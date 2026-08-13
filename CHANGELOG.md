@@ -4,10 +4,16 @@ This is the **single canonical changelog** for GeoLab 128. Application, renderer
 
 All notable changes to GeoLab 128 are documented here. The project follows semantic versioning while pre-1.0. The latest consolidation was completed on **2026-08-13**.
 
-## [Unreleased] - Updated 2026-08-13
+## [Unreleased]
+
+## [0.2.0] - 2026-08-13
 
 ### Added
 
+- Added a Rust workspace with a typed geographic scenario contract, strict unit/range/shape validation, Priority-Flood depression resolution, Horn slope, deterministic D8 routing, topological accumulation, hydroclimate partitioning, and independent process gates.
+- Added a bounded loopback-only Axum service with versioned health, capabilities, validation, and simulation endpoints; request-size, cell-count, concurrency, and execution-time limits; and structured error responses.
+- Added Electron sidecar lifecycle management, automatic 96 × 96 independent scenario verification, a live Rust-core readout, and an exportable backend verification report.
+- Added Rust formatting, Clippy, core/API tests, JavaScript client-contract tests, and desktop sidecar smoke coverage.
 - Added a cross-system physical-coupling ledger with eight conservation/process gates, eight directional coupling scores, limiting-link detection, method references, JSON export, and CSV export.
 - Added Unity Terrain scene packages with supported `2^n+1` 16-bit RAW heightfields, TGA surface masks, local ENU vectors, scale/elevation metadata, provenance, and import instructions.
 - Added Unreal Landscape scene packages with recommended 16-bit R16 dimensions, R8 weight layers, RAW JSON sidecars, calculated XY/Z scale, actor elevation, local vectors, provenance, and import instructions.
@@ -25,6 +31,9 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 
 ### Changed
 
+- Rewrote the public project page around user workflows, coupled capabilities, dual computation cores, 3D and engine interoperability, while removing handoff notes and development-residue wording.
+- Separated terrain point spacing from cell support area in the Rust contract so derivatives and volume accounting retain their correct dimensions across audit resolutions.
+- Updated desktop build and portable packaging workflows to compile and include the Rust service automatically.
 - Updated the CI checkout and Node setup actions to their Node 24-based v7 releases, removing the deprecated Node 20 action-runtime warning.
 - Replaced the temperature-only potential-evapotranspiration proxy with a FAO-56 Penman-Monteith structure using bounded radiation, humidity, wind, elevation-pressure, vapor-pressure, and terrain-exposure terms.
 - Reworked annual runoff into an explicit mass-conserving partition of precipitation and irrigation across demand, actual ET, runoff, groundwater recharge, and soil-storage change, with an NRCS curve-number event-response constraint.
@@ -40,6 +49,7 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 
 ### Fixed
 
+- Fixed the desktop runtime boundary so backend requests remain loopback-only, participate in smoke-test request auditing, receive managed process priority, and terminate with Electron.
 - Fixed local retention being applied to cumulative upstream discharge at every affected downstream cell; retention now removes only the newly generated local runoff volume before routing.
 - Fixed infrastructure storage capacity being counted as annual water supply even when no irrigation inflow is present.
 - Fixed physical water-closure gates to recompute the partition independently from raw raster terms, and extended accumulation checks to MFD receiver fractions.
@@ -48,10 +58,6 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 - Fixed duplicate and unreachable infrastructure-selection status branches.
 - Fixed null WebGL shader diagnostics, hidden-drawer keyboard focus, page-lifecycle resource cleanup, and incomplete startup error reporting.
 - Updated vulnerable transitive desktop-build dependencies within their compatible release ranges; the locked toolchain now reports zero known npm audit findings.
-
-### Planned
-
-- Reproducible benchmark cases, calibration workflows, uncertainty reporting, and broader regression coverage.
 
 ## [0.1.0] - 2026-08-11
 
@@ -68,5 +74,6 @@ This section is the preserved release history for the `v0.1.0` tag. It is not a 
 - This release establishes the public **teaching and exploratory prototype** baseline.
 - It does not claim calibrated or validated predictive performance.
 
-[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/laiyukai910-star/geolab-128/releases/tag/v0.1.0

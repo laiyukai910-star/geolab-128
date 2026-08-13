@@ -5,6 +5,8 @@ outputs/GeoLab-128-Local/
 outputs/GeoLab-128-Portable/
 outputs/GeoLab-128-Portable-Rebuilt/
 outputs/geo-sim-desktop/node_modules/
+outputs/geo-sim-desktop/backend/
+engine/target/
 
 .DS_Store
 Thumbs.db
