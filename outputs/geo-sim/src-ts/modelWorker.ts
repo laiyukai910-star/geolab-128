@@ -18,6 +18,7 @@ import {
   type KernelMutableModel
 } from "./modelKernel.js";
 import { createRustWasmKernel } from "./wasmAbi.js";
+import { createRetryableAsyncResource } from "./modelWorkerClient.js";
 
 type ModelOperation = "build" | "run" | "temporal" | "erode";
 
@@ -48,8 +49,8 @@ interface ModelWorkerScope {
 const MAX_AUTHORITATIVE_RESOLUTION = 512;
 const scope = globalThis as unknown as ModelWorkerScope;
 let taskQueue = Promise.resolve();
-let wasmKernelPromise: ReturnType<typeof loadWasmKernel> | null = null;
 let wasmRequestSequence = 0;
+const getWasmKernel = createRetryableAsyncResource(loadWasmKernel);
 
 scope.addEventListener("message", (event) => {
   taskQueue = taskQueue.then(() => handleRequest(event.data), () => handleRequest(event.data));
@@ -161,11 +162,6 @@ function directWasmTransport(): KernelTransport {
       ...(await getWasmKernel()).simulate(scenario)
     })
   };
-}
-
-function getWasmKernel() {
-  wasmKernelPromise ||= loadWasmKernel();
-  return wasmKernelPromise;
 }
 
 async function loadWasmKernel() {

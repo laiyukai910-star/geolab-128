@@ -225,14 +225,17 @@ function buildComparison(model, report) {
   };
 }
 class WorkerKernelTransport {
-  worker;
+  worker = null;
+  workerFactory;
   pending = /* @__PURE__ */ new Map();
   sequence = 0;
-  constructor() {
-    if (typeof Worker !== "function") throw new Error("Web Workers are unavailable in this runtime");
-    this.worker = new Worker(new URL("./rustKernelWorker.js", import.meta.url), { type: "module", name: "geolab-rust-wasm" });
-    this.worker.addEventListener("message", (event) => this.handleMessage(event.data));
-    this.worker.addEventListener("error", (event) => this.rejectAll(new Error(event.message || "Rust WASM worker failed")));
+  constructor(workerFactory) {
+    if (!workerFactory && typeof Worker !== "function") throw new Error("Web Workers are unavailable in this runtime");
+    this.workerFactory = workerFactory || (() => new Worker(
+      new URL("./rustKernelWorker.js", import.meta.url),
+      { type: "module", name: "geolab-rust-wasm" }
+    ));
+    this.ensureWorker();
   }
   capabilities() {
     return this.request({ kind: "capabilities" });
@@ -242,14 +245,39 @@ class WorkerKernelTransport {
   }
   request(request) {
     const id = (++this.sequence).toString(36);
+    const worker = this.ensureWorker();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error("Rust WASM worker request timed out"));
+        const error = new Error("Rust WASM worker request timed out");
+        reject(error);
+        this.invalidateWorker(worker, error);
       }, REQUEST_TIMEOUT_MS);
       this.pending.set(id, { resolve, reject, timer });
-      this.worker.postMessage({ id, ...request });
+      try {
+        worker.postMessage({ id, ...request });
+      } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
+  }
+  ensureWorker() {
+    if (this.worker) return this.worker;
+    const worker = this.workerFactory();
+    this.worker = worker;
+    worker.addEventListener("message", (event) => {
+      if (worker === this.worker) this.handleMessage(event.data);
+    });
+    worker.addEventListener("error", (event) => {
+      event.preventDefault?.();
+      this.invalidateWorker(worker, new Error(event.message || "Rust WASM worker failed"));
+    });
+    worker.addEventListener("messageerror", () => {
+      this.invalidateWorker(worker, new Error("Rust WASM worker returned an unreadable message"));
+    });
+    return worker;
   }
   handleMessage(response) {
     const pending = this.pending.get(response.id);
@@ -259,7 +287,10 @@ class WorkerKernelTransport {
     if (response.ok) pending.resolve(response.payload);
     else pending.reject(new Error(response.error));
   }
-  rejectAll(error) {
+  invalidateWorker(worker, error) {
+    if (worker !== this.worker) return;
+    worker.terminate();
+    this.worker = null;
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(error);
@@ -315,6 +346,7 @@ function clampInteger(value, minimum, maximum) {
   return Math.round(clamp(finite(value, minimum), minimum, maximum));
 }
 export {
+  WorkerKernelTransport,
   buildBackendScenario,
   configuredBackendUrl,
   inspectBackend,

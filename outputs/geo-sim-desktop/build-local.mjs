@@ -67,7 +67,7 @@ const appPaths = await packager({
 console.log(JSON.stringify({ backend, browser, vendorRoot, wasm, appPaths, status: "packaged" }, null, 2));
 
 async function prepareBrowserRuntime() {
-  const entries = ["backendClient", "modelKernel", "modelWorker", "rustKernelWorker", "wasmAbi"];
+  const entries = ["backendClient", "modelKernel", "modelWorkerClient", "modelWorker", "rustKernelWorker", "wasmAbi"];
   const outputs = [];
   for (const entry of entries) {
     const source = path.join(webRoot, "src-ts", `${entry}.ts`);

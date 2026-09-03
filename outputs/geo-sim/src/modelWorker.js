@@ -15,11 +15,12 @@ import {
   skippedRustAuthoritativeState
 } from "./modelKernel.js";
 import { createRustWasmKernel } from "./wasmAbi.js";
+import { createRetryableAsyncResource } from "./modelWorkerClient.js";
 const MAX_AUTHORITATIVE_RESOLUTION = 512;
 const scope = globalThis;
 let taskQueue = Promise.resolve();
-let wasmKernelPromise = null;
 let wasmRequestSequence = 0;
+const getWasmKernel = createRetryableAsyncResource(loadWasmKernel);
 scope.addEventListener("message", (event) => {
   taskQueue = taskQueue.then(() => handleRequest(event.data), () => handleRequest(event.data));
 });
@@ -121,10 +122,6 @@ function directWasmTransport() {
       ...(await getWasmKernel()).simulate(scenario)
     })
   };
-}
-function getWasmKernel() {
-  wasmKernelPromise ||= loadWasmKernel();
-  return wasmKernelPromise;
 }
 async function loadWasmKernel() {
   const wasmUrl = new URL("../vendor/geolab/geolab_core.wasm", scope.location.href);

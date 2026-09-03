@@ -379,8 +379,9 @@ function buildComparison(model: GeoModel, report: SimulationReport) {
   };
 }
 
-class WorkerKernelTransport implements KernelTransport {
-  private readonly worker: Worker;
+export class WorkerKernelTransport implements KernelTransport {
+  private worker: Worker | null = null;
+  private readonly workerFactory: () => Worker;
   private readonly pending = new Map<string, {
     resolve(value: unknown): void;
     reject(reason: Error): void;
@@ -388,11 +389,13 @@ class WorkerKernelTransport implements KernelTransport {
   }>();
   private sequence = 0;
 
-  constructor() {
-    if (typeof Worker !== "function") throw new Error("Web Workers are unavailable in this runtime");
-    this.worker = new Worker(new URL("./rustKernelWorker.js", import.meta.url), { type: "module", name: "geolab-rust-wasm" });
-    this.worker.addEventListener("message", (event: MessageEvent<WorkerResponse>) => this.handleMessage(event.data));
-    this.worker.addEventListener("error", (event) => this.rejectAll(new Error(event.message || "Rust WASM worker failed")));
+  constructor(workerFactory?: () => Worker) {
+    if (!workerFactory && typeof Worker !== "function") throw new Error("Web Workers are unavailable in this runtime");
+    this.workerFactory = workerFactory || (() => new Worker(
+      new URL("./rustKernelWorker.js", import.meta.url),
+      { type: "module", name: "geolab-rust-wasm" }
+    ));
+    this.ensureWorker();
   }
 
   capabilities() {
@@ -405,14 +408,40 @@ class WorkerKernelTransport implements KernelTransport {
 
   private request(request: Omit<WorkerRequest, "id">) {
     const id = (++this.sequence).toString(36);
+    const worker = this.ensureWorker();
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error("Rust WASM worker request timed out"));
+        const error = new Error("Rust WASM worker request timed out");
+        reject(error);
+        this.invalidateWorker(worker, error);
       }, REQUEST_TIMEOUT_MS);
       this.pending.set(id, { resolve, reject, timer });
-      this.worker.postMessage({ id, ...request });
+      try {
+        worker.postMessage({ id, ...request });
+      } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
+  }
+
+  private ensureWorker() {
+    if (this.worker) return this.worker;
+    const worker = this.workerFactory();
+    this.worker = worker;
+    worker.addEventListener("message", (event: MessageEvent<WorkerResponse>) => {
+      if (worker === this.worker) this.handleMessage(event.data);
+    });
+    worker.addEventListener("error", (event) => {
+      event.preventDefault?.();
+      this.invalidateWorker(worker, new Error(event.message || "Rust WASM worker failed"));
+    });
+    worker.addEventListener("messageerror", () => {
+      this.invalidateWorker(worker, new Error("Rust WASM worker returned an unreadable message"));
+    });
+    return worker;
   }
 
   private handleMessage(response: WorkerResponse) {
@@ -424,7 +453,10 @@ class WorkerKernelTransport implements KernelTransport {
     else pending.reject(new Error(response.error));
   }
 
-  private rejectAll(error: Error) {
+  private invalidateWorker(worker: Worker, error: Error) {
+    if (worker !== this.worker) return;
+    worker.terminate();
+    this.worker = null;
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(error);

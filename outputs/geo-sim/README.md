@@ -35,10 +35,11 @@ Open <http://127.0.0.1:5179/>. The bundled Rust WASM Worker is used automaticall
 | `src/terrainRenderer.js` | Three.js terrain, water, vegetation, wildlife, infrastructure, wind, hazard, and subsurface rendering. |
 | `src-ts/backendClient.ts` | Strict scenario types, bounded resampling, native/WASM selection, request control, and comparison reporting. |
 | `src-ts/modelKernel.ts` | Two-phase validation, JS/Rust comparison metrics, rollback, and atomic working-layer commit. |
+| `src-ts/modelWorkerClient.ts` | Recoverable typed Worker lifecycle, request isolation, diagnostics, cancellation, and transient-resource retry. |
 | `src-ts/modelWorker.ts` | Serialized model jobs, native/WASM execution selection, commit orchestration, and zero-copy return transfers. |
 | `src-ts/wasmAbi.ts` | Validated Rust WASM memory ABI and JSON envelope decoding. |
 | `src-ts/rustKernelWorker.ts` | Off-main-thread Rust kernel loading and execution. |
-| `src/backendClient.js`, `src/modelKernel.js`, `src/modelWorker.js`, `src/wasmAbi.js`, `src/rustKernelWorker.js` | Generated browser modules; edit the TypeScript sources instead. |
+| `src/backendClient.js`, `src/modelKernel.js`, `src/modelWorkerClient.js`, `src/modelWorker.js`, `src/wasmAbi.js`, `src/rustKernelWorker.js` | Generated browser modules; edit the TypeScript sources instead. |
 | `src/dataAdapters.js` | GeoTIFF, CSV, JSON, and GeoJSON parsing, unit normalization, bounds interpretation, and provenance. |
 | `src/physicalCoupling.js` | Cross-system conservation gates and directional coupling ledger. |
 | `src/landscapeEcology.js` | Habitat blocks, ecological connectivity, biodiversity, carrying capacity, and release screening. |

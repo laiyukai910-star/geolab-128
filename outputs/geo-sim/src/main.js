@@ -72,6 +72,7 @@ import {
   inspectBackend,
   runBackendVerification
 } from "./backendClient.js";
+import { ModelWorkerClient } from "./modelWorkerClient.js";
 import { mergeLayerBundle, readLayerFile, readLayerObject, summarizeLayerBundle } from "./dataAdapters.js";
 import {
   buildAcquisitionPlan,
@@ -368,9 +369,7 @@ let demProductCandidates = null;
 let gageCandidates = null;
 let osmInfrastructure = null;
 let modelWorker = null;
-let workerRequestId = 0;
 let modelJobSerial = 0;
-const workerRequests = new Map();
 const rustBackendEndpoint = configuredBackendUrl();
 let rustBackendState = {
   status: "connecting",
@@ -704,36 +703,21 @@ function disposeApplication(event) {
   if (timePlayTimer) clearInterval(timePlayTimer);
   timePlayTimer = null;
   modelJobSerial += 1;
-  workerRequests.clear();
-  modelWorker?.terminate?.();
+  modelWorker?.dispose?.();
   modelWorker = null;
   renderer?.dispose?.();
   renderer = null;
 }
 
 function createModelWorker() {
-  if (!window.Worker) return null;
   try {
-    const worker = new Worker(new URL("./modelWorker.js", import.meta.url), { type: "module" });
-    worker.addEventListener("message", (event) => {
-      const { id, ok, model: nextModel, transferDiagnostics, error } = event.data || {};
-      const request = workerRequests.get(id);
-      if (!request) return;
-      workerRequests.delete(id);
-      if (ok) {
+    return new ModelWorkerClient({
+      workerUrl: new URL("./modelWorker.js", import.meta.url),
+      onTransferDiagnostics(transferDiagnostics) {
         lastWorkerTransferDiagnostics = transferDiagnostics || null;
         if (typeof globalThis !== "undefined") globalThis.__geoLabWorkerTransferStats = lastWorkerTransferDiagnostics;
-        request.resolve(nextModel);
       }
-      else request.reject(new Error(error || "Worker failed"));
     });
-    worker.addEventListener("error", (event) => {
-      for (const request of workerRequests.values()) {
-        request.reject(new Error(event.message || "Worker error"));
-      }
-      workerRequests.clear();
-    });
-    return worker;
   } catch {
     return null;
   }
@@ -2372,17 +2356,13 @@ async function applyErosion() {
 }
 
 async function executeModelTask(op, payload, fallback) {
+  if (!modelWorker) modelWorker = createModelWorker();
   if (!modelWorker) return fallback();
-  const id = ++workerRequestId;
   try {
-    const promise = new Promise((resolve, reject) => {
-      workerRequests.set(id, { resolve, reject });
-    });
-    modelWorker.postMessage({ id, op, ...payload, rustBackendEndpoint });
-    return await promise;
+    return await modelWorker.execute(op, payload, rustBackendEndpoint);
   } catch (error) {
+    if (error?.name === "AbortError") return null;
     console.warn("后台线程不可用，回退到主线程执行", error);
-    workerRequests.delete(id);
     return fallback();
   }
 }

@@ -6,6 +6,21 @@ All notable changes to GeoLab 128 are documented here. The project follows seman
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-03
+
+### Added
+
+- Added a strict TypeScript model-Worker client with isolated request ownership, transfer diagnostics, explicit disposal, fatal-error invalidation, and automatic Worker recreation.
+- Added deterministic recovery tests for model-Worker crashes, unreadable messages, lifecycle cancellation, Rust audit-Worker crashes, and transient WASM initialization failures.
+
+### Fixed
+
+- Fixed model generation becoming permanently unresponsive after a module Worker error by rejecting in-flight work, retiring the failed instance, falling back for the current operation, and creating a fresh Worker for the next request.
+- Fixed the independent Rust WASM audit transport retaining a failed Worker until every later request timed out; errors, message-decoding failures, and timeouts now invalidate the transport instance and permit recovery.
+- Fixed a transient first-load failure of the bundled Rust WASM binary being cached forever inside the model Worker.
+- Fixed normal page shutdown being treated as a computation failure and incorrectly triggering a main-thread model rebuild while the application was closing.
+- Updated vulnerable transitive `fast-uri` and `@xmldom/xmldom` build dependencies and added a high-severity dependency audit to CI.
+
 ## [0.5.0] - 2026-08-13
 
 ### Added
@@ -154,7 +169,8 @@ This section is the preserved release history for the `v0.1.0` tag. It is not a 
 - This release establishes the public **teaching and exploratory prototype** baseline.
 - It does not claim calibrated or validated predictive performance.
 
-[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/laiyukai910-star/geolab-128/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.2.0...v0.3.0

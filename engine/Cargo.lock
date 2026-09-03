@@ -141,14 +141,14 @@ dependencies = [
 
 [[package]]
 name = "geolab-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "geolab-server"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "axum",
  "geolab-core",
@@ -164,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "geolab-wasm"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "geolab-core",
  "serde",

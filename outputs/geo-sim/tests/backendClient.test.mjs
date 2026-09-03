@@ -3,8 +3,38 @@ import {
   buildBackendScenario,
   configuredBackendUrl,
   inspectBackend,
-  runBackendVerification
+  runBackendVerification,
+  WorkerKernelTransport
 } from "../src/backendClient.js";
+
+class FakeWorker {
+  listeners = new Map();
+  messages = [];
+  terminated = false;
+
+  addEventListener(type, listener) {
+    const listeners = this.listeners.get(type) || [];
+    listeners.push(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  postMessage(message) {
+    this.messages.push(message);
+  }
+
+  terminate() {
+    this.terminated = true;
+  }
+
+  emit(type, data) {
+    for (const listener of this.listeners.get(type) || []) listener(data);
+  }
+
+  reply(payload) {
+    const request = this.messages.at(-1);
+    this.emit("message", { data: { id: request.id, ok: true, payload } });
+  }
+}
 
 const n = 4;
 const length = n * n;
@@ -134,6 +164,21 @@ const wasmVerification = await runBackendVerification(model, params, null, {
 assert.equal(wasmVerification.transport, "browser-wasm");
 assert.equal(wasmVerification.requestId, "wasm-test-1");
 assert.equal(wasmVerification.report.summary.passedGateCount, 12);
+
+const workers = [];
+const recoverableTransport = new WorkerKernelTransport(() => {
+  const worker = new FakeWorker();
+  workers.push(worker);
+  return worker;
+});
+const interruptedCapabilities = recoverableTransport.capabilities();
+workers[0].emit("error", { message: "synthetic WASM worker crash", preventDefault() {} });
+await assert.rejects(interruptedCapabilities, /synthetic WASM worker crash/);
+assert.equal(workers[0].terminated, true);
+const recoveredCapabilities = recoverableTransport.capabilities();
+assert.equal(workers.length, 2);
+workers[1].reply({ apiVersion: "1.0", engine: "geolab-core-rust" });
+assert.equal((await recoveredCapabilities).engine, "geolab-core-rust");
 
 console.log("Rust native/WASM kernel client tests passed");
 
