@@ -1,4 +1,10 @@
 import * as THREE from "three";
+import {
+  assetPipelineDiagnostics,
+  normalizeRenderDetailQuality,
+  proceduralDetailProfile,
+  proceduralMaterialClass
+} from "./assetPipeline.js";
 
 const SEMANTIC_ASSET_KIND = new Map([
   ["岩石露头", "fractured-rock"], ["坡麓碎屑", "talus-cluster"], ["高山雪斑", "snow-drift"],
@@ -61,9 +67,9 @@ export function semanticAssetKind(label) {
   return SEMANTIC_ASSET_KIND.get(label) || null;
 }
 
-export function createSemanticAssetGeometry(label, quality = "ultra") {
+export function createSemanticAssetGeometry(label, quality = "ultra", variant = 0) {
   const kind = semanticAssetKind(label);
-  return kind ? createProceduralGeometry(kind, quality) : null;
+  return kind ? createProceduralGeometry(kind, quality, variant) : null;
 }
 
 export function wildlifeProceduralKind(species, part) {
@@ -91,7 +97,9 @@ export function wildlifeProceduralKind(species, part) {
   return "wildlife-torso";
 }
 
-export function createProceduralGeometry(kind, quality = "ultra") {
+export function createProceduralGeometry(kind, quality = "ultra", variant = 0) {
+  quality = normalizeRenderDetailQuality(quality);
+  variant = Math.max(0, Math.floor(Number(variant) || 0));
   let geometry;
   switch (kind) {
     case "setback-tower": geometry = createSetbackTowerGeometry(quality); break;
@@ -205,22 +213,25 @@ export function createProceduralGeometry(kind, quality = "ultra") {
     case "wildlife-mane": geometry = createWildlifeMane(quality); break;
     default: geometry = createChamferedSlab(quality, 0.05); break;
   }
-  return tagProceduralGeometry(geometry, kind);
+  return tagProceduralGeometry(applyProceduralVariant(geometry, kind, quality, variant), kind, quality, variant);
 }
 
 export function proceduralAssetDiagnostics() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 3,
     assetKindCount: PROCEDURAL_ASSET_KINDS.length,
     semanticBindingCount: SEMANTIC_ASSET_KIND.size,
-    allKinds: PROCEDURAL_ASSET_KINDS
+    allKinds: PROCEDURAL_ASSET_KINDS,
+    pipeline: assetPipelineDiagnostics()
   };
 }
 
 function detail(quality) {
-  if (quality === "exhaustive") return { radial: 18, curve: 12, lobes: 7, bars: 8 };
-  if (quality === "ultra") return { radial: 14, curve: 9, lobes: 6, bars: 7 };
-  return { radial: 10, curve: 6, lobes: 5, bars: 5 };
+  return proceduralDetailProfile(quality);
+}
+
+function qualityCount(quality, high, ultra, exhaustive) {
+  return quality === "exhaustive" ? exhaustive : quality === "ultra" ? ultra : high;
 }
 
 function createSetbackTowerGeometry(quality) {
@@ -264,7 +275,7 @@ function createLowriseGeometry(quality) {
 
 function createIndustrialGeometry(quality) {
   const parts = [part(chamferedBox(quality), [0, -0.14, 0], [1, 0.72, 1])];
-  const teeth = quality === "high" ? 4 : 6;
+  const teeth = qualityCount(quality, 4, 7, 11);
   for (let i = 0; i < teeth; i += 1) {
     const x = -0.42 + i * (0.84 / Math.max(1, teeth - 1));
     parts.push(part(wedgeGeometry(), [x, 0.32, 0], [0.18, 0.25, 1], [0, 0, Math.PI / 2]));
@@ -311,7 +322,7 @@ function createLandmarkGeometry(quality) {
 }
 
 function createFracturedRockGeometry(quality) {
-  const count = quality === "exhaustive" ? 7 : quality === "ultra" ? 5 : 4;
+  const count = qualityCount(quality, 5, 8, 13);
   const parts = [];
   for (let i = 0; i < count; i += 1) {
     const geometry = deformedPolyhedron(quality, 0.14 + i * 0.37);
@@ -322,7 +333,7 @@ function createFracturedRockGeometry(quality) {
 }
 
 function createTalusGeometry(quality) {
-  const count = quality === "exhaustive" ? 11 : quality === "ultra" ? 8 : 6;
+  const count = qualityCount(quality, 7, 12, 20);
   const parts = [];
   for (let i = 0; i < count; i += 1) {
     const a = i * 2.17;
@@ -392,7 +403,7 @@ function createShrubGeometry(quality, understory) {
 
 function createReedGeometry(quality) {
   const d = detail(quality);
-  const count = quality === "exhaustive" ? 15 : quality === "ultra" ? 11 : 8;
+  const count = qualityCount(quality, 10, 16, 26);
   const parts = [];
   for (let i = 0; i < count; i += 1) {
     const a = i * 2.399;
@@ -405,7 +416,7 @@ function createReedGeometry(quality) {
 }
 
 function createCropRowGeometry(quality) {
-  const rows = quality === "high" ? 4 : 6;
+  const rows = qualityCount(quality, 5, 8, 14);
   const parts = [];
   for (let i = 0; i < rows; i += 1) {
     const z = -0.42 + i * (0.84 / Math.max(1, rows - 1));
@@ -419,7 +430,7 @@ function createCropRowGeometry(quality) {
 }
 
 function createGrassGeometry(quality) {
-  const blades = quality === "exhaustive" ? 13 : quality === "ultra" ? 10 : 7;
+  const blades = qualityCount(quality, 8, 14, 24);
   const parts = [];
   for (let i = 0; i < blades; i += 1) {
     const a = i * 2.399;
@@ -441,7 +452,7 @@ function createArchitecturalCrown(quality) {
 }
 
 function createFacadeBand(quality, vertical) {
-  const count = quality === "exhaustive" ? 9 : quality === "ultra" ? 7 : 5;
+  const count = qualityCount(quality, 6, 10, 16);
   const parts = [part(chamferedBox(quality), [0, 0, 0], [1, 0.08, 0.16])];
   for (let i = 0; i < count; i += 1) {
     const t = -0.44 + i * 0.88 / Math.max(1, count - 1);
@@ -453,7 +464,7 @@ function createFacadeBand(quality, vertical) {
 }
 
 function createCurtainWall(quality) {
-  const count = quality === "exhaustive" ? 8 : quality === "ultra" ? 6 : 4;
+  const count = qualityCount(quality, 5, 9, 15);
   const parts = [part(new THREE.BoxGeometry(1, 1, 1), [0, 0, -0.02], [1, 1, 0.05])];
   for (let i = 0; i <= count; i += 1) {
     const p = -0.5 + i / count;
@@ -529,7 +540,7 @@ function createPodiumBase(quality) {
 
 function createCrownedRoad(quality) {
   const parts = [{ geometry: crownedPrism() }];
-  const drains = quality === "high" ? 3 : 5;
+  const drains = qualityCount(quality, 4, 7, 11);
   for (let i = 0; i < drains; i += 1) {
     const x = -0.42 + i * 0.84 / Math.max(1, drains - 1);
     parts.push(part(new THREE.BoxGeometry(1, 1, 1), [x, -0.38, 0.43], [0.08, 0.05, 0.08]));
@@ -598,7 +609,7 @@ function createCanalBank(quality) {
 
 function createLevee(quality) {
   const parts = [part(trapezoidPrism(), [0, 0, 0])];
-  const stones = quality === "high" ? 4 : 7;
+  const stones = qualityCount(quality, 5, 9, 15);
   for (let i = 0; i < stones; i += 1) {
     parts.push(part(deformedPolyhedron("high", i), [-0.36 + i * 0.72 / Math.max(1, stones - 1), -0.2 + (i % 2) * 0.12, 0.42], [0.12, 0.1, 0.08]));
   }
@@ -606,7 +617,7 @@ function createLevee(quality) {
 }
 
 function createButtressDam(quality) {
-  const count = quality === "high" ? 4 : 6;
+  const count = qualityCount(quality, 5, 8, 12);
   const parts = [part(wedgeGeometry(), [0, 0, 0], [1, 1, 0.42], [0, Math.PI / 2, 0])];
   for (let i = 0; i < count; i += 1) {
     const x = -0.42 + i * 0.84 / Math.max(1, count - 1);
@@ -617,7 +628,7 @@ function createButtressDam(quality) {
 }
 
 function createSpillway(quality) {
-  const steps = quality === "exhaustive" ? 8 : quality === "ultra" ? 6 : 5;
+  const steps = qualityCount(quality, 6, 9, 14);
   const parts = [];
   for (let i = 0; i < steps; i += 1) {
     const t = i / steps;
@@ -637,7 +648,7 @@ function createSluiceGate(quality) {
 }
 
 function createGroovedRunway(quality) {
-  const grooves = quality === "high" ? 5 : 9;
+  const grooves = qualityCount(quality, 7, 12, 20);
   const parts = [part(chamferedBox(quality), [0, 0, 0], [1, 0.16, 1])];
   for (let i = 0; i < grooves; i += 1) {
     const x = -0.44 + i * 0.88 / Math.max(1, grooves - 1);
@@ -710,7 +721,7 @@ function createRibbedSpire(quality) {
 function createStadiumBowl(quality) {
   const d = detail(quality);
   const parts = [part(new THREE.TorusGeometry(0.34, 0.16, Math.ceil(d.radial / 2), d.radial * 2), [0, 0, 0], [1.28, 0.62, 0.9], [Math.PI / 2, 0, 0])];
-  const tiers = quality === "high" ? 3 : 5;
+  const tiers = qualityCount(quality, 4, 7, 10);
   for (let i = 0; i < tiers; i += 1) parts.push(part(new THREE.TorusGeometry(0.18 + i * 0.045, 0.018, 4, d.radial * 2), [0, -0.16 + i * 0.075, 0], [1.35, 1, 0.82], [Math.PI / 2, 0, 0]));
   for (let i = 0; i < 6; i += 1) {
     const a = i / 6 * Math.PI * 2;
@@ -752,7 +763,7 @@ function createPortico(quality) {
 }
 
 function createLouverScreen(quality) {
-  const bars = quality === "high" ? 6 : 10;
+  const bars = qualityCount(quality, 8, 14, 22);
   const parts = [];
   for (let i = 0; i < bars; i += 1) {
     const y = -0.45 + i * 0.9 / Math.max(1, bars - 1);
@@ -785,7 +796,7 @@ function createGreenhouseBay(quality) {
 }
 
 function createMarketAwning(quality) {
-  const ribs = quality === "high" ? 5 : 8;
+  const ribs = qualityCount(quality, 6, 10, 16);
   const parts = [part(curvedRibbon(quality, 0.1), [0, 0.16, 0], [1, 0.4, 1], [0.12, 0, 0])];
   for (let i = 0; i < ribs; i += 1) {
     const x = -0.46 + i * 0.92 / Math.max(1, ribs - 1);
@@ -796,7 +807,7 @@ function createMarketAwning(quality) {
 }
 
 function createRetainingWall(quality) {
-  const courses = quality === "high" ? 4 : 7;
+  const courses = qualityCount(quality, 5, 10, 16);
   const parts = [part(wedgeGeometry(), [0, 0, 0], [1, 1, 0.7], [0, Math.PI / 2, 0])];
   for (let y = 0; y < courses; y += 1) {
     const count = 5 + (y % 2);
@@ -808,7 +819,7 @@ function createRetainingWall(quality) {
 }
 
 function createQuarryBench(quality) {
-  const steps = quality === "high" ? 4 : 6;
+  const steps = qualityCount(quality, 5, 8, 12);
   const parts = [];
   for (let i = 0; i < steps; i += 1) {
     const t = i / steps;
@@ -842,7 +853,7 @@ function createHelipad(quality) {
 
 function createPatternedSurface(quality, mode) {
   const parts = [part(chamferedBox(quality), [0, -0.44, 0], [1, 0.12, 1])];
-  const count = quality === "high" ? 4 : 6;
+  const count = qualityCount(quality, 5, 8, 13);
   for (let i = 0; i < count; i += 1) {
     const p = -0.4 + i * 0.8 / Math.max(1, count - 1);
     parts.push(part(new THREE.BoxGeometry(1, 1, 1), [p, -0.36, 0], [0.025, 0.025, 0.88]));
@@ -873,7 +884,7 @@ function createGardenCourt(quality) {
 }
 
 function createTrussTower(quality) {
-  const levels = quality === "high" ? 4 : 6;
+  const levels = qualityCount(quality, 5, 8, 12);
   const parts = [];
   for (const [x, z] of [[-0.32, -0.28], [0.32, -0.28], [-0.32, 0.28], [0.32, 0.28]]) {
     parts.push(part(new THREE.BoxGeometry(1, 1, 1), [x, 0, z], [0.055, 1.1, 0.055], [z * 0.3, 0, -x * 0.3]));
@@ -1015,7 +1026,7 @@ function createCraneTower(quality) {
 }
 
 function createCraneBoom(quality) {
-  const bays = quality === "high" ? 5 : 8;
+  const bays = qualityCount(quality, 6, 11, 18);
   const parts = [];
   for (const y of [-0.28, 0.28]) parts.push(part(new THREE.BoxGeometry(1, 1, 1), [0, y, 0], [1, 0.05, 0.05]));
   for (let i = 0; i <= bays; i += 1) {
@@ -1028,7 +1039,7 @@ function createCraneBoom(quality) {
 }
 
 function createWindbreak(quality) {
-  const bars = quality === "high" ? 7 : 11;
+  const bars = qualityCount(quality, 9, 15, 24);
   const parts = [];
   for (let i = 0; i < bars; i += 1) {
     const x = -0.46 + i * 0.92 / Math.max(1, bars - 1);
@@ -1047,7 +1058,7 @@ function createFloodBase(quality) {
 
 function createFirebreak(quality) {
   const parts = [part(chamferedBox(quality), [0, -0.44, 0], [1, 0.12, 1])];
-  const count = quality === "high" ? 6 : 10;
+  const count = qualityCount(quality, 8, 14, 22);
   for (let i = 0; i < count; i += 1) parts.push(part(deformedPolyhedron("high", i), [-0.44 + i * 0.88 / Math.max(1, count - 1), -0.32, Math.sin(i * 2.2) * 0.28], [0.07, 0.05, 0.07]));
   return mergeAssembly(parts);
 }
@@ -1132,7 +1143,7 @@ function createWildlifeLegPair(quality) {
 }
 
 function createWildlifeWing(quality) {
-  const feathers = quality === "exhaustive" ? 9 : quality === "ultra" ? 7 : 5;
+  const feathers = qualityCount(quality, 6, 10, 16);
   const parts = [part(wingMembraneGeometry(quality), [0, 0, 0])];
   for (let i = 0; i < feathers; i += 1) {
     const t = i / Math.max(1, feathers - 1);
@@ -1176,7 +1187,7 @@ function createWildlifeTail(quality, flat) {
 }
 
 function createWildlifeFeatherTail(quality) {
-  const count = quality === "high" ? 5 : 7;
+  const count = qualityCount(quality, 6, 10, 15);
   const parts = [];
   for (let i = 0; i < count; i += 1) {
     const a = -0.42 + i * 0.84 / Math.max(1, count - 1);
@@ -1229,7 +1240,7 @@ function createWildlifeMane(quality) {
 }
 
 function createRippledSurfaceGeometry(quality, amplitude) {
-  const segments = quality === "exhaustive" ? 18 : quality === "ultra" ? 12 : 8;
+  const segments = detail(quality).surfaceSegments;
   const geometry = new THREE.PlaneGeometry(1, 1, segments, segments);
   geometry.rotateX(-Math.PI / 2);
   const position = geometry.getAttribute("position");
@@ -1246,6 +1257,7 @@ function createChamferedBoxGeometry(quality, bevel = 0.06) {
 }
 
 function chamferedBox(quality, bevel = 0.055) {
+  const d = detail(quality);
   const b = Math.min(0.18, Math.max(0.01, bevel));
   const shape = new THREE.Shape();
   shape.moveTo(-0.5 + b, -0.5);
@@ -1255,9 +1267,9 @@ function chamferedBox(quality, bevel = 0.055) {
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth: 1,
     steps: 1,
-    curveSegments: quality === "exhaustive" ? 2 : 1,
+    curveSegments: Math.max(1, Math.ceil(d.bevelSegments / 2)),
     bevelEnabled: quality !== "high",
-    bevelSegments: quality === "exhaustive" ? 2 : 1,
+    bevelSegments: d.bevelSegments,
     bevelSize: quality === "high" ? 0 : b * 0.22,
     bevelThickness: quality === "high" ? 0 : b * 0.22
   });
@@ -1293,7 +1305,7 @@ function ringLoft(profile, radialSegments, twist) {
 }
 
 function deformedPolyhedron(quality, phase = 0) {
-  const geometry = new THREE.IcosahedronGeometry(0.5, quality === "exhaustive" ? 2 : quality === "ultra" ? 1 : 0);
+  const geometry = new THREE.IcosahedronGeometry(0.5, detail(quality).organicSubdivision);
   const position = geometry.getAttribute("position");
   for (let i = 0; i < position.count; i += 1) {
     const x = position.getX(i);
@@ -1318,7 +1330,7 @@ function deformedHemisphere(radial) {
 }
 
 function organicEllipsoid(quality, phase) {
-  const geometry = new THREE.IcosahedronGeometry(0.5, quality === "exhaustive" ? 2 : 1);
+  const geometry = new THREE.IcosahedronGeometry(0.5, detail(quality).organicSubdivision);
   const position = geometry.getAttribute("position");
   for (let i = 0; i < position.count; i += 1) {
     const x = position.getX(i);
@@ -1369,15 +1381,16 @@ function ridgedStrip(quality) {
 }
 
 function extrudedShape(points, depth, quality) {
+  const d = detail(quality);
   const shape = new THREE.Shape();
   points.forEach(([x, y], index) => index ? shape.lineTo(x, y) : shape.moveTo(x, y));
   shape.closePath();
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth,
     steps: 1,
-    curveSegments: quality === "exhaustive" ? 3 : quality === "ultra" ? 2 : 1,
+    curveSegments: Math.max(1, d.bevelSegments),
     bevelEnabled: quality !== "high",
-    bevelSegments: 1,
+    bevelSegments: d.bevelSegments,
     bevelSize: quality === "high" ? 0 : Math.min(0.025, depth * 0.18),
     bevelThickness: quality === "high" ? 0 : Math.min(0.025, depth * 0.18)
   });
@@ -1463,9 +1476,61 @@ function mergeAssembly(parts) {
   return geometry;
 }
 
-function tagProceduralGeometry(geometry, kind) {
+function applyProceduralVariant(geometry, kind, quality, variant) {
+  if (!geometry?.getAttribute("position")) return geometry;
+  const count = Math.max(0, Math.floor(Number(variant) || 0));
+  if (count === 0) return geometry;
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox;
+  const height = Math.max(1e-6, (bounds?.max.y ?? 0.5) - (bounds?.min.y ?? -0.5));
+  const minY = bounds?.min.y ?? -0.5;
+  const position = geometry.getAttribute("position");
+  const materialClass = proceduralMaterialClass(kind);
+  const phase = count * 1.61803398875 + String(kind).length * 0.173;
+  const qualityGain = quality === "exhaustive" ? 1 : quality === "ultra" ? 0.72 : 0.45;
+  for (let i = 0; i < position.count; i += 1) {
+    let x = position.getX(i);
+    let y = position.getY(i);
+    let z = position.getZ(i);
+    const normalizedY = Math.max(0, Math.min(1, (y - minY) / height));
+    const field = Math.sin(x * 11.7 + z * 7.9 + y * 5.3 + phase) * 0.6
+      + Math.cos(z * 13.1 - x * 4.7 + phase * 0.7) * 0.4;
+    if (materialClass === "organic" || materialClass === "wildlife" || materialClass === "mineral") {
+      const amplitude = (materialClass === "mineral" ? 0.045 : 0.032) * qualityGain;
+      const radial = 1 + field * amplitude + Math.sin(normalizedY * Math.PI + phase) * amplitude * 0.55;
+      x *= radial * (1 + count * 0.006);
+      z *= radial * (1 - count * 0.004);
+      y = minY + (y - minY) * (1 + Math.sin(phase) * 0.018) + field * amplitude * 0.12;
+    } else if (materialClass === "water") {
+      y += field * 0.009 * qualityGain;
+    } else if (materialClass === "masonry") {
+      const taper = 1 + (normalizedY - 0.5) * Math.sin(phase) * 0.025;
+      const twist = (normalizedY - 0.5) * Math.cos(phase) * 0.022;
+      const cos = Math.cos(twist);
+      const sin = Math.sin(twist);
+      const rotatedX = (x * cos - z * sin) * taper;
+      z = (x * sin + z * cos) * (2 - taper);
+      x = rotatedX;
+    } else {
+      x *= 1 + Math.sin(phase) * 0.012;
+      z *= 1 + Math.cos(phase) * 0.012;
+    }
+    position.setXYZ(i, x, y, z);
+  }
+  position.needsUpdate = true;
+  return geometry;
+}
+
+function tagProceduralGeometry(geometry, kind, quality, variant) {
   geometry.type = `GeoLab${kind.split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join("")}Geometry`;
   geometry.userData.proceduralKind = kind;
+  geometry.userData.assetPipelineVersion = 3;
+  geometry.userData.quality = quality;
+  geometry.userData.variant = variant;
+  geometry.userData.vertexCount = geometry.getAttribute("position")?.count || 0;
+  geometry.userData.triangleCount = geometry.index
+    ? Math.floor(geometry.index.count / 3)
+    : Math.floor((geometry.getAttribute("position")?.count || 0) / 3);
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();

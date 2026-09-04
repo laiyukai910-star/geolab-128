@@ -16,6 +16,14 @@ import {
   semanticAssetKind,
   wildlifeProceduralKind
 } from "./proceduralAssets.js";
+import {
+  assetPipelineDiagnostics,
+  block3DRendererFacilityTypes,
+  createRenderDetailBudgetPlan as detailBudgetPlan,
+  proceduralAssetVariantCount,
+  proceduralAssetVariantIndex,
+  proceduralMaterialProfile
+} from "./assetPipeline.js";
 
 function cameraHome(sizeKm) {
   return {
@@ -52,11 +60,7 @@ function terrainCameraFocusY(model, params = {}) {
 
 const BUILDING_HEIGHT_VISUAL_SCALE = 1.08;
 const MAX_BUILDING_INSTANCES = 90000;
-const MAX_BUILDING_DIAGNOSTIC_INSTANCES = 6000;
 const MAX_FACILITY_INSTANCES = 52000;
-const MAX_VEGETATION_INSTANCES = 12000;
-const MAX_TERRAIN_DETAIL_INSTANCES = 24000;
-const MAX_HAZARD_DETAIL_INSTANCES = 18000;
 const TERRAIN_TILE_SEGMENTS = 128;
 const WILDLIFE_MATRIX_DUMMY = new THREE.Object3D();
 const FIRST_PHASE_LAYER_NAMES = Object.freeze(["scene-scale", "terrain-surface", "rivers", "wind-arrows"]);
@@ -80,61 +84,9 @@ const LOWRISE_ROOF_TYPES = new Set([
   "visitor_center", "scenic_overlook", "trailhead", "ranger_station", "gauging_station",
   "mountain_refuge", "fire_watch_tower"
 ]);
-const BLOCK_3D_FACILITY_TYPES_HIGH = Object.freeze([
-  "highrise", "village", "industrial", "hospital", "transport", "rail", "reservoir",
-  "dam", "canal", "solar_farm", "wind_farm", "park", "airport", "quarry"
-]);
-const BLOCK_3D_FACILITY_TYPES_ULTRA = Object.freeze([
-  ...BLOCK_3D_FACILITY_TYPES_HIGH,
-  "apartment", "school", "data_center", "bridge", "port", "powerplant", "greenhouse",
-  "flood_pump_station", "observatory", "mountain_refuge", "ranger_station", "water_treatment_plant"
-]);
 
 function isTemporalViewMode(viewMode) {
   return TEMPORAL_VIEW_MODES.has(String(viewMode || ""));
-}
-
-function adaptiveResolutionScale(n) {
-  if (n >= 4096) return 0.6;
-  if (n >= 3072) return 0.68;
-  if (n >= 2048) return 0.76;
-  if (n >= 1024) return 0.88;
-  return 1;
-}
-
-function adaptiveLayerStep(n, targetSamplesPerAxis) {
-  return Math.max(1, Math.ceil(Math.max(1, Number(n) || 1) / targetSamplesPerAxis));
-}
-
-function detailBudgetPlan(input = {}) {
-  const n = Math.max(1, Math.round(Number(input.n ?? input.resolution ?? 0) || 256));
-  const scale = adaptiveResolutionScale(n);
-  const requestedQuality = String(input.renderDetailQuality || "ultra");
-  const quality = ["high", "ultra", "exhaustive"].includes(requestedQuality) ? requestedQuality : "ultra";
-  const profile = quality === "exhaustive"
-    ? { multiplier: 4, subsurface: 160, terrain: 420, vegetation: 340, hazard: 220 }
-    : quality === "ultra"
-      ? { multiplier: 2, subsurface: 112, terrain: 288, vegetation: 220, hazard: 160 }
-      : { multiplier: 1, subsurface: 72, terrain: 192, vegetation: 140, hazard: 96 };
-  return {
-    mode: `adaptive-resolution-budget-${quality}`,
-    quality,
-    resolution: n,
-    scale,
-    subsurfaceStep: adaptiveLayerStep(n, profile.subsurface),
-    terrainDetailStep: adaptiveLayerStep(n, profile.terrain),
-    vegetationStride: adaptiveLayerStep(n, profile.vegetation),
-    hazardStep: adaptiveLayerStep(n, profile.hazard),
-    maxTerrainDetailInstances: Math.max(6000, Math.round(MAX_TERRAIN_DETAIL_INSTANCES * scale * profile.multiplier)),
-    maxVegetationInstances: Math.max(4000, Math.round(MAX_VEGETATION_INSTANCES * scale * profile.multiplier)),
-    maxHazardInstances: Math.max(5000, Math.round(MAX_HAZARD_DETAIL_INSTANCES * scale * profile.multiplier)),
-    maxBuildingDiagnosticInstances: Math.max(2500, Math.round(MAX_BUILDING_DIAGNOSTIC_INSTANCES * scale * Math.min(2.5, profile.multiplier)))
-  };
-}
-
-function block3DRendererFacilityTypes(quality = "ultra") {
-  if (quality === "exhaustive") return null;
-  return quality === "high" ? BLOCK_3D_FACILITY_TYPES_HIGH : BLOCK_3D_FACILITY_TYPES_ULTRA;
 }
 
 function gpuCapabilitySnapshot(renderer) {
@@ -1167,13 +1119,18 @@ export class TerrainRenderer {
     const geometryMeshCounts = {};
     const geometryInstanceCounts = {};
     const proceduralGeometryInstances = {};
+    const proceduralVariantInstances = {};
+    const materialTypeCounts = {};
     const materials = new Set();
+    const geometries = new Set();
     let objectCount = 0;
     let meshCount = 0;
     let instancedMeshCount = 0;
     let frustumCulledInstancedMeshCount = 0;
     let instanceCount = 0;
     let proceduralInstanceCount = 0;
+    let templateVertexCount = 0;
+    let templateTriangleCount = 0;
     this.scene.traverseVisible((object) => {
       objectCount += 1;
       if (!object.isMesh) return;
@@ -1185,15 +1142,30 @@ export class TerrainRenderer {
         if (object.frustumCulled !== false) frustumCulledInstancedMeshCount += 1;
       }
       instanceCount += instances;
+      if (object.geometry?.uuid && !geometries.has(object.geometry.uuid)) {
+        geometries.add(object.geometry.uuid);
+        const vertexCount = object.geometry.getAttribute?.("position")?.count || 0;
+        templateVertexCount += vertexCount;
+        templateTriangleCount += object.geometry.index
+          ? Math.floor(object.geometry.index.count / 3)
+          : Math.floor(vertexCount / 3);
+      }
       geometryMeshCounts[geometryType] = (geometryMeshCounts[geometryType] || 0) + 1;
       geometryInstanceCounts[geometryType] = (geometryInstanceCounts[geometryType] || 0) + instances;
       const proceduralKind = object.geometry?.userData?.proceduralKind;
       if (proceduralKind) {
         proceduralInstanceCount += instances;
         proceduralGeometryInstances[proceduralKind] = (proceduralGeometryInstances[proceduralKind] || 0) + instances;
+        const variantKey = `${proceduralKind}:v${object.geometry?.userData?.variant || 0}`;
+        proceduralVariantInstances[variantKey] = (proceduralVariantInstances[variantKey] || 0) + instances;
       }
       const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
-      objectMaterials.filter(Boolean).forEach((material) => materials.add(material.uuid));
+      objectMaterials.filter(Boolean).forEach((material) => {
+        if (materials.has(material.uuid)) return;
+        materials.add(material.uuid);
+        const materialType = material.type || "UnknownMaterial";
+        materialTypeCounts[materialType] = (materialTypeCounts[materialType] || 0) + 1;
+      });
     });
     const layerStats = [
       this.terrainTileGroup,
@@ -1218,6 +1190,10 @@ export class TerrainRenderer {
       frustumCulledInstancedMeshCount,
       instanceCount,
       materialCount: materials.size,
+      materialTypeCounts,
+      templateGeometryCount: geometries.size,
+      templateVertexCount,
+      templateTriangleCount,
       sharedGeometryCache: {
         entryCount: this.sharedGeometryCache.size,
         keys: Array.from(this.sharedGeometryCache.keys()).sort()
@@ -1225,10 +1201,12 @@ export class TerrainRenderer {
       geometryMeshCounts,
       geometryInstanceCounts,
       proceduralModeling: {
-        profile: "semantic-assembly-assets-v2",
+        profile: "typed-multi-variant-physical-assets-v3",
         instanceCount: proceduralInstanceCount,
         geometryInstances: proceduralGeometryInstances,
-        registry: proceduralAssetDiagnostics()
+        variantInstances: proceduralVariantInstances,
+        registry: proceduralAssetDiagnostics(),
+        pipeline: assetPipelineDiagnostics()
       },
       camera: {
         position: this.camera.position.toArray().map(roundDiagnostic),
@@ -1807,13 +1785,13 @@ export class TerrainRenderer {
     }
 
     addInstancedCylinder(group, "树干", buckets.trunks, 0x9b6a43, { radiusSegments: 7, roughness: 0.88, emissiveIntensity: 0.26 });
-    addInstancedBox(group, "阔叶冠层", buckets.broadleaf, 0x54a866, { geometryFactory: () => createAssetGeometry("broadleaf-canopy", budgetPlan.quality), roughness: 0.96, transparent: true, opacity: 0.92 });
-    addInstancedBox(group, "针叶林冠", buckets.conifers, 0x3b8456, { geometryFactory: () => createAssetGeometry("layered-conifer", budgetPlan.quality), roughness: 0.95, transparent: true, opacity: 0.92 });
-    addInstancedBox(group, "灌草斑块", buckets.shrubs, 0x82b864, { geometryFactory: () => createAssetGeometry("irregular-shrub", budgetPlan.quality), roughness: 0.98, transparent: true, opacity: 0.86 });
+    addInstancedBox(group, "阔叶冠层", buckets.broadleaf, 0x54a866, { geometryFactory: (variant) => createAssetGeometry("broadleaf-canopy", budgetPlan.quality, variant), roughness: 0.96, transparent: true, opacity: 0.92 });
+    addInstancedBox(group, "针叶林冠", buckets.conifers, 0x3b8456, { geometryFactory: (variant) => createAssetGeometry("layered-conifer", budgetPlan.quality, variant), roughness: 0.95, transparent: true, opacity: 0.92 });
+    addInstancedBox(group, "灌草斑块", buckets.shrubs, 0x82b864, { geometryFactory: (variant) => createAssetGeometry("irregular-shrub", budgetPlan.quality, variant), roughness: 0.98, transparent: true, opacity: 0.86 });
     addInstancedCylinder(group, "湿地芦苇", buckets.reeds, 0x86b861, { radiusSegments: 5, roughness: 0.96, transparent: true, opacity: 0.88 });
-    addInstancedBox(group, "林下植被", buckets.understory, 0x669f5b, { geometryFactory: () => createAssetGeometry("understory-cluster", budgetPlan.quality), roughness: 0.98, transparent: true, opacity: 0.84 });
+    addInstancedBox(group, "林下植被", buckets.understory, 0x669f5b, { geometryFactory: (variant) => createAssetGeometry("understory-cluster", budgetPlan.quality, variant), roughness: 0.98, transparent: true, opacity: 0.84 });
     addInstancedBox(group, "农田作物行", buckets.cropRows, 0xb9aa55, { roughness: 0.96, transparent: true, opacity: 0.88 });
-    addInstancedBox(group, "草簇", buckets.grassTufts, 0x9fba5d, { geometryFactory: () => createAssetGeometry("crossed-grass", budgetPlan.quality), roughness: 0.97, transparent: true, opacity: 0.86, side: THREE.DoubleSide });
+    addInstancedBox(group, "草簇", buckets.grassTufts, 0x9fba5d, { geometryFactory: (variant) => createAssetGeometry("crossed-grass", budgetPlan.quality, variant), roughness: 0.97, transparent: true, opacity: 0.86, side: THREE.DoubleSide });
     group.visible = this.vegetationVisible;
     this.vegetation = group;
     this.scene.add(group);
@@ -1831,7 +1809,7 @@ export class TerrainRenderer {
       understoryCount: buckets.understory.length,
       cropRowCount: buckets.cropRows.length,
       grassTuftCount: buckets.grassTufts.length,
-      geometryProfile: "semantic-assembly-vegetation-v2"
+      geometryProfile: "typed-multi-variant-vegetation-v3"
     };
     if (typeof globalThis !== "undefined") globalThis.__geoLabVegetation3DStats = this.vegetation3DStats;
   }
@@ -1851,7 +1829,7 @@ export class TerrainRenderer {
         renderedAgentCount: 0,
         migrationCorridorCount: 0,
         instancedMeshCount: 0,
-        geometryProfile: "batched-semantic-anatomy-v2",
+        geometryProfile: "typed-multi-variant-anatomy-v3",
         visualScale,
         layerNames: []
       };
@@ -1887,13 +1865,12 @@ export class TerrainRenderer {
       }
     }
     for (const batch of partBatches.values()) {
-      const mesh = addWildlifeInstancedBatch(
+      const renderSets = addWildlifeInstancedBatch(
         this.wildlifeGroup,
         batch,
         this.activeDetailBudgetPlan?.quality
       );
-      if (!mesh) continue;
-      this.wildlifeRenderSets.push({ mesh, entries: batch.entries, kind: batch.kind });
+      for (const renderSet of renderSets) this.wildlifeRenderSets.push(renderSet);
     }
     const migrationCorridorCount = addWildlifeMigrationCorridors(
       this.wildlifeGroup,
@@ -1908,7 +1885,7 @@ export class TerrainRenderer {
       renderedAgentCount: wildlife.agents.length,
       migrationCorridorCount,
       instancedMeshCount: this.wildlifeRenderSets.length,
-      geometryProfile: "batched-semantic-anatomy-v2",
+      geometryProfile: "typed-multi-variant-anatomy-v3",
       visualScale,
       populationEstimate: wildlife.summary?.totalPopulationEstimate || 0,
       meanHabitatConnectivity: wildlife.summary?.meanHabitatConnectivity || 0,
@@ -2325,12 +2302,12 @@ export class TerrainRenderer {
     const ecosystemVisualControls = infrastructureEcosystem3DControls(this.params);
     const ecosystemVisualPlan = pushInfrastructureEcosystemVisualLayers(buckets, ecosystemVisualCandidates, cell, ecosystemVisualControls);
 
-    addInstancedBox(this.infrastructureGroup, "退台高层塔楼", buckets.highrise, 0xb8c5c7, { geometryFactory: () => createAssetGeometry("setback-tower", budgetPlan.quality), roughness: 0.55, metalness: 0.08 });
-    addInstancedBox(this.infrastructureGroup, "围合中高层组团", buckets.midrise, 0xb8aa96, { geometryFactory: () => createAssetGeometry("courtyard-midrise", budgetPlan.quality), roughness: 0.7, metalness: 0.02 });
-    addInstancedBox(this.infrastructureGroup, "错落低层住宅", buckets.lowrise, 0xc2aa8a, { geometryFactory: () => createAssetGeometry("l-plan-lowrise", budgetPlan.quality), roughness: 0.82, metalness: 0.01 });
-    addInstancedBox(this.infrastructureGroup, "锯齿顶工业厂房", buckets.industrial, 0x9c9a91, { geometryFactory: () => createAssetGeometry("sawtooth-industrial", budgetPlan.quality), roughness: 0.78, metalness: 0.04 });
-    addInstancedBox(this.infrastructureGroup, "多翼公共设施", buckets.civic, 0xc8bc96, { geometryFactory: () => createAssetGeometry("cross-plan-civic", budgetPlan.quality), roughness: 0.72, metalness: 0.02 });
-    addInstancedBox(this.infrastructureGroup, "四坡脊屋顶", buckets.roofs, 0x875d43, { geometryFactory: () => createAssetGeometry("hipped-roof", budgetPlan.quality), roughness: 0.88 });
+    addInstancedBox(this.infrastructureGroup, "退台高层塔楼", buckets.highrise, 0xb8c5c7, { geometryFactory: (variant) => createAssetGeometry("setback-tower", budgetPlan.quality, variant), roughness: 0.55, metalness: 0.08 });
+    addInstancedBox(this.infrastructureGroup, "围合中高层组团", buckets.midrise, 0xb8aa96, { geometryFactory: (variant) => createAssetGeometry("courtyard-midrise", budgetPlan.quality, variant), roughness: 0.7, metalness: 0.02 });
+    addInstancedBox(this.infrastructureGroup, "错落低层住宅", buckets.lowrise, 0xc2aa8a, { geometryFactory: (variant) => createAssetGeometry("l-plan-lowrise", budgetPlan.quality, variant), roughness: 0.82, metalness: 0.01 });
+    addInstancedBox(this.infrastructureGroup, "锯齿顶工业厂房", buckets.industrial, 0x9c9a91, { geometryFactory: (variant) => createAssetGeometry("sawtooth-industrial", budgetPlan.quality, variant), roughness: 0.78, metalness: 0.04 });
+    addInstancedBox(this.infrastructureGroup, "多翼公共设施", buckets.civic, 0xc8bc96, { geometryFactory: (variant) => createAssetGeometry("cross-plan-civic", budgetPlan.quality, variant), roughness: 0.72, metalness: 0.02 });
+    addInstancedBox(this.infrastructureGroup, "四坡脊屋顶", buckets.roofs, 0x875d43, { geometryFactory: (variant) => createAssetGeometry("hipped-roof", budgetPlan.quality, variant), roughness: 0.88 });
     addInstancedBox(this.infrastructureGroup, "塔楼顶冠", buckets.caps, 0xd7dfdf, { roughness: 0.48, metalness: 0.08 });
     addInstancedBox(this.infrastructureGroup, "立面横带", buckets.facadeBands, 0x66808e, { roughness: 0.56, metalness: 0.14 });
     addInstancedBox(this.infrastructureGroup, "窗格幕墙", buckets.windowGrids, 0x93c7da, { roughness: 0.38, metalness: 0.12, transparent: true, opacity: 0.86 });
@@ -2353,10 +2330,10 @@ export class TerrainRenderer {
     addInstancedBox(this.infrastructureGroup, "光伏板", buckets.solarPanels, 0x2e5d8a, { roughness: 0.36, metalness: 0.22 });
     addInstancedBox(this.infrastructureGroup, "风机叶片", buckets.windBlades, 0xdfe4df, { roughness: 0.5, metalness: 0.04 });
     addInstancedBox(this.infrastructureGroup, "水库水面", buckets.reservoirs, 0x3f9fc2, { roughness: 0.36, metalness: 0.02, transparent: true, opacity: 0.74 });
-    addInstancedBox(this.infrastructureGroup, "曲面地标塔体", buckets.landmarkTowers, 0xd6ddd9, { geometryFactory: () => createAssetGeometry("tapered-landmark", budgetPlan.quality), roughness: 0.5, metalness: 0.08 });
+    addInstancedBox(this.infrastructureGroup, "曲面地标塔体", buckets.landmarkTowers, 0xd6ddd9, { geometryFactory: (variant) => createAssetGeometry("tapered-landmark", budgetPlan.quality, variant), roughness: 0.5, metalness: 0.08 });
     addInstancedCylinder(this.infrastructureGroup, "风机塔筒", buckets.windMasts, 0xdfe4df, { radiusSegments: 8, roughness: 0.5, metalness: 0.04 });
     addInstancedCylinder(this.infrastructureGroup, "蓄水/处理罐", buckets.tanks, 0x9fa8a5, { radiusSegments: 16, roughness: 0.65, metalness: 0.08 });
-    addInstancedBox(this.infrastructureGroup, "地标尖顶", buckets.landmarkSpires, 0xe4e9e6, { geometryFactory: () => createAssetGeometry("ribbed-spire", budgetPlan.quality), roughness: 0.5, metalness: 0.08 });
+    addInstancedBox(this.infrastructureGroup, "地标尖顶", buckets.landmarkSpires, 0xe4e9e6, { geometryFactory: (variant) => createAssetGeometry("ribbed-spire", budgetPlan.quality, variant), roughness: 0.5, metalness: 0.08 });
     addInstancedTorus(this.infrastructureGroup, "体育场看台", buckets.stadiums, 0xaaa79b);
     addInstancedBox(this.infrastructureGroup, "建筑损伤包络", buckets.buildingDamageOverlays, 0xcc7a5d, {
       roughness: 0.68,
@@ -2413,7 +2390,7 @@ export class TerrainRenderer {
     addInstancedBox(this.infrastructureGroup, "公交港湾", buckets.busBays, 0xd7d1b5, { roughness: 0.7, metalness: 0.02 });
     addInstancedCylinder(this.infrastructureGroup, "高架水塔储罐", buckets.waterTowerTanks, 0xb8c8cc, { radiusSegments: 16, roughness: 0.56, metalness: 0.1 });
     addInstancedBox(this.infrastructureGroup, "水塔支腿", buckets.waterTowerLegs, 0x8c989c, { roughness: 0.58, metalness: 0.12 });
-    addInstancedBox(this.infrastructureGroup, "天文台穹顶", buckets.observatoryDomes, 0xc8d3d2, { geometryFactory: () => createAssetGeometry("observatory-dome", budgetPlan.quality), roughness: 0.42, metalness: 0.08 });
+    addInstancedBox(this.infrastructureGroup, "天文台穹顶", buckets.observatoryDomes, 0xc8d3d2, { geometryFactory: (variant) => createAssetGeometry("observatory-dome", budgetPlan.quality, variant), roughness: 0.42, metalness: 0.08 });
     addInstancedBox(this.infrastructureGroup, "天文台望远镜座", buckets.observatoryTelescopeMounts, 0xe1e6e3, { roughness: 0.46, metalness: 0.18 });
     addInstancedBox(this.infrastructureGroup, "缆车塔架", buckets.cableCarTowers, 0x8f9284, { roughness: 0.56, metalness: 0.16 });
     addInstancedBox(this.infrastructureGroup, "缆车索道", buckets.cableCarCables, 0x2f3434, { roughness: 0.36, metalness: 0.42 });
@@ -6950,34 +6927,52 @@ function wildlifePartPlan(species) {
 }
 
 function addWildlifeInstancedBatch(group, batch, renderDetailQuality = "ultra") {
-  if (!batch?.entries?.length) return null;
-  const geometry = sharedGeometry(
-    group,
-    `wildlife:${renderDetailQuality}:${batch.kind}`,
-    () => createAssetGeometry(batch.kind, renderDetailQuality)
-  );
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
+  if (!batch?.entries?.length) return [];
+  const variantCount = proceduralAssetVariantCount(batch.kind, renderDetailQuality);
+  const partitions = Array.from({ length: variantCount }, () => []);
+  for (const entry of batch.entries) {
+    const state = entry.state || {};
+    const part = entry.part || {};
+    const variant = proceduralAssetVariantIndex(batch.kind, {
+      x: Number(state.baseX) + Number(part.offset?.[0] || 0),
+      y: Number(state.baseY) + Number(part.offset?.[1] || 0),
+      z: Number(state.baseZ) + Number(part.offset?.[2] || 0),
+      sx: Number(state.bodySize),
+      color: entry.colorHex
+    }, variantCount);
+    partitions[variant].push(entry);
+  }
+  const material = createProceduralAssetMaterial(batch.kind, 0x9a8d78, {
     roughness: 0.82,
     metalness: 0.01,
     emissive: 0x1b211e,
-    emissiveIntensity: 0.12,
-    vertexColors: true
+    emissiveIntensity: 0.08
   });
-  const mesh = new THREE.InstancedMesh(geometry, material, batch.entries.length);
-  mesh.name = `动物程序化部件 · ${batch.kind}`;
-  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  const color = new THREE.Color();
-  const white = new THREE.Color(0xffffff);
-  batch.entries.forEach((entry, index) => {
-    color.setHex(entry.colorHex);
-    if (entry.lighten) color.lerp(white, Math.min(0.32, entry.lighten));
-    mesh.setColorAt(index, color);
+  const renderSets = [];
+  partitions.forEach((entries, variant) => {
+    if (!entries.length) return;
+    const geometry = sharedGeometry(
+      group,
+      `wildlife:${renderDetailQuality}:${batch.kind}:v${variant}`,
+      () => createAssetGeometry(batch.kind, renderDetailQuality, variant)
+    );
+    const mesh = new THREE.InstancedMesh(geometry, material, entries.length);
+    mesh.name = `动物程序化部件 · ${batch.kind} · V${variant + 1}`;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.userData.assetVariant = variant;
+    const color = new THREE.Color();
+    const white = new THREE.Color(0xffffff);
+    entries.forEach((entry, index) => {
+      color.setHex(entry.colorHex);
+      if (entry.lighten) color.lerp(white, Math.min(0.32, entry.lighten));
+      mesh.setColorAt(index, color);
+    });
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    writeWildlifeBatchMatrices(mesh, entries, 0, true);
+    group.add(mesh);
+    renderSets.push({ mesh, entries, kind: batch.kind, variant });
   });
-  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  writeWildlifeBatchMatrices(mesh, batch.entries, 0, true);
-  group.add(mesh);
-  return mesh;
+  return renderSets;
 }
 
 function writeWildlifeBatchMatrices(mesh, entries, timeSeconds, refreshBounds = false) {
@@ -7070,86 +7065,101 @@ function addWildlifeMigrationCorridors(group, model, params, migrationLinks) {
 }
 
 function addInstancedBox(group, name, transforms, fallbackColor, options = {}) {
-  if (!transforms.length) return;
+  return addInstancedAsset(group, name, transforms, fallbackColor, options, "box");
+}
+
+function addInstancedCylinder(group, name, transforms, fallbackColor, options = {}) {
+  return addInstancedAsset(group, name, transforms, fallbackColor, options, "cylinder");
+}
+
+function addInstancedTorus(group, name, transforms, fallbackColor, options = {}) {
+  return addInstancedAsset(group, name, transforms, fallbackColor, options, "torus");
+}
+
+function addInstancedAsset(group, name, transforms, fallbackColor, options, primitiveType) {
+  if (!transforms.length) return [];
   const assetQuality = options.quality || group?.userData?.assetQuality || "high";
   const semanticKind = semanticAssetKind(name);
-  const geometry = options.geometry || sharedGeometry(
-    group,
-    options.geometryKey || `box:${assetQuality}:${semanticKind || name}`,
-    () => options.geometryFactory?.() || createSemanticAssetGeometry(name, assetQuality) || new THREE.BoxGeometry(1, 1, 1)
-  );
-  const material = new THREE.MeshStandardMaterial({
+  const pipelineKind = semanticKind || name;
+  const variantCount = semanticKind && !options.geometry && options.variants !== false
+    ? proceduralAssetVariantCount(semanticKind, assetQuality)
+    : 1;
+  const partitions = partitionAssetTransforms(pipelineKind, transforms, variantCount);
+  const material = createProceduralAssetMaterial(pipelineKind, fallbackColor, options, primitiveType);
+  const meshes = [];
+  partitions.forEach((variantTransforms, variant) => {
+    if (!variantTransforms.length) return;
+    const cacheKey = options.geometryKey
+      ? `${options.geometryKey}:v${variant}`
+      : `${primitiveType}:${assetQuality}:${semanticKind || name}:v${variant}:${options.radiusSegments || 0}`;
+    const geometry = options.geometry || sharedGeometry(
+      group,
+      cacheKey,
+      () => options.geometryFactory?.(variant)
+        || createSemanticAssetGeometry(name, assetQuality, variant)
+        || createFallbackAssetGeometry(primitiveType, options)
+    );
+    const mesh = new THREE.InstancedMesh(geometry, material, variantTransforms.length);
+    mesh.name = variantCount > 1 ? `${name} · V${variant + 1}` : name;
+    mesh.userData.assetVariant = variant;
+    mesh.userData.assetKind = semanticKind;
+    writeInstanceTransforms(mesh, variantTransforms, fallbackColor);
+    group.add(mesh);
+    meshes.push(mesh);
+  });
+  return meshes;
+}
+
+function partitionAssetTransforms(kind, transforms, variantCount) {
+  const partitions = Array.from({ length: variantCount }, () => []);
+  for (const transform of transforms) {
+    const variant = proceduralAssetVariantIndex(kind, transform, variantCount);
+    partitions[variant].push(transform);
+  }
+  return partitions;
+}
+
+function createFallbackAssetGeometry(primitiveType, options) {
+  if (primitiveType === "cylinder") {
+    return new THREE.CylinderGeometry(0.5, 0.5, 1, options.radiusSegments || 12);
+  }
+  if (primitiveType === "torus") {
+    const torus = new THREE.TorusGeometry(0.5, 0.12, 12, 28);
+    torus.rotateX(Math.PI / 2);
+    return torus;
+  }
+  return new THREE.BoxGeometry(1, 1, 1, 2, 2, 2);
+}
+
+function createProceduralAssetMaterial(kind, fallbackColor, options = {}, primitiveType = "box") {
+  const profile = proceduralMaterialProfile(kind);
+  const transparent = options.transparent ?? false;
+  const opacity = options.opacity ?? 1;
+  const layeredTransparentSurface = ["water", "glass", "organic"].includes(profile.materialClass);
+  const authoredRoughness = options.roughness ?? (primitiveType === "torus" ? 0.78 : primitiveType === "cylinder" ? 0.62 : 0.76);
+  const authoredMetalness = options.metalness ?? (primitiveType === "torus" ? 0.03 : primitiveType === "cylinder" ? 0.04 : 0.02);
+  const material = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
-    roughness: options.roughness ?? 0.76,
-    metalness: options.metalness ?? 0.02,
-    transparent: options.transparent ?? false,
-    opacity: options.opacity ?? 1,
+    roughness: profile.roughness * 0.68 + authoredRoughness * 0.32,
+    metalness: profile.metalness * 0.68 + authoredMetalness * 0.32,
+    clearcoat: profile.clearcoat,
+    clearcoatRoughness: profile.clearcoatRoughness,
+    sheen: profile.sheen,
+    sheenRoughness: profile.sheenRoughness,
+    envMapIntensity: profile.envMapIntensity,
+    specularIntensity: profile.specularIntensity,
+    transparent,
+    opacity,
+    depthWrite: options.depthWrite ?? !(transparent && (layeredTransparentSurface || opacity < 0.8)),
     emissive: options.emissive ?? subduedEmissive(fallbackColor),
-    emissiveIntensity: options.emissiveIntensity ?? 0.42,
+    emissiveIntensity: options.emissiveIntensity ?? (profile.materialClass === "technical" ? 0.2 : 0.08),
     side: options.side ?? THREE.FrontSide,
     vertexColors: true,
     dithering: true
   });
-  const mesh = new THREE.InstancedMesh(geometry, material, transforms.length);
-  mesh.name = name;
-  writeInstanceTransforms(mesh, transforms, fallbackColor);
-  group.add(mesh);
-}
-
-function addInstancedCylinder(group, name, transforms, fallbackColor, options = {}) {
-  if (!transforms.length) return;
-  const assetQuality = options.quality || group?.userData?.assetQuality || "high";
-  const semanticKind = semanticAssetKind(name);
-  const geometry = options.geometry || sharedGeometry(
-    group,
-    options.geometryKey || `cylinder:${assetQuality}:${semanticKind || name}:${options.radiusSegments || 10}`,
-    () => options.geometryFactory?.() || createSemanticAssetGeometry(name, assetQuality) || new THREE.CylinderGeometry(0.5, 0.5, 1, options.radiusSegments || 10)
-  );
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    roughness: options.roughness ?? 0.62,
-    metalness: options.metalness ?? 0.04,
-    transparent: options.transparent ?? false,
-    opacity: options.opacity ?? 1,
-    emissive: options.emissive ?? subduedEmissive(fallbackColor),
-    emissiveIntensity: options.emissiveIntensity ?? 0.42,
-    vertexColors: true,
-    dithering: true
-  });
-  const mesh = new THREE.InstancedMesh(geometry, material, transforms.length);
-  mesh.name = name;
-  writeInstanceTransforms(mesh, transforms, fallbackColor);
-  group.add(mesh);
-}
-
-function addInstancedTorus(group, name, transforms, fallbackColor, options = {}) {
-  if (!transforms.length) return;
-  const assetQuality = options.quality || group?.userData?.assetQuality || "high";
-  const semanticKind = semanticAssetKind(name);
-  const geometry = options.geometry || sharedGeometry(
-    group,
-    options.geometryKey || `torus:${assetQuality}:${semanticKind || name}`,
-    () => {
-      const semanticGeometry = options.geometryFactory?.() || createSemanticAssetGeometry(name, assetQuality);
-      if (semanticGeometry) return semanticGeometry;
-      const torus = new THREE.TorusGeometry(0.5, 0.12, 8, 20);
-      torus.rotateX(Math.PI / 2);
-      return torus;
-    }
-  );
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    roughness: 0.78,
-    metalness: 0.03,
-    emissive: subduedEmissive(fallbackColor),
-    emissiveIntensity: 0.42,
-    vertexColors: true,
-    dithering: true
-  });
-  const mesh = new THREE.InstancedMesh(geometry, material, transforms.length);
-  mesh.name = name;
-  writeInstanceTransforms(mesh, transforms, fallbackColor);
-  group.add(mesh);
+  material.userData.assetPipelineVersion = 3;
+  material.userData.materialClass = profile.materialClass;
+  return material;
 }
 
 function writeInstanceTransforms(mesh, transforms, fallbackColor = 0xffffff) {

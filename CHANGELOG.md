@@ -2,9 +2,32 @@
 
 This is the **single canonical changelog** for GeoLab 128. Application, renderer, desktop-runtime, documentation, and validation changes are consolidated here; subsystem changelogs are not maintained separately.
 
-All notable changes to GeoLab 128 are documented here. The project follows semantic versioning while pre-1.0. The latest consolidation was completed on **2026-08-13**.
+All notable changes to GeoLab 128 are documented here in descending release order. The project follows semantic versioning while pre-1.0.
 
 ## [Unreleased]
+
+## [0.6.0] - 2026-09-04
+
+### Added
+
+- Added a strict TypeScript 3D asset pipeline for resolution-aware detail budgets, monotonic geometry profiles, semantic physical-material classes, deterministic spatial variants, and machine-readable diagnostics.
+- Added deterministic tests for quality growth, 4096 x 4096 budget behavior, facility coverage, material classification, and stable multi-template distribution.
+- Added direct WebGL framebuffer statistics and a captured-canvas check to the Electron smoke test, preventing scene-statistics-only false positives when the visible 3D frame is blank.
+
+### Changed
+
+- Increased radial, curved, beveled, repeated, surface, and organic subdivision density across all three renderer quality levels; exhaustive assets now use up to 40 radial/surface segments and subdivision level 3.
+- Rebuilt semantic instance batching so vegetation, rock, architecture, infrastructure, and wildlife use multiple stable geometry variants without abandoning shared GPU geometry.
+- Replaced generic standard materials for semantic instances with class-aware physical materials covering mineral, organic, water, glass, metal, masonry, wildlife, and technical surfaces.
+- Expanded high, research, and exhaustive scene budgets while retaining resolution-aware strides through 4096 x 4096 terrain grids.
+- Promoted research detail as the fresh-install interface default and clarified the quality labels in both English and Simplified Chinese.
+- Expanded public and browser documentation with the procedural-asset architecture, quality behavior, diagnostics, and honest limits relative to surveyed, BIM, CAD, and photogrammetric assets.
+
+### Fixed
+
+- Fixed repeated assets sharing one silhouette even when their environment and placement differed by assigning reproducible spatial variants.
+- Fixed transparent semantic surfaces writing depth indiscriminately, reducing dark water, glass, and vegetation overlap artifacts.
+- Fixed desktop smoke verification accepting a transient blank frame during staged model and Rust authoritative scene updates.
 
 ## [0.5.1] - 2026-09-03
 
@@ -169,7 +192,8 @@ This section is the preserved release history for the `v0.1.0` tag. It is not a 
 - This release establishes the public **teaching and exploratory prototype** baseline.
 - It does not claim calibrated or validated predictive performance.
 
-[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/laiyukai910-star/geolab-128/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/laiyukai910-star/geolab-128/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/laiyukai910-star/geolab-128/compare/v0.3.0...v0.4.0

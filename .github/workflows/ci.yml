@@ -58,6 +58,7 @@ jobs:
 
       - name: Run model-report tests
         run: |
+          node outputs/geo-sim/tests/assetPipeline.test.mjs
           node outputs/geo-sim/tests/scenarioSynthesis.test.mjs
           node outputs/geo-sim/tests/landscapeEcology.test.mjs
           node outputs/geo-sim/tests/physicalCouplingInterop.test.mjs
@@ -80,6 +81,8 @@ jobs:
           test -f outputs/geo-sim/src/modelKernel.js
           test -f outputs/geo-sim/src/modelWorker.js
           test -f outputs/geo-sim/src/modelWorkerClient.js
+          test -f outputs/geo-sim/src/assetPipeline.js
+          test -f outputs/geo-sim/src-ts/assetPipeline.ts
           test -f outputs/geo-sim/src-ts/backendClient.ts
           test -f outputs/geo-sim/src-ts/rustKernelWorker.ts
           test -f outputs/geo-sim/src-ts/wasmAbi.ts
@@ -94,6 +97,7 @@ jobs:
           test -f outputs/geo-sim/tests/wasmKernel.test.mjs
           test -f outputs/geo-sim/tests/modelKernel.test.mjs
           test -f outputs/geo-sim/tests/modelWorkerClient.test.mjs
+          test -f outputs/geo-sim/tests/assetPipeline.test.mjs
           test -f outputs/geo-sim-desktop/package.json
           test -f engine/Cargo.toml
           test -f engine/Cargo.lock

@@ -298,6 +298,9 @@ async function runSmokeTest(window, localUrl, externalRequests) {
   while (Date.now() < timeoutAt) {
     pageState = await window.webContents.executeJavaScript(`(() => ({
       ready: Boolean(globalThis.__geoLabModelStats && globalThis.__geoLabGpuStats),
+      startupCompleted: Boolean(globalThis.__geoLabStartupStats?.completed),
+      statusText: document.querySelector("#status")?.textContent || "",
+      subtitle: document.querySelector("#modelSubtitle")?.textContent || "",
       model: globalThis.__geoLabModelStats || null,
       gpu: globalThis.__geoLabGpuStats || null,
       gpuPipelineWarmup: globalThis.__geoLabGpuPipelineWarmupStats || null,
@@ -324,6 +327,16 @@ async function runSmokeTest(window, localUrl, externalRequests) {
         blockMicrozoneDetailPlan: globalThis.__geoLabInfrastructure3DStats.blockMicrozoneDetailPlan || null
       } : null,
       wildlife: globalThis.__geoLabWildlife3DStats || null,
+      scene: globalThis.__geoLabSceneComplexityStats ? {
+        profile: globalThis.__geoLabSceneComplexityStats.proceduralModeling?.profile || null,
+        pipeline: globalThis.__geoLabSceneComplexityStats.proceduralModeling?.pipeline || null,
+        proceduralInstanceCount: globalThis.__geoLabSceneComplexityStats.proceduralModeling?.instanceCount || 0,
+        proceduralVariantCount: Object.keys(globalThis.__geoLabSceneComplexityStats.proceduralModeling?.variantInstances || {}).length,
+        templateGeometryCount: globalThis.__geoLabSceneComplexityStats.templateGeometryCount || 0,
+        templateVertexCount: globalThis.__geoLabSceneComplexityStats.templateVertexCount || 0,
+        templateTriangleCount: globalThis.__geoLabSceneComplexityStats.templateTriangleCount || 0,
+        physicalMaterialCount: globalThis.__geoLabSceneComplexityStats.materialTypeCounts?.MeshPhysicalMaterial || 0
+      } : null,
       title: document.title
     }))()`);
     const rustReady = (
@@ -332,9 +345,20 @@ async function runSmokeTest(window, localUrl, externalRequests) {
       pageState?.rustBackend?.failedGateCount === 0
     );
     const authoritativeReady = pageState?.rustAuthority?.status === "applied" && pageState?.rustAuthority?.resolution <= 512;
-    if (pageState?.ready && pageState?.render?.completed && pageState?.gpuPipelineWarmup?.status === "ready" && pageState?.systemPriority?.highPriorityProcessCount >= 3 && rustReady && authoritativeReady) break;
+    const assetPipelineReady = (
+      pageState?.scene?.profile === "typed-multi-variant-physical-assets-v3" &&
+      pageState?.scene?.pipeline?.implementation === "strict-typescript" &&
+      pageState?.scene?.proceduralInstanceCount > 0 &&
+      pageState?.scene?.proceduralVariantCount > 1 &&
+      pageState?.scene?.templateTriangleCount > 1000 &&
+      pageState?.scene?.physicalMaterialCount > 0
+    );
+    const uiReady = pageState?.startupCompleted && !pageState?.subtitle?.includes("演算中");
+    if (pageState?.ready && uiReady && pageState?.render?.completed && pageState?.gpuPipelineWarmup?.status === "ready" && pageState?.systemPriority?.highPriorityProcessCount >= 3 && rustReady && authoritativeReady && assetPipelineReady) break;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
+  const canvasVisual = await captureCanvasVisualReport(window);
+  const assetGeometryAudit = await auditProceduralGeometryComplexity(window);
   const priorityReady = Boolean(
     latestPriorityReport?.highPriorityProcessCount >= 3 &&
     latestPriorityReport?.processes?.some((item) => item.type === "GPU" && item.status === "applied")
@@ -342,6 +366,8 @@ async function runSmokeTest(window, localUrl, externalRequests) {
   const report = {
     passed: Boolean(
       pageState?.ready &&
+      pageState?.startupCompleted &&
+      !pageState?.subtitle?.includes("演算中") &&
       pageState?.render?.completed &&
       pageState?.gpuPipelineWarmup?.status === "ready" &&
       (
@@ -350,6 +376,14 @@ async function runSmokeTest(window, localUrl, externalRequests) {
         pageState?.rustBackend?.failedGateCount === 0
       ) &&
       pageState?.rustAuthority?.status === "applied" &&
+      pageState?.scene?.profile === "typed-multi-variant-physical-assets-v3" &&
+      pageState?.scene?.pipeline?.implementation === "strict-typescript" &&
+      pageState?.scene?.proceduralInstanceCount > 0 &&
+      pageState?.scene?.proceduralVariantCount > 1 &&
+      pageState?.scene?.templateTriangleCount > 1000 &&
+      pageState?.scene?.physicalMaterialCount > 0 &&
+      canvasVisual.passed &&
+      assetGeometryAudit.passed &&
       priorityReady &&
       externalRequests.length === 0
     ),
@@ -370,18 +404,164 @@ async function runSmokeTest(window, localUrl, externalRequests) {
     gpuFeatureStatus: app.getGPUFeatureStatus(),
     gpuInfo: await app.getGPUInfo("complete"),
     systemPriority: latestPriorityReport,
+    canvasVisual,
+    assetGeometryAudit,
     page: pageState
   };
   writeFileSync(smokeTestPath, JSON.stringify(report, null, 2), "utf8");
-  await window.webContents.executeJavaScript(`(() => {
-    const canvas = document.querySelector("#scene canvas");
-    const gl = canvas?.getContext("webgl2") || canvas?.getContext("webgl");
-    gl?.finish();
-    return true;
-  })()`).catch(() => {});
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await new Promise((resolve) => setTimeout(resolve, 160));
   window.destroy();
   app.quit();
+}
+
+async function auditProceduralGeometryComplexity(window) {
+  return window.webContents.executeJavaScript(`(async () => {
+    try {
+      const assets = await import(new URL("./src/proceduralAssets.js", location.href).href);
+      const kinds = ["broadleaf-canopy", "setback-tower", "wildlife-torso", "process-tank"];
+      const rows = [];
+      for (const kind of kinds) {
+        const counts = {};
+        for (const quality of ["high", "ultra", "exhaustive"]) {
+          const geometry = assets.createProceduralGeometry(kind, quality, 0);
+          counts[quality] = {
+            vertices: geometry.getAttribute("position")?.count || 0,
+            triangles: geometry.index ? geometry.index.count / 3 : (geometry.getAttribute("position")?.count || 0) / 3
+          };
+          geometry.dispose();
+        }
+        rows.push({
+          kind,
+          ...counts,
+          monotonic: counts.high.vertices < counts.ultra.vertices && counts.ultra.vertices < counts.exhaustive.vertices
+        });
+      }
+      const base = assets.createProceduralGeometry("broadleaf-canopy", "ultra", 0);
+      const variant = assets.createProceduralGeometry("broadleaf-canopy", "ultra", 1);
+      const a = base.getAttribute("position").array;
+      const b = variant.getAttribute("position").array;
+      let variantDifference = 0;
+      for (let i = 0; i < Math.min(a.length, b.length, 512); i += 1) variantDifference += Math.abs(a[i] - b[i]);
+      base.dispose();
+      variant.dispose();
+      return {
+        passed: rows.every((row) => row.monotonic) && variantDifference > 0.01,
+        rows,
+        variantDifference: Number(variantDifference.toFixed(6))
+      };
+    } catch (error) {
+      return { passed: false, error: error?.stack || String(error) };
+    }
+  })()`);
+}
+
+async function captureCanvasVisualReport(window) {
+  try {
+    const webglPixels = await window.webContents.executeJavaScript(`new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        try {
+          const canvas = document.querySelector("#scene canvas");
+          const gl = canvas?.getContext("webgl2") || canvas?.getContext("webgl");
+          if (!canvas || !gl) return resolve({ passed: false, error: "WebGL canvas unavailable" });
+          const width = gl.drawingBufferWidth;
+          const height = gl.drawingBufferHeight;
+          const pixels = new Uint8Array(width * height * 4);
+          gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          const stride = Math.max(1, Math.floor(Math.sqrt((width * height) / 8192)));
+          const colors = new Set();
+          let samples = 0;
+          let mean = 0;
+          let m2 = 0;
+          let min = 255;
+          let max = 0;
+          for (let y = 0; y < height; y += stride) {
+            for (let x = 0; x < width; x += stride) {
+              const offset = (y * width + x) * 4;
+              const red = pixels[offset];
+              const green = pixels[offset + 1];
+              const blue = pixels[offset + 2];
+              const luminance = red * 0.2126 + green * 0.7152 + blue * 0.0722;
+              samples += 1;
+              const delta = luminance - mean;
+              mean += delta / samples;
+              m2 += delta * (luminance - mean);
+              min = Math.min(min, luminance);
+              max = Math.max(max, luminance);
+              colors.add(((red >> 4) << 8) | ((green >> 4) << 4) | (blue >> 4));
+            }
+          }
+          const deviation = samples > 1 ? Math.sqrt(m2 / (samples - 1)) : 0;
+          resolve({
+            passed: samples >= 256 && max - min >= 20 && deviation >= 8 && colors.size >= 12,
+            width,
+            height,
+            sampledPixelCount: samples,
+            luminanceRange: Number((max - min).toFixed(2)),
+            luminanceStandardDeviation: Number(deviation.toFixed(2)),
+            coarseColorCount: colors.size
+          });
+        } catch (error) {
+          resolve({ passed: false, error: error?.stack || String(error) });
+        }
+      }));
+    })`);
+    const bounds = await window.webContents.executeJavaScript(`(() => {
+      const rect = document.querySelector("#scene canvas")?.getBoundingClientRect();
+      if (!rect) return null;
+      return {
+        x: Math.max(0, Math.floor(rect.left)),
+        y: Math.max(0, Math.floor(rect.top)),
+        width: Math.max(1, Math.floor(rect.width)),
+        height: Math.max(1, Math.floor(rect.height))
+      };
+    })()`);
+    if (!bounds) return { passed: false, error: "3D canvas bounds unavailable" };
+    const image = await window.webContents.capturePage(bounds);
+    const size = image.getSize();
+    const pixels = image.toBitmap();
+    const pixelCount = size.width * size.height;
+    const stride = Math.max(1, Math.floor(Math.sqrt(pixelCount / 8192)));
+    const coarseColors = new Set();
+    let samples = 0;
+    let mean = 0;
+    let m2 = 0;
+    let minLuminance = 255;
+    let maxLuminance = 0;
+    for (let y = 0; y < size.height; y += stride) {
+      for (let x = 0; x < size.width; x += stride) {
+        const offset = (y * size.width + x) * 4;
+        const red = pixels[offset + 2];
+        const green = pixels[offset + 1];
+        const blue = pixels[offset];
+        const luminance = red * 0.2126 + green * 0.7152 + blue * 0.0722;
+        samples += 1;
+        const delta = luminance - mean;
+        mean += delta / samples;
+        m2 += delta * (luminance - mean);
+        minLuminance = Math.min(minLuminance, luminance);
+        maxLuminance = Math.max(maxLuminance, luminance);
+        coarseColors.add(((red >> 4) << 8) | ((green >> 4) << 4) | (blue >> 4));
+      }
+    }
+    const standardDeviation = samples > 1 ? Math.sqrt(m2 / (samples - 1)) : 0;
+    const screenshotPath = /\.json$/i.test(smokeTestPath)
+      ? smokeTestPath.replace(/\.json$/i, "-canvas.png")
+      : `${smokeTestPath}-canvas.png`;
+    writeFileSync(screenshotPath, image.toPNG());
+    return {
+      passed: webglPixels.passed && samples >= 256 && maxLuminance - minLuminance >= 20 && standardDeviation >= 8 && coarseColors.size >= 12,
+      width: size.width,
+      height: size.height,
+      sampledPixelCount: samples,
+      luminanceRange: Number((maxLuminance - minLuminance).toFixed(2)),
+      luminanceStandardDeviation: Number(standardDeviation.toFixed(2)),
+      coarseColorCount: coarseColors.size,
+      webglPixels,
+      screenshotPath
+    };
+  } catch (error) {
+    return { passed: false, error: error?.stack || String(error) };
+  }
 }
 
 app.whenReady().then(() => {

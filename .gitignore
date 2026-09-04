@@ -1,5 +1,6 @@
 .agents/
 work/
+artifacts/
 
 outputs/GeoLab-128-Local/
 outputs/GeoLab-128-Portable/

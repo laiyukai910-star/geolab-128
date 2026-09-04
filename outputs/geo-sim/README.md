@@ -33,13 +33,14 @@ Open <http://127.0.0.1:5179/>. The bundled Rust WASM Worker is used automaticall
 | `src/main.js` | UI state, simulation lifecycle, inspection, reporting, and export commands. |
 | `src/geoEngine.js` | Browser terrain, climate, hydrology, subsurface, ecology, infrastructure, time, and hazard model. |
 | `src/terrainRenderer.js` | Three.js terrain, water, vegetation, wildlife, infrastructure, wind, hazard, and subsurface rendering. |
+| `src-ts/assetPipeline.ts` | Strict detail budgets, refinement profiles, PBR material classes, and deterministic spatial asset variants. |
 | `src-ts/backendClient.ts` | Strict scenario types, bounded resampling, native/WASM selection, request control, and comparison reporting. |
 | `src-ts/modelKernel.ts` | Two-phase validation, JS/Rust comparison metrics, rollback, and atomic working-layer commit. |
 | `src-ts/modelWorkerClient.ts` | Recoverable typed Worker lifecycle, request isolation, diagnostics, cancellation, and transient-resource retry. |
 | `src-ts/modelWorker.ts` | Serialized model jobs, native/WASM execution selection, commit orchestration, and zero-copy return transfers. |
 | `src-ts/wasmAbi.ts` | Validated Rust WASM memory ABI and JSON envelope decoding. |
 | `src-ts/rustKernelWorker.ts` | Off-main-thread Rust kernel loading and execution. |
-| `src/backendClient.js`, `src/modelKernel.js`, `src/modelWorkerClient.js`, `src/modelWorker.js`, `src/wasmAbi.js`, `src/rustKernelWorker.js` | Generated browser modules; edit the TypeScript sources instead. |
+| `src/assetPipeline.js`, `src/backendClient.js`, `src/modelKernel.js`, `src/modelWorkerClient.js`, `src/modelWorker.js`, `src/wasmAbi.js`, `src/rustKernelWorker.js` | Generated browser modules; edit the TypeScript sources instead. |
 | `src/dataAdapters.js` | GeoTIFF, CSV, JSON, and GeoJSON parsing, unit normalization, bounds interpretation, and provenance. |
 | `src/physicalCoupling.js` | Cross-system conservation gates and directional coupling ledger. |
 | `src/landscapeEcology.js` | Habitat blocks, ecological connectivity, biodiversity, carrying capacity, and release screening. |
@@ -61,6 +62,8 @@ The browser engine supports:
 - source coverage, provenance, calibration, uncertainty, process gates, and interpretation boundaries.
 
 The Rust core has two roles. First, it independently resamples the current scenario to a bounded audit grid and reports terrain, water, groundwater, sediment, habitat, and process gates. Second, on working grids up to 512 x 512, it returns a focused authoritative surface profile. TypeScript validates physical ranges, the complete sparse MFD graph, downhill edges, acyclic topology, and all conservation gates; it then atomically replaces thirteen compatible model layers and rebuilds dependent river, hydraulic, subsurface, hazard, infrastructure, ecology, wildlife, statistics, and 3D state in graph-topological order. Electron uses the native Rust process; the static application executes the same crate as WASM inside the model Worker.
+
+The 3D asset pipeline is also a reviewed TypeScript boundary. It controls monotonic quality profiles, resolution-aware layer budgets, semantic physical materials, and stable spatial variant selection. The Three.js geometry implementation consumes that contract to build multi-template vegetation, buildings, infrastructure, terrain details, and wildlife. Runtime diagnostics expose the active pipeline version and actual template/instance complexity, while the Electron smoke test verifies the rendered WebGL pixel distribution and writes a canvas capture.
 
 ## Data Inputs
 

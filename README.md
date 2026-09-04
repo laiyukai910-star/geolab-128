@@ -78,11 +78,15 @@ The desktop application starts and stops the native service automatically. Stati
 
 ### Language boundary
 
-Migration is capability-driven rather than a file-extension exercise. Numerically sensitive, deterministic, and conservation-checked work moves to Rust first. Browser-to-core schemas, the queued model Worker, two-phase commit validation, rollback, and asynchronous orchestration live in strict TypeScript. Three.js rendering and stable UI modules remain JavaScript until their contracts are isolated and covered, then migrate incrementally. Generated files under `outputs/geo-sim/src/` are browser artifacts; their reviewed sources live under `outputs/geo-sim/src-ts/`.
+Migration is capability-driven rather than a file-extension exercise. Numerically sensitive, deterministic, and conservation-checked work moves to Rust first. Browser-to-core schemas, the queued model Worker, two-phase commit validation, rollback, asynchronous orchestration, and the 3D asset-quality pipeline live in strict TypeScript. The new typed asset boundary owns resolution-aware budgets, geometric refinement profiles, physical material classes, and deterministic spatial variant assignment. Three.js scene assembly and stable UI modules remain JavaScript until their contracts are isolated and covered, then migrate incrementally. Generated files under `outputs/geo-sim/src/` are browser artifacts; their reviewed sources live under `outputs/geo-sim/src-ts/`.
 
 ## 3D And Engine Workflows
 
 The Three.js scene visualizes terrain, river networks, vegetation, infrastructure, wildlife, ecological blocks, wind, and subsurface cutaways. It is a working analysis view: layer changes, selected regions, simulation time, and modeled interventions update the scene rather than living in a separate preview.
+
+Procedural assets are assembled from semantic geometry rather than one universal primitive. Trees use fluted trunks, lobed broadleaf crowns, layered conifer profiles, understory, reeds, crops, and grass forms. Buildings and facilities use setback, courtyard, low-rise, industrial, civic, roof, facade, balcony, plant, bridge, rail, hydraulic, energy, port, and observatory assemblies. Wildlife is rendered from species-aware torso, head, muzzle, limb, wing, tail, horn, antler, beak, mane, and other anatomical templates. Research and exhaustive detail levels increase curve, radial, surface, bevel, repetition, and organic subdivision together.
+
+Each populated semantic class is distributed across deterministic spatial variants, so rebuilding the same scenario preserves its forms while avoiding obvious repeated silhouettes. Eight physical material classes distinguish mineral, organic, water, glass, metal, masonry, wildlife, and technical surfaces. Scene diagnostics report template vertices, triangles, procedural instances, variant use, and the active typed pipeline. These are high-detail procedural analysis assets, not surveyed meshes, photogrammetry, BIM, or production-ready CAD models.
 
 The export drawer creates self-contained packages for production engines:
 
@@ -146,7 +150,7 @@ GeoLab 128 is a teaching and exploratory prototype under active validation devel
 | `engine/geolab-core/` | Rust terrain, hydroclimate, routing, conservation, and gate library. |
 | `engine/geolab-server/` | Bounded local Axum service used by the desktop application. |
 | `engine/geolab-wasm/` | Minimal browser ABI for the shared Rust core. |
-| `outputs/geo-sim/` | Browser application, strict TypeScript kernel bridge and atomic commit layer, exploratory authoring engine, Three.js renderer, adapters, and exports. |
+| `outputs/geo-sim/` | Browser application, strict TypeScript kernel and 3D asset pipelines, atomic commit layer, exploratory authoring engine, Three.js renderer, adapters, and exports. |
 | `outputs/geo-sim-desktop/` | Electron runtime, native/WASM build orchestration, Rust sidecar lifecycle, and local packaging. |
 | `outputs/geo-sim/tests/` | Deterministic client, model, ecology, reporting, and interchange tests. |
 | `.github/workflows/ci.yml` | Rust, WebAssembly, TypeScript, JavaScript, and cross-runtime integrity pipeline. |

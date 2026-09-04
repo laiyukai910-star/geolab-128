@@ -1,8 +1,8 @@
 {
   "name": "geolab-128-local",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
-  "description": "Interactive 3D geographic systems laboratory with shared native and WebAssembly Rust verification",
+  "description": "Coupled geographic systems laboratory with typed procedural 3D assets and shared native/WebAssembly Rust verification",
   "main": "main.cjs",
   "scripts": {
     "vendor": "node build-local.mjs --vendor-only",
@@ -10,6 +10,7 @@
     "wasm:build": "node build-local.mjs --wasm-only",
     "backend:build": "node build-local.mjs --backend-only",
     "typecheck": "tsc --noEmit -p ../geo-sim/tsconfig.json",
+    "test:asset-pipeline": "npm run browser:build && node ../geo-sim/tests/assetPipeline.test.mjs",
     "runtime:build": "node build-local.mjs --prepare-runtime",
     "start": "npm run runtime:build && electron .",
     "package:win": "node build-local.mjs",
