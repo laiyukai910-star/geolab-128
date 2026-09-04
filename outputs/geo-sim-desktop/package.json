@@ -2,7 +2,7 @@
   "name": "geolab-128-local",
   "version": "0.6.0",
   "private": true,
-  "description": "Coupled geographic systems laboratory with typed procedural 3D assets and shared native/WebAssembly Rust verification",
+  "description": "Local-first 3D laboratory for coupled regional geographic scenarios",
   "main": "main.cjs",
   "scripts": {
     "vendor": "node build-local.mjs --vendor-only",
