@@ -73,11 +73,35 @@ available, so this does not certify the entire startup as offline or error-free.
 The run captured the canvas and closed Electron successfully. No separate
 pixel-distribution assertion or full child-process shutdown audit ran here.
 
+## Static Browser Follow-up
+
+On 2026-09-05, the unchanged application at commit
+`136a998182256ea6502a8bfee2c3979760e5804a` was exercised in locally installed
+Chrome `152.0.7977.82`, headless, with a 1600 x 900 viewport and a fresh browser
+context. A temporary loopback static server supplied the application and bundled
+WASM. No native backend endpoint was configured.
+
+Request blocking and error listeners were installed before navigation. The
+initial 256 x 256 scenario reached ready in 2.88 seconds by its page-boot clock.
+Changing only the base-temperature control from 17.5 C to 19 C and rebuilding
+the same grid took 2.75 seconds. Modeled mean temperature increased from
+12.962 C to 14.462 C.
+
+Both results reported `browser-wasm`, an applied authoritative surface commit,
+and 13 passed process gates with zero failures. The run recorded zero page
+errors, unhandled promise rejections, failed page requests, or attempted external
+requests. The captured canvas was visually inspected and contained terrain,
+water, and river lines. Browser and temporary server closed successfully.
+
+This completes the previously blocked static-browser smoke check for this
+scenario. It is not a numerical native/WASM parity test or a complete UI audit.
+The single-run timings are not directly comparable with the desktop timings.
+
 ## Incomplete Checks and Warnings
 
-- Static-browser runtime verification did not start: Playwright's configured
-  Chromium headless executable was absent. This is a test-environment failure,
-  not evidence of an application failure. The Node-based WASM test did pass.
+- The original static-browser attempt could not start because Playwright's
+  configured Chromium executable was absent. The follow-up above resolved this
+  by using installed Chrome; no additional browser download was needed.
 - Full native/browser scenario parity, failure injection, cancellation,
   persistent temporal state, import fixtures, and grids above 512 x 512 remain
   outside this baseline's runtime coverage.
@@ -90,11 +114,13 @@ pixel-distribution assertion or full child-process shutdown audit ran here.
 
 ## Next Check
 
-Complete the remaining baseline runtime check, then build the content matrix
-incrementally. The first focused P0 regression should cover a nonresponding
+Build the content matrix incrementally. The first focused P0 regression should
+cover a nonresponding
 model Worker: bounded failure, retirement, and a successful subsequent request.
 An additional audit candidate is failure during downstream rebuilding after
 Rust surface layers have been applied. Neither candidate is recorded as fixed.
 
 Local raw records remain under ignored `artifacts/`: `baseline-checks.json`,
-individual `baseline-*.log` files, and `baseline-runtime.json`.
+individual `baseline-*.log` files, and `baseline-runtime.json`. The static-browser
+follow-up used `verify-static-baseline.cjs` and produced `static-baseline.json`
+and `static-baseline-canvas.png` in the same ignored directory.
