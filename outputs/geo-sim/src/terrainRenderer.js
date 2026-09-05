@@ -4,6 +4,7 @@ import { createFoliageGeometry } from "./foliageGeometry.js";
 import { FoliageInstances } from "./foliageInstances.js";
 import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal } from "./terrainAppearance.js";
 import { createTerrainSurfaceMaterial, updateTerrainSurfaceMaterial } from "./terrainSurfaceMaterial.js";
+import { SceneVolume } from "./sceneVolume.js";
 import {
   buildAdaptiveInfrastructurePlacementPlan,
   buildBlockDetailAtlas,
@@ -29,11 +30,12 @@ import {
   proceduralMaterialProfile
 } from "./assetPipeline.js";
 
-function cameraHome(sizeKm) {
+function cameraHome(sizeKm, aspect = 1.5) {
+  const fit = Math.max(1, 1.2 / aspect);
   return {
-    x: sizeKm * 0.8,
-    y: sizeKm * 0.475,
-    z: sizeKm * 0.9
+    x: sizeKm * 0.8 * fit,
+    y: sizeKm * 0.32 * fit,
+    z: sizeKm * 0.9 * fit
   };
 }
 
@@ -410,6 +412,7 @@ export class TerrainRenderer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = false;
+    this.renderer.localClippingEnabled = true;
     this.parallelShaderCompileSupported = Boolean(
       this.renderer.getContext().getExtension("KHR_parallel_shader_compile")
     );
@@ -422,7 +425,7 @@ export class TerrainRenderer {
     this.controls.dampingFactor = 0.06;
     this.controls.minDistance = 0.28;
     this.controls.maxDistance = Math.max(68, MAP_SIZE_KM * 3.4);
-    this.controls.maxPolarAngle = Math.PI * 0.49;
+    this.controls.maxPolarAngle = Math.PI * 0.97;
     this.controls.target.set(0, 0.6, 0);
 
     this.terrain = null;
@@ -489,6 +492,7 @@ export class TerrainRenderer {
     const skyFill = new THREE.DirectionalLight(0x9fc8dd, 0.82);
     skyFill.position.set(14, 7, -11);
     this.scene.add(skyFill);
+    this.sceneVolume = new SceneVolume(this.scene);
 
     this.grid = null;
     this.gridSizeKm = 0;
@@ -545,6 +549,7 @@ export class TerrainRenderer {
     timedBuild("terrain-surface", () => this.buildTerrainMesh());
     timedBuild("rivers", () => this.buildRivers());
     timedBuild("wind-arrows", () => this.buildWindArrows());
+    if (["section", "underwater"].includes(params.worldView)) this.focusVolumeView();
     this.applySceneVisibility();
     this.renderLoadStats = {
       mode: "staged-detail-layers",
@@ -749,6 +754,7 @@ export class TerrainRenderer {
     this.viewMode = viewMode;
     this.updateSceneScale(previousSizeKm !== modelSizeKm(model));
     this.buildTerrainMesh(dirtyBounds);
+    if (["section", "underwater"].includes(params.worldView)) this.focusVolumeView();
     if (typeof globalThis !== "undefined") {
       globalThis.__geoLabTerrainRefreshStats = this.lastTerrainRefreshStats;
       globalThis.__geoLabTerrainTileStats = this.lastTerrainTileStats;
@@ -780,6 +786,42 @@ export class TerrainRenderer {
     return this.activeDetailBudgetPlan || null;
   }
 
+  updateWorldViewOptions(params = this.params) {
+    if (!this.model || !this.sceneVolume) return null;
+    const previous = this.sceneVolume.config;
+    this.params = params;
+    this.sceneVolume.rebuild(this.model, params, this.terrainTiles, this.viewMode);
+    if (this.shouldShowSubsurface3D()) this.buildSubsurface3D();
+    this.applySceneVisibility();
+    const next = this.sceneVolume.config;
+    if (previous?.mode !== next.mode || (next.mode === "section" && (previous.cutX !== next.cutX || previous.depthScale !== next.depthScale))) this.focusVolumeView();
+    this.sceneDiagnosticsDirty = true;
+    return this.sceneVolume.stats;
+  }
+
+  focusVolumeView() {
+    const volume = this.sceneVolume;
+    if (!volume?.config) return;
+    const { mode, sizeKm, cutX } = volume.config;
+    if (mode === "underwater") {
+      if (!volume.focus) return;
+      const { x, y, z, depthKm } = volume.focus;
+      this.controls.minDistance = Math.max(0.0001, depthKm * 0.05);
+      this.camera.near = Math.max(0.00001, depthKm * 0.001);
+      this.controls.target.set(x, y + depthKm * 0.25, z - depthKm);
+      this.camera.position.set(x, y + depthKm * 0.65, z);
+    } else if (mode === "section") {
+      const targetY = (volume.baseY + terrainCameraFocusY(this.model, this.params)) * 0.5;
+      this.controls.target.set(cutX - sizeKm * 0.1, targetY, 0);
+      const aspectScale = Math.max(1, 1.2 / this.camera.aspect);
+      this.camera.position.set(cutX + sizeKm * 0.8 * aspectScale, targetY + sizeKm * 0.36 * aspectScale, sizeKm * 0.8 * aspectScale);
+    } else {
+      this.resetCamera();
+    }
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+  }
+
   updateView(viewMode, dirtyBounds = null) {
     this.viewMode = viewMode;
     if (!this.model || !this.terrainTiles?.length) return;
@@ -803,6 +845,7 @@ export class TerrainRenderer {
     this.applySceneVisibility();
     this.sceneDiagnosticsDirty = true;
     return {
+      volume: this.sceneVolume?.stats,
       subsurface: this.subsurfaceGroup.visible,
       terrainDetails: this.terrainDetailGroup.visible,
       wind: this.windGroup.visible,
@@ -835,6 +878,9 @@ export class TerrainRenderer {
     this.wildlifeGroup.visible = this.params?.wildlife3DEnabled === true;
     this.hazardGroup.visible = this.shouldShowHazards3D();
     if (this.grid) this.grid.visible = this.params?.grid3DEnabled === true;
+    this.sceneVolume?.setVisibility(this.params, this.viewMode);
+    this.sceneVolume?.applyClipping([this.terrainTileGroup, this.rivers, this.vegetation,
+      this.terrainDetailGroup, this.infrastructureGroup, this.wildlifeGroup, this.hazardGroup, this.windGroup, this.subsurfaceGroup, this.grid]);
   }
 
   updateTemporalState(model, params, viewMode) {
@@ -883,7 +929,7 @@ export class TerrainRenderer {
   resetCamera() {
     const sizeKm = modelSizeKm(this.model);
     const focusY = terrainCameraFocusY(this.model, this.params);
-    const home = cameraHome(sizeKm);
+    const home = cameraHome(sizeKm, this.camera.aspect);
     this.camera.position.set(home.x, home.y + focusY, home.z);
     this.controls.target.set(0, focusY, 0);
     this.controls.update();
@@ -945,6 +991,7 @@ export class TerrainRenderer {
     const sizeKm = modelSizeKm(this.model);
     this.scene.fog.density = 0.035 * (20 / sizeKm);
     this.camera.far = Math.max(160, sizeKm * 10);
+    this.camera.near = 0.00005;
     this.camera.updateProjectionMatrix();
     this.controls.minDistance = Math.max(0.05, sizeKm * 0.0025);
     this.controls.maxDistance = Math.max(68, sizeKm * 3.4);
@@ -981,6 +1028,13 @@ export class TerrainRenderer {
     const rect = this.container.getBoundingClientRect();
     const width = Math.max(1, rect.width);
     const height = Math.max(1, rect.height);
+    const aspect = width / height;
+    if (this.sceneVolume?.config?.mode !== "underwater") {
+      const oldFit = this.lastViewportAspect ? Math.max(1, 1.2 / this.lastViewportAspect) : 1;
+      const fit = Math.max(1, 1.2 / aspect) / oldFit;
+      this.camera.position.sub(this.controls.target).multiplyScalar(fit).add(this.controls.target);
+    }
+    this.lastViewportAspect = aspect;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
@@ -1052,7 +1106,8 @@ export class TerrainRenderer {
     );
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(pointer, this.camera);
-    const hit = raycaster.intersectObjects(this.terrainTileGroup.children, false)[0];
+    const hit = raycaster.intersectObjects(this.terrainTileGroup.children, false).find(candidate =>
+      this.sceneVolume?.config?.mode !== "section" || candidate.point.x <= this.sceneVolume.config.cutX);
     if (!hit) return;
     const sizeKm = modelSizeKm(this.model);
     const cellKm = this.model.cellSizeKm || sizeKm / Math.max(1, this.model.n - 1);
@@ -1080,6 +1135,7 @@ export class TerrainRenderer {
     if (this.wildlifeGroup) disposeObjectTree(this.wildlifeGroup);
     if (this.hazardGroup) disposeObjectTree(this.hazardGroup);
     if (this.windGroup) disposeObjectTree(this.windGroup);
+    this.sceneVolume?.dispose();
     disposeTerrainTiles(this);
     if (this.rivers) {
       this.rivers.geometry.dispose();
@@ -1099,6 +1155,7 @@ export class TerrainRenderer {
     this.controls.update();
     const now = performance.now();
     const t = now * 0.001;
+    this.sceneVolume?.update(this.camera, t);
     if (this.windGroup.visible) {
       this.windGroup.children.forEach((arrow, index) => {
         arrow.position.y = arrow.userData.baseY + Math.sin(t * 1.6 + index) * 0.018;
@@ -1256,6 +1313,8 @@ export class TerrainRenderer {
     touchedTiles.forEach((tile) => {
       updateTerrainTileMesh(tile, model, params, this.viewMode, { updateHeights: true, updateColors: true });
     });
+    this.sceneVolume?.rebuild(model, params, this.terrainTiles, this.viewMode);
+    if (this.sceneVolume) this.applySceneVisibility();
   }
 
   buildSubsurface3D() {
@@ -1295,9 +1354,9 @@ export class TerrainRenderer {
     const budgetPlan = this.activeDetailBudgetPlan || detailBudgetPlan(model);
     const step = budgetPlan.subsurfaceStep;
     const sliceY = Math.floor(n * 0.52);
-    const sliceX = Math.floor(n * 0.48);
+    const sliceX = this.sceneVolume?.config?.mode === "section" ? this.sceneVolume.config.cutIndex : Math.floor(n * 0.48);
     const verticalScale = Number(this.params.verticalScale) || 1;
-    const undergroundScale = Math.max(1.35, verticalScale * 1.15);
+    const undergroundScale = verticalScale * (this.sceneVolume?.config?.depthScale || 1);
     const seen = new Set();
     const pushColumn = (x, y, thinAxis) => {
       const key = `${x}:${y}`;

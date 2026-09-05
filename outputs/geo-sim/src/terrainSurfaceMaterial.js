@@ -96,6 +96,13 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
     0.32 * blocks + 0.12 * chips + layers * 0.035 - fracture * 0.09
     + bevel * 0.07 + grain * 0.06 + grit * 0.008, rock) * (1.0 - sealed * 0.85);
   geoRoughness = clamp(mix(0.94, 0.79, rock) + (grain - 0.5) * 0.1 - wet * 0.27, 0.42, 0.99);
+} else if (geoSurfaceEnabled > 0.5) {
+  float sediment = geoFilteredNoise(p, 0.18, footprint);
+  float ripple = sin(p.x * 3.8 + geoFilteredNoise(p, 2.2, footprint) * 4.0)
+    * (1.0 - smoothstep(0.2, 1.4, footprint));
+  diffuseColor.rgb *= 0.86 + sediment * 0.22 + ripple * 0.08;
+  geoHeight = sediment * 0.015 + ripple * 0.018;
+  geoRoughness = 0.75;
 }
 `;
 

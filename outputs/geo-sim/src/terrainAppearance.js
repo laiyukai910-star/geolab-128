@@ -15,7 +15,7 @@ export function terrainSurfaceWeights(model, params, index) {
 }
 
 export function naturalTerrainColor(model, params, index, weights = null) {
-  if (model.height[index] <= (Number(params?.seaLevel) || 0)) return [34, 82, 125];
+  if (model.height[index] <= (Number(params?.seaLevel) || 0)) return [142, 151, 132];
   const [rock, vegetation, wet, sealed] = weights || terrainSurfaceWeights(model, params, index);
   const soil = [139, 121, 93];
   const mineral = [147, 151, 146];

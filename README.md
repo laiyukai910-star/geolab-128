@@ -87,6 +87,8 @@ Procedural objects use type-specific geometry variants and material classes. The
 
 The natural-surface view blends rock, soil, vegetation, and sealed ground with multiscale surface relief and wetness-dependent roughness. Materials run locally, remain continuous across terrain tiles, and fade subpixel detail with distance. These are illustrative surface details, not additional DEM samples. [Material comparison and verification](docs/v1-readiness/TERRAIN_MATERIALS.md).
 
+Terrain now has closed sides and a base. Solid, geological-section, and underwater views expose the modeled ground and sea-level water from different positions, with a local sky environment. Underground display exaggeration changes presentation only. [Volume views and their limits](docs/v1-readiness/WORLD_VOLUME.md).
+
 Available analysis layers include elevation, climate, precipitation, temperature, flow accumulation, velocity, shear stress, sediment, erosion, deposition, hazards, vegetation, land cover, soil, groundwater, aquifer potential, imperviousness, wetness, confidence, ecological connectivity, and wildlife richness.
 
 ## Data And Exports

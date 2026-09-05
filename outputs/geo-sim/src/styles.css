@@ -137,6 +137,16 @@ input[type="range"] {
   align-items: flex-start;
   justify-content: space-between;
   pointer-events: none;
+  isolation: isolate;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+.topbar::before {
+  content: "";
+  position: absolute;
+  inset: -18px -82px -24px -18px;
+  z-index: -1;
+  background: linear-gradient(rgba(8, 18, 16, 0.86), rgba(8, 18, 16, 0));
 }
 
 .topbar h1 {

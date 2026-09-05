@@ -2,6 +2,15 @@ const STORAGE_KEY = "geolab.locale";
 const DEFAULT_LOCALE = "en";
 
 const EXACT = Object.freeze({
+  "立体观察": "Volume view",
+  "完整地块": "Solid terrain",
+  "地下剖面": "Geological section",
+  "水下观察": "Underwater",
+  "剖切位置 %": "Section position %",
+  "地下显示夸张倍数": "Underground exaggeration",
+  "天空环境": "Sky environment",
+  "海面与水体": "Sea surface and water",
+  "当前海平面下没有可进入的水域。": "No submerged terrain at the current sea level.",
   "自然地表（示意）": "Natural surface (illustrative)",
   "GeoLab 128 | 地理演算程序": "GeoLab 128 | Geographic Simulation",
   "DEM 演算中": "DEM processing",

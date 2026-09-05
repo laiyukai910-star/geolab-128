@@ -6,6 +6,10 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Changed
 
+- Closed terrain into a solid display block with elevation-following sides, modeled underground layers, a base, and a movable geological section. Underground display exaggeration is independent of scientific depth.
+- Added a local sky environment, sea-level water surfaces and boundary walls, seabed shading, and an underwater camera with depth-dependent fog.
+- Clipped above-ground objects with geological sections, excluded hidden terrain from double-click focus, and fitted the overview to narrow viewports.
+- Kept volume-view controls independent of scientific rebuilds and shared terrain geometry with sea surfaces to avoid duplicating grid buffers.
 - Added a natural-surface view with locally generated rock joints, strata, soil grain, vegetation mottling, and wetness-dependent roughness; analytical palettes remain separate.
 - Filtered subpixel terrain detail by viewing footprint and packed surface weights into four bytes per vertex, without additional mesh subdivisions or texture downloads.
 - Matched terrain normals across tile boundaries and refreshed neighboring normals and culling bounds after height edits.

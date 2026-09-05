@@ -61,6 +61,7 @@ jobs:
           node outputs/geo-sim/tests/assetPipeline.test.mjs
           node outputs/geo-sim/tests/proceduralGeometry.test.mjs
           node outputs/geo-sim/tests/terrainSurface.test.mjs
+          node outputs/geo-sim/tests/terrainVolume.test.mjs
           node outputs/geo-sim/tests/scenarioSynthesis.test.mjs
           node outputs/geo-sim/tests/landscapeEcology.test.mjs
           node outputs/geo-sim/tests/physicalCouplingInterop.test.mjs

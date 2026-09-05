@@ -109,6 +109,11 @@ const ids = [
   "renderDetailQuality",
   "terrainDetail3DEnabled",
   "subsurface3DEnabled",
+  "worldView",
+  "sectionPosition",
+  "subsurfaceDisplayScale",
+  "sky3DEnabled",
+  "water3DEnabled",
   "wind3DEnabled",
   "grid3DEnabled",
   "continentTemplate",
@@ -920,10 +925,32 @@ function bindUi() {
     ui[id]?.addEventListener("change", refreshSceneVisibilityControls);
   });
 
+  ["worldView", "sectionPosition", "subsurfaceDisplayScale", "sky3DEnabled", "water3DEnabled"].forEach(id => {
+    ui[id]?.addEventListener("change", () => {
+      if (id === "worldView" && ui.worldView.value === "underwater") {
+        viewMode.value = "landscape";
+        ui.water3DEnabled.checked = true;
+        renderer.updateView("landscape");
+        drawAnalysis();
+      }
+      params = readParams();
+      const stats = renderer.updateWorldViewOptions(params);
+      const message = document.getElementById("worldViewMessage");
+      message.hidden = !(params.worldView === "underwater" && stats?.underwaterAvailable === false);
+      ui.sectionPosition.disabled = params.worldView !== "section";
+    });
+  });
+
   viewMode.addEventListener("change", () => {
     if (!model) return;
     renderer.updateView(viewMode.value);
     renderer.updateSceneVisibility?.(readParams(), viewMode.value);
+    if (["subsurface", "aquifer", "geostress", "subsurfaceConfidence", "undergroundRisk"].includes(viewMode.value)) {
+      ui.worldView.value = "section";
+      ui.sectionPosition.disabled = false;
+      params = readParams();
+      renderer.updateWorldViewOptions(params);
+    }
     drawAnalysis();
   });
 
@@ -3319,6 +3346,11 @@ function readParams() {
     aquiferRechargeScale: Number(ui.aquiferRechargeScale.value),
     terrainDetail3DEnabled: ui.terrainDetail3DEnabled?.checked === true,
     subsurface3DEnabled: ui.subsurface3DEnabled?.checked === true,
+    worldView: ui.worldView?.value || "solid",
+    sectionPosition: clamp(Number(ui.sectionPosition?.value ?? 50), 5, 95),
+    subsurfaceDisplayScale: clamp(Number(ui.subsurfaceDisplayScale?.value ?? 20), 1, 100),
+    sky3DEnabled: ui.sky3DEnabled?.checked !== false,
+    water3DEnabled: ui.water3DEnabled?.checked !== false,
     wind3DEnabled: ui.wind3DEnabled?.checked === true,
     grid3DEnabled: ui.grid3DEnabled?.checked === true,
     ecosystem3DEnabled: ui.ecosystem3DEnabled?.checked !== false,
