@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createFoliageGeometry } from "./foliageGeometry.js";
 import { FoliageInstances } from "./foliageInstances.js";
+import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal } from "./terrainAppearance.js";
+import { createTerrainSurfaceMaterial, updateTerrainSurfaceMaterial } from "./terrainSurfaceMaterial.js";
 import {
   buildAdaptiveInfrastructurePlacementPlan,
   buildBlockDetailAtlas,
@@ -1240,7 +1242,11 @@ export class TerrainRenderer {
     const dirtyRange = shouldUpdateFull ? null : terrainDirtyVertexRange(model, dirtyBounds);
     const refreshStats = terrainRefreshStats(model, dirtyRange, TERRAIN_TILE_SEGMENTS);
     this.lastTerrainRefreshStats = refreshStats;
-    const touchedTiles = selectTerrainTilesForRange(this.terrainTiles, dirtyRange);
+    const normalRange = dirtyRange && {
+      x0: dirtyRange.x0 - 1, y0: dirtyRange.y0 - 1,
+      x1: dirtyRange.x1 + 1, y1: dirtyRange.y1 + 1
+    };
+    const touchedTiles = selectTerrainTilesForRange(this.terrainTiles, normalRange);
     this.lastTerrainTileStats = terrainTileStats(this.terrainTiles, touchedTiles, model, dirtyRange);
     if (this.terrainTileGroup) {
       this.terrainTileGroup.userData.n = n;
@@ -4081,19 +4087,14 @@ function buildTerrainTiles(renderer, model) {
   if (!renderer.terrainTileGroup.parent) renderer.scene.add(renderer.terrainTileGroup);
 
   const sizeKm = modelSizeKm(model);
-  const materialOptions = {
-    vertexColors: true,
-    roughness: 0.92,
-    metalness: 0.02,
-    flatShading: false
-  };
   renderer.terrainTiles = createTerrainTileLayout(model, TERRAIN_TILE_SEGMENTS).map((tile) => {
     const widthKm = ((tile.x1 - tile.x0) / Math.max(1, model.n - 1)) * sizeKm;
     const depthKm = ((tile.y1 - tile.y0) / Math.max(1, model.n - 1)) * sizeKm;
     const geometry = new THREE.PlaneGeometry(widthKm, depthKm, tile.segX, tile.segY);
     geometry.rotateX(-Math.PI / 2);
     geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array((tile.segX + 1) * (tile.segY + 1) * 3), 3));
-    const material = new THREE.MeshStandardMaterial(materialOptions);
+    geometry.setAttribute("terrainSurface", new THREE.BufferAttribute(new Uint8Array((tile.segX + 1) * (tile.segY + 1) * 4), 4, true));
+    const material = createTerrainSurfaceMaterial();
     const mesh = new THREE.Mesh(geometry, material);
     const centerX = (((tile.x0 + tile.x1) / 2) / Math.max(1, model.n - 1) - 0.5) * sizeKm;
     const centerZ = (((tile.y0 + tile.y1) / 2) / Math.max(1, model.n - 1) - 0.5) * sizeKm;
@@ -4141,18 +4142,35 @@ function updateTerrainTileMesh(tile, model, params, viewMode, options = {}) {
   const geometry = tile.mesh.geometry;
   const positions = geometry.getAttribute("position");
   const colors = geometry.getAttribute("color");
+  const normals = geometry.getAttribute("normal");
+  const surfaces = geometry.getAttribute("terrainSurface");
   const n = model.n;
   const verticalScale = Number(params?.verticalScale) || 1;
+  const natural = viewMode === "landscape";
+  const linearColor = new THREE.Color();
+  updateTerrainSurfaceMaterial(tile.mesh.material, params, viewMode);
   let vertex = 0;
   for (let ly = 0; ly <= tile.segY; ly += 1) {
     const gy = tile.y0 + ly;
     for (let lx = 0; lx <= tile.segX; lx += 1) {
       const gx = tile.x0 + lx;
       const modelIndex = gy * n + gx;
-      if (updateHeights) positions.setY(vertex, (model.height[modelIndex] / 1000) * verticalScale);
+      if (updateHeights) {
+        positions.setY(vertex, (model.height[modelIndex] / 1000) * verticalScale);
+        const [nx, ny, nz] = terrainVertexNormal(model, gx, gy, verticalScale);
+        normals.setXYZ(vertex, nx, ny, nz);
+      }
       if (updateColors) {
-        const [r, g, b] = colorForValue(model, params, viewMode, modelIndex);
-        colors.setXYZ(vertex, r / 255, g / 255, b / 255);
+        if (natural) {
+          const weights = terrainSurfaceWeights(model, params, modelIndex);
+          surfaces.setXYZW(vertex, ...weights);
+          const [r, g, b] = naturalTerrainColor(model, params, modelIndex, weights);
+          linearColor.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
+          colors.setXYZ(vertex, linearColor.r, linearColor.g, linearColor.b);
+        } else {
+          const [r, g, b] = colorForValue(model, params, viewMode, modelIndex);
+          colors.setXYZ(vertex, r / 255, g / 255, b / 255);
+        }
       }
       vertex += 1;
     }
@@ -4161,12 +4179,15 @@ function updateTerrainTileMesh(tile, model, params, viewMode, options = {}) {
     positions.clearUpdateRanges?.();
     positions.addUpdateRange?.(0, positions.count * 3);
     positions.needsUpdate = true;
-    geometry.computeVertexNormals();
+    normals.needsUpdate = true;
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
   }
   if (updateColors) {
     colors.clearUpdateRanges?.();
     colors.addUpdateRange?.(0, colors.count * 3);
     colors.needsUpdate = true;
+    if (natural) surfaces.needsUpdate = true;
   }
 }
 

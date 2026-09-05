@@ -1,3 +1,4 @@
+import { naturalTerrainColor } from "./terrainAppearance.js";
 import {
   buildEcologicalIntegrityReport,
   buildLandscapeBlockNetwork,
@@ -2438,6 +2439,7 @@ export function getCell(model, x, y) {
 }
 
 export function colorForValue(model, params, mode, i) {
+  if (mode === "landscape") return naturalTerrainColor(model, params, i);
   if (mode === "landscapeConnectivity") {
     const block = landscapeBlockAtCell(model, i);
     return ramp(block?.meanNeighborConnectivity ?? 0, 0.18, 0.96, [

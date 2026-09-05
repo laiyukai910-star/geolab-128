@@ -1,0 +1,44 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Terrain material inspection</title>
+<style>html,body{margin:0;overflow:hidden;background:#dee6e8}canvas{display:block}header{position:absolute;top:18px;left:20px;right:20px;font:16px system-ui;color:#243a3a;pointer-events:none}</style>
+<header id="title"></header>
+<script type="importmap">{"imports":{"three":"../../vendor/three/three.module.js","three/addons/":"../../vendor/three/addons/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {TerrainRenderer} from '../../src/terrainRenderer.js';
+import {terrainVertexNormal} from '../../src/terrainAppearance.js';
+const query = new URLSearchParams(location.search), before = query.get('version') === 'before';
+document.querySelector('#title').textContent = before ? 'Base color only / same heightfield' : 'Multiscale surface / same heightfield';
+const n = 257, sizeKm = 0.16;
+const model = {n,sizeKm,cellSizeKm:sizeKm/(n-1),height:new Float32Array(n*n),slope:new Float32Array(n*n),wetnessIndex:new Float32Array(n*n),surface:{vegetation:new Float32Array(n*n),imperviousFraction:new Float32Array(n*n)}};
+for(let y=0;y<n;y++) for(let x=0;x<n;x++) {
+  const xm=(x/(n-1)-0.5)*160, zm=(y/(n-1)-0.5)*160;
+  model.height[y*n+x] = 26 + 23*Math.tanh((xm+14+10*Math.sin(zm/35))/13) + 6*Math.sin(zm/40)+3*Math.cos(xm/23);
+}
+for(let y=0;y<n;y++) for(let x=0;x<n;x++) {
+  const i=y*n+x, normal=terrainVertexNormal(model,x,y);
+  model.slope[i] = Math.acos(normal[1])*180/Math.PI;
+  model.surface.vegetation[i]=0.88*Math.exp(-Math.pow(model.slope[i]/24,2));
+  model.wetnessIndex[i]=4+5*Math.exp(-Math.pow(model.height[i]/13,2));
+}
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(1);renderer.setClearColor(0xdee6e8);document.body.append(renderer.domElement);
+const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(38,1,0.0001,10);
+scene.add(new THREE.HemisphereLight(0xffffff,0x657166,1.5));
+const sun=new THREE.DirectionalLight(0xfff4df,2.5);sun.position.set(-0.14,0.18,0.08);scene.add(sun);
+const terrain=Object.create(TerrainRenderer.prototype);
+Object.assign(terrain,{model,params:{seaLevel:-10,verticalScale:1},scene,viewMode:'landscape',terrainTiles:[]});terrain.buildTerrainMesh();
+if(before) for(const tile of terrain.terrainTiles) {
+  tile.mesh.material.dispose();tile.mesh.material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.92,metalness:0.02});
+}
+const controls=new OrbitControls(camera,renderer.domElement);
+function resize(){
+ camera.aspect=innerWidth/innerHeight;
+ if(query.get('shot')==='close') {controls.target.set(-0.016,0.025,0.008);camera.position.set(-0.045,0.032,0.044)}
+ else {const scale=Math.max(1,0.85/camera.aspect);controls.target.set(0,0.02,0);camera.position.set(-0.12*scale,0.12*scale,0.16*scale)}
+ camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);controls.update();
+}
+addEventListener('resize',resize);resize();
+globalThis.review={renderer,scene,camera,controls,terrain};
+renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera);globalThis.reviewReady=true});
+</script></html>

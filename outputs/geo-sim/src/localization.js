@@ -2,6 +2,7 @@ const STORAGE_KEY = "geolab.locale";
 const DEFAULT_LOCALE = "en";
 
 const EXACT = Object.freeze({
+  "自然地表（示意）": "Natural surface (illustrative)",
   "GeoLab 128 | 地理演算程序": "GeoLab 128 | Geographic Simulation",
   "DEM 演算中": "DEM processing",
   "初始化": "Initializing",

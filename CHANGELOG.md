@@ -6,6 +6,9 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Changed
 
+- Added a natural-surface view with locally generated rock joints, strata, soil grain, vegetation mottling, and wetness-dependent roughness; analytical palettes remain separate.
+- Filtered subpixel terrain detail by viewing footprint and packed surface weights into four bytes per vertex, without additional mesh subdivisions or texture downloads.
+- Matched terrain normals across tile boundaries and refreshed neighboring normals and culling bounds after height edits.
 - Rebuilt broadleaf and conifer crowns with branched stems, folded leaves, and per-vertex foliage tones. These are procedural visual assets, not measured tree architecture.
 - Added screen-size foliage LOD with shared distant meshes and a 128-instance close-detail limit per species variant batch.
 - Preserved indices, UVs, and colors when combining procedural model parts, reducing repeated vertices and reconstructing smooth normals after deformation.

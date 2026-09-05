@@ -85,6 +85,8 @@ The Three.js workspace renders terrain, coastlines, rivers, vegetation, infrastr
 
 Procedural objects use type-specific geometry variants and material classes. They are analytical representations, not surveyed meshes, BIM models, CAD assets, or photogrammetry.
 
+The natural-surface view blends rock, soil, vegetation, and sealed ground with multiscale surface relief and wetness-dependent roughness. Materials run locally, remain continuous across terrain tiles, and fade subpixel detail with distance. These are illustrative surface details, not additional DEM samples. [Material comparison and verification](docs/v1-readiness/TERRAIN_MATERIALS.md).
+
 Available analysis layers include elevation, climate, precipitation, temperature, flow accumulation, velocity, shear stress, sediment, erosion, deposition, hazards, vegetation, land cover, soil, groundwater, aquifer potential, imperviousness, wetness, confidence, ecological connectivity, and wildlife richness.
 
 ## Data And Exports
