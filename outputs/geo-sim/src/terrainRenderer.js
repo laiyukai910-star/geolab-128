@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { createFoliageGeometry } from "./foliageGeometry.js";
+import { FoliageInstances } from "./foliageInstances.js";
 import {
   buildAdaptiveInfrastructurePlacementPlan,
   buildBlockDetailAtlas,
@@ -1785,8 +1787,8 @@ export class TerrainRenderer {
     }
 
     addInstancedCylinder(group, "树干", buckets.trunks, 0x9b6a43, { radiusSegments: 7, roughness: 0.88, emissiveIntensity: 0.26 });
-    addInstancedBox(group, "阔叶冠层", buckets.broadleaf, 0x54a866, { geometryFactory: (variant) => createAssetGeometry("broadleaf-canopy", budgetPlan.quality, variant), roughness: 0.96, transparent: true, opacity: 0.92 });
-    addInstancedBox(group, "针叶林冠", buckets.conifers, 0x3b8456, { geometryFactory: (variant) => createAssetGeometry("layered-conifer", budgetPlan.quality, variant), roughness: 0.95, transparent: true, opacity: 0.92 });
+    addInstancedBox(group, "阔叶冠层", buckets.broadleaf, 0x54a866, { geometryFactory: (variant) => createAssetGeometry("broadleaf-canopy", budgetPlan.quality, variant), roughness: 0.96, side: THREE.DoubleSide });
+    addInstancedBox(group, "针叶林冠", buckets.conifers, 0x3b8456, { geometryFactory: (variant) => createAssetGeometry("layered-conifer", budgetPlan.quality, variant), roughness: 0.95, side: THREE.DoubleSide });
     addInstancedBox(group, "灌草斑块", buckets.shrubs, 0x82b864, { geometryFactory: (variant) => createAssetGeometry("irregular-shrub", budgetPlan.quality, variant), roughness: 0.98, transparent: true, opacity: 0.86 });
     addInstancedCylinder(group, "湿地芦苇", buckets.reeds, 0x86b861, { radiusSegments: 5, roughness: 0.96, transparent: true, opacity: 0.88 });
     addInstancedBox(group, "林下植被", buckets.understory, 0x669f5b, { geometryFactory: (variant) => createAssetGeometry("understory-cluster", budgetPlan.quality, variant), roughness: 0.98, transparent: true, opacity: 0.84 });
@@ -7099,6 +7101,19 @@ function addInstancedAsset(group, name, transforms, fallbackColor, options, prim
         || createSemanticAssetGeometry(name, assetQuality, variant)
         || createFallbackAssetGeometry(primitiveType, options)
     );
+    if (semanticKind === "broadleaf-canopy" || semanticKind === "layered-conifer") {
+      const distant = sharedGeometry(group, `${cacheKey}:distant`, () => createFoliageGeometry(semanticKind === "layered-conifer", "distant", variant));
+      const lod = new FoliageInstances(geometry, distant, material, variantTransforms, fallbackColor);
+      lod.name = `${name} V${variant + 1}`;
+      for (const mesh of [lod.far, lod.near]) {
+        mesh.name = `${lod.name} ${mesh === lod.near ? "detail" : "distant"}`;
+        mesh.userData.assetKind = semanticKind;
+        mesh.userData.assetVariant = variant;
+      }
+      group.add(lod);
+      meshes.push(lod.far, lod.near);
+      return;
+    }
     const mesh = new THREE.InstancedMesh(geometry, material, variantTransforms.length);
     mesh.name = variantCount > 1 ? `${name} · V${variant + 1}` : name;
     mesh.userData.assetVariant = variant;

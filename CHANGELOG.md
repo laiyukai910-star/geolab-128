@@ -6,6 +6,10 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Changed
 
+- Rebuilt broadleaf and conifer crowns with branched stems, folded leaves, and per-vertex foliage tones. These are procedural visual assets, not measured tree architecture.
+- Added screen-size foliage LOD with shared distant meshes and a 128-instance close-detail limit per species variant batch.
+- Preserved indices, UVs, and colors when combining procedural model parts, reducing repeated vertices and reconstructing smooth normals after deformation.
+- Replaced transparent crown shells with opaque, double-sided leaves to resolve overlapping-canopy depth ordering.
 - Reorganized the public documentation around project goals, functional systems, scale, computation, data, and validation boundaries.
 - Replaced the outdated preview with current local Electron captures and a compact animated overview.
 - Condensed historical release notes to user-visible and compatibility-relevant changes.

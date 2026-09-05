@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createFoliageGeometry } from "./foliageGeometry.js";
 import {
   assetPipelineDiagnostics,
   normalizeRenderDetailQuality,
@@ -114,8 +115,8 @@ export function createProceduralGeometry(kind, quality = "ultra", variant = 0) {
     case "snow-drift": geometry = createSnowDriftGeometry(quality); break;
     case "wetland-ribbon": geometry = createRippledSurfaceGeometry(quality, 0.055); break;
     case "fluted-trunk": geometry = createFlutedTrunkGeometry(quality); break;
-    case "broadleaf-canopy": geometry = createBroadleafCanopyGeometry(quality); break;
-    case "layered-conifer": geometry = createConiferGeometry(quality); break;
+    case "broadleaf-canopy": geometry = createFoliageGeometry(false, quality, variant); break;
+    case "layered-conifer": geometry = createFoliageGeometry(true, quality, variant); break;
     case "irregular-shrub": geometry = createShrubGeometry(quality, false); break;
     case "understory-cluster": geometry = createShrubGeometry(quality, true); break;
     case "reed-cluster": geometry = createReedGeometry(quality); break;
@@ -362,32 +363,6 @@ function createFlutedTrunkGeometry(quality) {
     parts.push(part(new THREE.ConeGeometry(0.22, 0.42, 6), [Math.cos(a) * 0.23, -0.39, Math.sin(a) * 0.23], [1, 1, 0.42], [0, -a, Math.PI / 2]));
   }
   parts.push(part(curvedTube([[0, 0.12, 0], [0.12, 0.28, 0.03], [0.3, 0.4, 0.08]], 0.045, d.curve), [0, 0, 0]));
-  return mergeAssembly(parts);
-}
-
-function createBroadleafCanopyGeometry(quality) {
-  const d = detail(quality);
-  const parts = [];
-  for (let i = 0; i < d.lobes; i += 1) {
-    const a = i * 2.399;
-    const r = i === 0 ? 0 : 0.23 + (i % 2) * 0.05;
-    parts.push(part(deformedPolyhedron(quality, i * 0.81), [Math.cos(a) * r, -0.05 + (i % 3) * 0.08, Math.sin(a) * r], [0.56, 0.48, 0.56], [0, a, 0]));
-  }
-  return mergeAssembly(parts);
-}
-
-function createConiferGeometry(quality) {
-  const d = detail(quality);
-  const profile = [
-    new THREE.Vector2(0.06, -0.5), new THREE.Vector2(0.2, -0.45), new THREE.Vector2(0.49, -0.27),
-    new THREE.Vector2(0.18, -0.18), new THREE.Vector2(0.4, 0.03), new THREE.Vector2(0.14, 0.11),
-    new THREE.Vector2(0.3, 0.29), new THREE.Vector2(0.08, 0.37), new THREE.Vector2(0, 0.5)
-  ];
-  const parts = [{ geometry: new THREE.LatheGeometry(profile, d.radial) }];
-  for (let i = 0; i < 5; i += 1) {
-    const a = i / 5 * Math.PI * 2;
-    parts.push(part(new THREE.ConeGeometry(0.16, 0.58, 5), [Math.cos(a) * 0.24, -0.1 + (i % 2) * 0.12, Math.sin(a) * 0.24], [1, 1, 0.6], [0, -a, 0.52]));
-  }
   return mergeAssembly(parts);
 }
 
@@ -1449,30 +1424,49 @@ function part(geometry, position = [0, 0, 0], scale = [1, 1, 1], rotation = [0, 
 
 function mergeAssembly(parts) {
   const chunks = [];
-  let total = 0;
+  let vertexCount = 0;
+  let indexCount = 0;
   for (const entry of parts) {
     if (!entry?.geometry?.getAttribute("position")) continue;
-    const source = entry.geometry.index ? entry.geometry.toNonIndexed() : entry.geometry.clone();
+    const source = entry.geometry.clone();
     const object = new THREE.Object3D();
     object.position.fromArray(entry.position || [0, 0, 0]);
     object.scale.fromArray(entry.scale || [1, 1, 1]);
     object.rotation.fromArray(entry.rotation || [0, 0, 0]);
     object.updateMatrix();
     source.applyMatrix4(object.matrix);
-    const values = new Float32Array(source.getAttribute("position").array);
-    chunks.push(values);
-    total += values.length;
-    source.dispose();
+    chunks.push(source);
+    vertexCount += source.getAttribute("position").count;
+    indexCount += source.index?.count ?? source.getAttribute("position").count;
     entry.geometry.dispose();
   }
-  const merged = new Float32Array(total);
-  let offset = 0;
-  for (const values of chunks) {
-    merged.set(values, offset);
-    offset += values.length;
-  }
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(merged, 3));
+  const attributes = { position: 3 };
+  if (chunks.some(source => source.hasAttribute("uv"))) attributes.uv = 2;
+  if (chunks.some(source => source.hasAttribute("color"))) attributes.color = 3;
+  for (const [name, size] of Object.entries(attributes)) {
+    const values = new Float32Array(vertexCount * size);
+    if (name === "color") values.fill(1);
+    let offset = 0;
+    for (const source of chunks) {
+      const attribute = source.getAttribute(name);
+      if (attribute) values.set(attribute.array, offset * size);
+      offset += source.getAttribute("position").count;
+    }
+    geometry.setAttribute(name, new THREE.BufferAttribute(values, size));
+  }
+  // Keep source vertex sharing and hard-edge splits instead of expanding triangles.
+  const indices = vertexCount > 65535 ? new Uint32Array(indexCount) : new Uint16Array(indexCount);
+  let vertexOffset = 0, indexOffset = 0;
+  for (const source of chunks) {
+    const count = source.getAttribute("position").count;
+    for (let i = 0; i < (source.index?.count ?? count); i++) {
+      indices[indexOffset++] = vertexOffset + (source.index ? source.index.getX(i) : i);
+    }
+    vertexOffset += count;
+    source.dispose();
+  }
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
   return geometry;
 }
 
@@ -1518,6 +1512,7 @@ function applyProceduralVariant(geometry, kind, quality, variant) {
     position.setXYZ(i, x, y, z);
   }
   position.needsUpdate = true;
+  geometry.deleteAttribute("normal");
   return geometry;
 }
 

@@ -59,6 +59,7 @@ jobs:
       - name: Run model-report tests
         run: |
           node outputs/geo-sim/tests/assetPipeline.test.mjs
+          node outputs/geo-sim/tests/proceduralGeometry.test.mjs
           node outputs/geo-sim/tests/scenarioSynthesis.test.mjs
           node outputs/geo-sim/tests/landscapeEcology.test.mjs
           node outputs/geo-sim/tests/physicalCouplingInterop.test.mjs
