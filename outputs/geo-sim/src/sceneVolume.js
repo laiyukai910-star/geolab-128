@@ -1,24 +1,31 @@
 import * as THREE from "three";
-import { buildTerrainVolume, volumeDisplayConfig, sampleTerrainHeight, underwaterFocus } from "./terrainVolume.js";
+import { buildTerrainVolume, volumeDisplayConfig, sampleTerrainHeight, underwaterFocus, constrainTerrainCamera } from "./terrainVolume.js";
 
 function createSky() {
   const material = new THREE.ShaderMaterial({
-    side: THREE.BackSide, depthWrite: false, depthTest: false,
-    uniforms: { time: { value: 0 } },
-    vertexShader: `varying vec3 direction;
-      void main() { direction = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: `varying vec3 direction; uniform float time;
-      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+    depthWrite: false, depthTest: false,
+    uniforms: { time: { value: 0 }, skyProjectionInverse: { value: new THREE.Matrix4() }, skyRotation: { value: new THREE.Matrix3() } },
+    vertexShader: `varying vec2 skyNdc;
+      void main() { skyNdc = position.xy; gl_Position = vec4(position.xy, 0.999999, 1.0); }`,
+    fragmentShader: `varying vec2 skyNdc; uniform float time;
+      uniform mat4 skyProjectionInverse; uniform mat3 skyRotation;
+      float hash(vec2 p) { vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z); }
       float noise(vec2 p) { vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
         return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.0),f.x),f.y); }
+      float filteredNoise(vec2 p, float footprint) {
+        float fade=1.0-smoothstep(0.25,1.0,footprint);
+        return mix(0.5,noise(p),fade);
+      }
       void main() {
-        vec3 ray=normalize(direction);
+        vec3 viewRay=(skyProjectionInverse*vec4(skyNdc,1.0,1.0)).xyz;
+        vec3 ray=normalize(skyRotation*viewRay);
         vec3 sky=mix(vec3(0.57,0.73,0.80),vec3(0.035,0.16,0.32),pow(max(ray.y,0.0),0.45));
         vec3 sun=normalize(vec3(-0.5,0.72,0.42));
         float alignment=max(dot(ray,sun),0.0);
         sky+=vec3(1.0,0.84,0.54)*(pow(alignment,700.0)*1.5+pow(alignment,16.0)*0.12);
         vec2 p=ray.xz/max(ray.y+0.2,0.15)*2.5+vec2(time*0.006,0.0);
-        float cloud=noise(p)*0.55+noise(p*2.1)*0.28+noise(p*4.3)*0.17;
+        float footprint=max(length(dFdx(p)),length(dFdy(p)));
+        float cloud=filteredNoise(p,footprint)*0.55+filteredNoise(p*2.1,footprint*2.1)*0.28+filteredNoise(p*4.3,footprint*4.3)*0.17;
         float cover=smoothstep(0.55,0.74,cloud)*smoothstep(0.0,0.22,ray.y);
         sky=mix(sky,vec3(0.87,0.90,0.89),cover*0.82);
         sky=mix(vec3(0.27,0.34,0.38),sky,smoothstep(-0.22,0.02,ray.y));
@@ -27,10 +34,17 @@ function createSky() {
         #include <colorspace_fragment>
       }`
   });
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), material);
+  // Reconstruct world rays without translating a distant shell or writing scene depth.
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([-1,-1,0, 3,-1,0, -1,3,0], 3));
+  const sky = new THREE.Mesh(geometry, material);
   sky.name = "atmosphere display";
   sky.frustumCulled = false;
   sky.renderOrder = -10000;
+  sky.onBeforeRender = (_renderer, _scene, camera) => {
+    material.uniforms.skyProjectionInverse.value.copy(camera.projectionMatrixInverse);
+    material.uniforms.skyRotation.value.setFromMatrix4(camera.matrixWorld);
+  };
   return sky;
 }
 
@@ -77,17 +91,22 @@ function createWaterMaterial(config) {
 
 function createRockSectionMaterial() {
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
-  material.customProgramCacheKey = () => "geolab-section-rock-v1";
+  // Display-only fill keeps unlit geological faces readable without changing surface lighting.
+  material.userData.inspectionFill = 0.8;
+  material.customProgramCacheKey = () => "geolab-section-rock-v2";
   material.onBeforeCompile = shader => {
+    shader.uniforms.sectionInspectionFill = { value: material.userData.inspectionFill };
     shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 sectionPosition;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nsectionPosition=position;");
-    shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 sectionPosition;")
+    shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 sectionPosition;\nuniform float sectionInspectionFill;")
       .replace("#include <color_fragment>", `#include <color_fragment>
         float footprint=max(length(dFdx(sectionPosition)),length(dFdy(sectionPosition)));
         float band=sin(sectionPosition.y*37.0+sin(sectionPosition.x*6.0+sectionPosition.z*7.0));
         float grain=sin(dot(sectionPosition,vec3(119.0,173.0,127.0)))*sin(sectionPosition.y*233.0);
         diffuseColor.rgb*=0.91+band*0.055*(1.0-smoothstep(0.02,0.12,footprint))
-          +grain*0.045*(1.0-smoothstep(0.002,0.025,footprint));`);
+          +grain*0.045*(1.0-smoothstep(0.002,0.025,footprint));`)
+      .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+        totalEmissiveRadiance += diffuseColor.rgb * sectionInspectionFill;`);
   };
   return material;
 }
@@ -171,15 +190,14 @@ export class SceneVolume {
     });
   }
 
-  update(camera, seconds) {
+  update(camera, seconds, orbitTarget = null) {
     if (!this.model) return;
+    this.stats.cameraConstrained = this.group.visible && constrainTerrainCamera(this.model, this.config, this.baseY, camera, orbitTarget);
     const { verticalScale, seaLevel, sizeKm, cutX, mode } = this.config;
     const h = sampleTerrainHeight(this.model, camera.position.x, camera.position.z);
     const submerged = this.waterVisible && h !== null && (mode !== "section" || camera.position.x <= cutX)
       && camera.position.y < seaLevel * verticalScale / 1000 && camera.position.y > h * verticalScale / 1000;
     this.sky.visible = this.params.sky3DEnabled !== false && !submerged;
-    this.sky.position.copy(camera.position);
-    this.sky.scale.setScalar(camera.far * 0.8);
     this.sky.material.uniforms.time.value = seconds;
     for (const water of this.waterMeshes) water.material.userData.waterUniforms.waterTime.value = seconds;
     if (!this.scene.fog) this.scene.fog = new THREE.FogExp2();

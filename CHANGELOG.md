@@ -4,6 +4,12 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+### Fixed
+
+- Stabilized the sky during camera rotation with a full-screen background, current-frame camera rays, and filtered cloud detail.
+- Prevented the camera from entering opaque terrain and exposing culled interior faces; geological cutaways and water remain navigable.
+- Added geological inspection lighting and a lighter unclassified base color so underground faces remain visible from below.
+
 ### Changed
 
 - Closed terrain into a solid display block with elevation-following sides, modeled underground layers, a base, and a movable geological section. Underground display exaggeration is independent of scientific depth.

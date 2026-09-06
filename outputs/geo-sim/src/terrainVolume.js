@@ -28,9 +28,10 @@ export function subsurfaceColumnIndex(model, surfaceIndex) {
 }
 
 const LITHOLOGY = [0x626569, 0x9a7048, 0x897b5c, 0xb79b61, 0x777b79, 0x5f666b, 0x725f59];
+const UNCLASSIFIED_COLOR = 0x72787e;
 function layerColor(model, surfaceIndex, layer) {
   const volume = model.subsurface, column = subsurfaceColumnIndex(model, surfaceIndex);
-  if (column < 0 || layer < 0) return new THREE.Color(0x454b50);
+  if (column < 0 || layer < 0) return new THREE.Color(UNCLASSIFIED_COLOR);
   const voxel = layer * volume.columnCellCount + column;
   const color = new THREE.Color(LITHOLOGY[volume.lithologyCode?.[voxel] || 0] || LITHOLOGY[0]);
   const saturation = clamp(Number(volume.groundwaterSaturation?.[voxel]) || 0, 0, 1);
@@ -75,7 +76,7 @@ export function buildTerrainVolume(model, config) {
   const baseY = (minHeight - depthM * depthScale) * verticalScale / 1000;
   const edges = model.subsurface?.depthEdgesM || [0, depthM];
   const solid = geometryBuilder(), water = geometryBuilder();
-  const unknown = new THREE.Color(0x454b50);
+  const unknown = new THREE.Color(UNCLASSIFIED_COLOR);
   const seaY = seaLevel * verticalScale / 1000;
   const waterTop = new THREE.Color(0x5fa6b3), waterBottom = new THREE.Color(0x145064);
   for (let r = 0; r < rim.length; r++) {
@@ -112,6 +113,31 @@ export function sampleTerrainHeight(model, xKm, zKm) {
   const fx = gx - x, fy = gy - y, i = y * n + x, h = model.height;
   return fx + fy <= 1 ? h[i] + fx * (h[i + 1] - h[i]) + fy * (h[i + n] - h[i])
     : h[i + n + 1] + (1 - fx) * (h[i + n] - h[i + n + 1]) + (1 - fy) * (h[i + 1] - h[i + n + 1]);
+}
+
+export function containsTerrainPoint(model, config, baseY, point) {
+  if (point.y <= baseY || (config.mode === "section" && point.x >= config.cutX)) return false;
+  const height = sampleTerrainHeight(model, point.x, point.z);
+  return height !== null && point.y < height * config.verticalScale / 1000;
+}
+
+export function constrainTerrainCamera(model, config, baseY, camera, target = null) {
+  if (!containsTerrainPoint(model, config, baseY, camera.position)) return false;
+  const origin = camera.position.clone();
+  const direction = target ? origin.clone().sub(target) : camera.getWorldDirection(new THREE.Vector3()).negate();
+  if (direction.lengthSq() < 1e-12) direction.set(0, 1, 0);
+  direction.normalize();
+  const point = new THREE.Vector3();
+  let low = 0, high = 2 * (config.sizeKm + Math.abs(baseY) + Math.abs(origin.y) + 1);
+  // Pull back along the viewing ray, preserving the orbit target and section orientation.
+  for (let i = 0; i < 28; i++) {
+    const distance = (low + high) * 0.5;
+    point.copy(origin).addScaledVector(direction, distance);
+    if (containsTerrainPoint(model, config, baseY, point)) low = distance; else high = distance;
+  }
+  const clearance = Math.max(0.00005, Math.min(0.02, config.sizeKm / (model.n - 1) * 0.005));
+  camera.position.copy(origin).addScaledVector(direction, high + clearance);
+  return true;
 }
 
 export function underwaterFocus(model, config) {

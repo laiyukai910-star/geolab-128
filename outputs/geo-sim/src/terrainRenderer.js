@@ -1155,7 +1155,7 @@ export class TerrainRenderer {
     this.controls.update();
     const now = performance.now();
     const t = now * 0.001;
-    this.sceneVolume?.update(this.camera, t);
+    this.sceneVolume?.update(this.camera, t, this.controls.target);
     if (this.windGroup.visible) {
       this.windGroup.children.forEach((arrow, index) => {
         arrow.position.y = arrow.userData.baseY + Math.sin(t * 1.6 + index) * 0.018;

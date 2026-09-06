@@ -8,6 +8,16 @@ existing subsurface columns for lithology and groundwater-saturation colors.
 Extensions beneath modeled columns use an unclassified base color; they are
 geometric closure, not additional geological evidence.
 
+The camera is kept outside opaque terrain, including when orbiting below the
+surface. If a zoom or terrain edit places it inside rock, it retreats along the
+viewing ray without moving the orbit target. Use Geological section to inspect
+the interior; the removed half remains accessible. This is a camera guard, not
+a collision or excavation solver.
+
+Geological faces receive a display-only inspection fill so shaded walls and the
+underside remain readable. The unclassified base is neutral gray. Neither this
+fill nor its color represents subsurface light, temperature, or a new rock type.
+
 ![Solid regional terrain, coast and sky](media/volume-solid.png)
 
 ## Geological Section
@@ -46,8 +56,11 @@ reports that no submerged terrain is available rather than inventing water.
 
 ![Local underwater view of the modeled seabed](media/volume-underwater.png)
 
-The sky dome contains a sun glow, horizon tones, and slowly moving procedural
-clouds. It requires no downloaded textures. Sky and sea display can be switched
+The sky uses a full-screen background reconstructed from the current camera's
+world-space rays. It does not depend on a distant sphere, camera translation,
+or near/far clipping distances. A sun glow, horizon tones, and slowly moving
+procedural clouds require no downloaded textures; subpixel cloud detail is
+filtered to reduce shimmer. Sky and sea display can be switched
 off independently. Water is hidden on analytical surface palettes so it does
 not conceal their colors.
 
@@ -65,6 +78,15 @@ Local checks performed on 2026-09-06:
   to two triangles after combining the top, sides, cut face, and bottom.
 - Tests cover section extents, sea-boundary geometry, interpolated terrain height,
   immersion transitions, clipping removal, and unchanged scientific arrays.
+- Camera tests cover escape from opaque ground, correction settling, underwater
+  clearance, and access to the cutaway half. Sky uniforms use the current camera
+  projection and orientation without writing scene depth.
+- The browser fixture `outputs/geo-sim/tests/fixtures/volume-regression.html`
+  exposes `review.frame(position, target, skyOnly)` for frozen-time pixel checks.
+  Local Playwright checks covered a full yaw sweep, small rotation steps,
+  translation invariance, near/far changes, and mobile pitch changes without
+  uncovered background pixels or shader errors. Underside and cutaway captures
+  showed visible material colors; an inside camera settled outside opaque rock.
 - Resource tests verify that disposing water does not release borrowed terrain
   geometry and that scene-owned geometry/materials are removed.
 - Playwright exercised all three views at 1600 x 900 and 390 x 844, with canvas
@@ -75,7 +97,7 @@ Local checks performed on 2026-09-06:
   native Rust sidecar, including 13 process gates, canvas pixels, geometry audit,
   and zero external requests.
 
-The new local executable is under
+The local executable, with the sky and underground fixes synchronized, is under
 `outputs/GeoLab-128-Local/GeoLab 128-win32-x64/GeoLab 128.exe`.
 Historical self-extracting portable executables were not rebuilt in this stage.
 The heightfield/Unity/Unreal data exports are unchanged; these new renderer

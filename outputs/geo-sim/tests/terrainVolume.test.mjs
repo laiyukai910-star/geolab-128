@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 registerHooks({ resolve(s, c, next) { return next(s === "three" ? new URL("../vendor/three/three.module.js", import.meta.url).href : s, c); } });
-const { buildTerrainVolume, volumeDisplayConfig, sampleTerrainHeight } = await import("../src/terrainVolume.js");
+const { buildTerrainVolume, volumeDisplayConfig, sampleTerrainHeight, containsTerrainPoint, constrainTerrainCamera } = await import("../src/terrainVolume.js");
 const model = {
   n: 5, sizeKm: 0.4, cellSizeKm: 0.1,
   height: Float32Array.from({ length: 25 }, (_, i) => 10 + (i % 5) * 10),
@@ -50,6 +50,7 @@ assert.deepEqual(model, before);
 const THREE = await import('three');
 const { SceneVolume } = await import('../src/sceneVolume.js');
 const scene = new THREE.Scene(), manager = new SceneVolume(scene);
+assert.equal(manager.sky.geometry.getAttribute('position').count, 3, 'sky must use a full-screen primitive independent of near/far clipping');
 const borrowed = new THREE.PlaneGeometry(0.4, 0.4, 4, 4);
 borrowed.rotateX(-Math.PI/2);
 const terrain = new THREE.Mesh(borrowed, new THREE.MeshStandardMaterial());
@@ -60,6 +61,8 @@ manager.rebuild(model, params, [{mesh: terrain}], 'landscape');
 manager.applyClipping([terrain]);
 assert.equal(terrain.material.clippingPlanes[0].distanceToPoint(new THREE.Vector3(0.2, 0, 0)) < 0, true);
 manager.rebuild(model, {...params, worldView:'solid'}, [{mesh: terrain}], 'landscape');
+const rock = manager.group.children.find(mesh => mesh.name === 'modeled columns and unclassified closure');
+assert.ok(rock.material.userData.inspectionFill > 0, 'underside needs a geological inspection fill');
 manager.applyClipping([terrain]);
 assert.equal(terrain.material.clippingPlanes, null);
 const camera = new THREE.PerspectiveCamera(50, 1, 0.00001, 10);
@@ -72,6 +75,33 @@ camera.position.y = 0.04;
 manager.update(camera, 2);
 assert.equal(manager.stats.underwater, false);
 assert.equal(manager.sky.visible, true);
+camera.lookAt(0, 0.2, 0);
+camera.updateMatrixWorld();
+manager.sky.onBeforeRender(null, scene, camera);
+assert.deepEqual(manager.sky.material.uniforms.skyProjectionInverse.value, camera.projectionMatrixInverse);
+assert.deepEqual(manager.sky.material.uniforms.skyRotation.value, new THREE.Matrix3().setFromMatrix4(camera.matrixWorld));
+assert.equal(manager.sky.material.depthTest, false);
+assert.equal(manager.sky.material.depthWrite, false);
+const config = manager.config;
+const base = manager.baseY;
+for (const [position, target] of [
+  [[0,0,0],[0,0.08,0]], [[0,0,0],[-0.1,0,0]], [[0,-0.1,0],[0,-0.2,0]], [[0,0,0],[0,0,0]]
+]) {
+  camera.position.fromArray(position);
+  camera.lookAt(...target);
+  const orbitTarget = new THREE.Vector3(...target);
+  const oldTarget = orbitTarget.clone();
+  assert.equal(containsTerrainPoint(model, config, base, camera.position), true);
+  assert.equal(constrainTerrainCamera(model, config, base, camera, orbitTarget), true);
+  assert.equal(containsTerrainPoint(model, config, base, camera.position), false, 'camera cannot remain inside opaque rock');
+  assert.equal(constrainTerrainCamera(model, config, base, camera, orbitTarget), false, 'camera correction must settle without oscillation');
+  assert.deepEqual(orbitTarget, oldTarget);
+}
+const cutConfig = volumeDisplayConfig(model, {...params, worldView:'section'});
+assert.equal(containsTerrainPoint(model, cutConfig, base, new THREE.Vector3(0.1, 0, 0)), false, 'cut-away air must remain navigable');
+assert.equal(containsTerrainPoint(model, config, base, new THREE.Vector3(-0.15, 0.025, 0)), false, 'water above the seabed is not rock');
+assert.equal(containsTerrainPoint(model, config, base, new THREE.Vector3(0, base - 0.05, 0)), false);
+assert.deepEqual(model, before);
 manager.setVisibility(params, 'slope');
 assert.equal(manager.waterMeshes[0].visible, false);
 manager.dispose();
