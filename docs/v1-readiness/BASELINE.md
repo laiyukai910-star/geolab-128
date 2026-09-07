@@ -93,8 +93,7 @@ errors, unhandled promise rejections, failed page requests, or attempted externa
 requests. The captured canvas was visually inspected and contained terrain,
 water, and river lines. Browser and temporary server closed successfully.
 
-This completes the previously blocked static-browser smoke check for this
-scenario. It is not a numerical native/WASM parity test or a complete UI audit.
+This static-browser smoke check is not a numerical native/WASM parity test or a complete UI audit.
 The single-run timings are not directly comparable with the desktop timings.
 
 ## Incomplete Checks and Warnings
@@ -111,14 +110,6 @@ The single-run timings are not directly comparable with the desktop timings.
 - The first automation attempt referenced an Electron executable before its
   lazy installation. Resolving Electron through its package entry point
   installed the binary and allowed the desktop run above to complete.
-
-## Next Check
-
-Build the content matrix incrementally. The first focused P0 regression should
-cover a nonresponding
-model Worker: bounded failure, retirement, and a successful subsequent request.
-An additional audit candidate is failure during downstream rebuilding after
-Rust surface layers have been applied. Neither candidate is recorded as fixed.
 
 Local raw records remain under ignored `artifacts/`: `baseline-checks.json`,
 individual `baseline-*.log` files, and `baseline-runtime.json`. The static-browser

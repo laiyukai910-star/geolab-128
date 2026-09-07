@@ -64,7 +64,7 @@ same camera. Omit `shot=close` for the overview. Orbit interaction is available.
   All 13 process gates passed; mean temperature changed from approximately
   12.962 C to 14.462 C when the input increased by 1.5 C.
 
-This stage improves surface appearance, not photogrammetric fidelity. Dedicated
+These materials improve surface appearance, not photogrammetric fidelity. Dedicated
 snow, sand, exposed lithologies, eroded cliff silhouettes, and calibrated material
 response remain separate work. The shader is specific to the Three.js workspace;
 Unity/Unreal exports continue to use their existing heightfields and masks.

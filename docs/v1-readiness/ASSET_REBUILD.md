@@ -1,6 +1,6 @@
-# Procedural Asset Rebuild: First Stage
+# Procedural Asset Construction
 
-This stage changes rendering geometry and foliage selection. It does not change
+This document covers rendering geometry and foliage selection. It does not change
 terrain elevation, ecological abundance, canopy-height inputs, or geographic
 process equations. The following local captures use identical camera, lighting,
 quality (`ultra`), instance dimensions, and colors.
@@ -47,6 +47,5 @@ rendering cost; they do not establish a general performance ratio.
 - Static application startup and temperature rebuild pass with WASM authority
   and 13 process gates. The unchanged modeled temperature values match the baseline.
 
-Buildings, wildlife anatomy, terrain materials, and additional plant forms are
-not rebuilt in this stage. Botanical structures remain procedural visual forms,
-not calibrated species architecture or biomass measurements.
+Botanical structures are procedural visual forms, not calibrated species
+architecture or biomass measurements.

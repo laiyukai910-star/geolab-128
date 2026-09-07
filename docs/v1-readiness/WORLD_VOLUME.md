@@ -105,8 +105,7 @@ Local checks performed on 2026-09-06:
   native Rust sidecar, including 13 process gates, canvas pixels, geometry audit,
   and zero external requests.
 
-The local executable, with the sky and underground fixes synchronized, is under
+The synchronized local executable is under
 `outputs/GeoLab-128-Local/GeoLab 128-win32-x64/GeoLab 128.exe`.
-Historical self-extracting portable executables were not rebuilt in this stage.
 The heightfield/Unity/Unreal data exports are unchanged; these new renderer
 materials and clipping controls are not exported as engine-ready scenes.
