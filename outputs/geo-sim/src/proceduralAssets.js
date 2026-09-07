@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { createFoliageGeometry } from "./foliageGeometry.js";
+import { ORGANISM_KINDS, createOrganismGeometry } from "./organismGeometry.js";
 import {
   assetPipelineDiagnostics,
   normalizeRenderDetailQuality,
@@ -53,6 +54,7 @@ const SEMANTIC_ASSET_KIND = new Map([
 ]);
 
 const EXPLICIT_KINDS = [
+  ...ORGANISM_KINDS.map(kind=>`wildlife-organism-${kind}`),
   "wildlife-torso", "wildlife-head", "wildlife-muzzle", "wildlife-ear", "wildlife-eye",
   "wildlife-leg-cluster", "wildlife-leg-pair", "wildlife-wing", "wildlife-neck", "wildlife-beak", "wildlife-talon",
   "wildlife-tail", "wildlife-flat-tail", "wildlife-feather-tail", "wildlife-antler", "wildlife-horn",
@@ -74,6 +76,7 @@ export function createSemanticAssetGeometry(label, quality = "ultra", variant = 
 }
 
 export function wildlifeProceduralKind(species, part) {
+  if(ORGANISM_KINDS.includes(species?.geometryClass))return `wildlife-organism-${species.geometryClass}`;
   const id = String(part?.id || "").toLowerCase();
   if (id.includes("eye")) return "wildlife-eye";
   if (id.includes("antler")) return "wildlife-antler";
@@ -101,6 +104,7 @@ export function wildlifeProceduralKind(species, part) {
 export function createProceduralGeometry(kind, quality = "ultra", variant = 0) {
   quality = normalizeRenderDetailQuality(quality);
   variant = Math.max(0, Math.floor(Number(variant) || 0));
+  if(kind.startsWith("wildlife-organism-"))return tagProceduralGeometry(createOrganismGeometry(kind.slice(18),quality,variant),kind,quality,variant);
   let geometry;
   switch (kind) {
     case "setback-tower": geometry = createSetbackTowerGeometry(quality); break;

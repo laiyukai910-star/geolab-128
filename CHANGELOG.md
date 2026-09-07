@@ -4,14 +4,25 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+### Added
+
+- Added 13 locally generated organism models with a full-canvas specimen viewer: three fish forms, ray, octopus, jellyfish, crab, mussel, bat, fern, fungus, branching coral, and kelp.
+- Added eight aquatic functional profiles with freshwater/marine separation, depth and salinity screening, water-site placement, and water-connected block migration.
+- Added an adjustable illustrative karst cavity with connected passages, interior rock surfaces, speleothems, and cave-life exemplars. It does not infer caves from geological observations or alter groundwater calculations.
+
 ### Fixed
 
+- Removed checkerboard underground presentation by reconstructing continuous display colors and filtering rock detail; categorical scientific layers remain unchanged.
+- Closed cave branch endpoints, bounded cavity size in shallow columns, and shared the cavity field between clipping, mesh extraction, and camera access.
+- Deferred nearby coral and kelp geometry until underwater entry; regional overviews no longer preload or draw meter-scale benthic models.
+- Cleared residual orbit inertia when switching volume views and focused underwater inspection on compatible seabed sites.
 - Stabilized the sky during camera rotation with a full-screen background, current-frame camera rays, and filtered cloud detail.
 - Prevented the camera from entering opaque terrain and exposing culled interior faces; geological cutaways and water remain navigable.
 - Added geological inspection lighting and a lighter unclassified base color so underground faces remain visible from below.
 
 ### Changed
 
+- Replaced bright river lines with hydraulic-width water ribbons and curved display centerlines. Routing data is unchanged; sub-grid curves are not surveyed bathymetry.
 - Closed terrain into a solid display block with elevation-following sides, modeled underground layers, a base, and a movable geological section. Underground display exaggeration is independent of scientific depth.
 - Added a local sky environment, sea-level water surfaces and boundary walls, seabed shading, and an underwater camera with depth-dependent fog.
 - Clipped above-ground objects with geological sections, excluded hidden terrain from double-click focus, and fitted the overview to narrow viewports.

@@ -1,3 +1,5 @@
+import { aquaticContext, aquaticSite, aquaticFit, AQUATIC_PROFILES } from "./aquaticHabitats.js";
+
 const REPRESENTATIVE_ADULT_BODY_MASS_KG = Object.freeze({
   red_deer: 180,
   wild_boar: 90,
@@ -248,7 +250,8 @@ export const WILDLIFE_SPECIES = Object.freeze([
     vegetation: [0.16, 0.24], wetness: [0.78, 0.3], roughness: [0.16, 0.3], temperature: [14, 13],
     humanTolerance: 0.06, aquaticAffinity: 0.76, flowAffinity: 0.3, movementKmPerDay: 82,
     regions: ["oceania_volcanic_arc", "south_america_patagonia", "antarctica_plateau"]
-  })
+  }),
+  ...AQUATIC_PROFILES.map(p=>species(p.id,p.labelZh,p.geometryClass,p.colorHex,p.bodyScale,p))
 ]);
 
 export const ECOSYSTEM_GUILDS = Object.freeze([
@@ -271,6 +274,17 @@ export function buildLandscapeBlockNetwork(model, params = {}, options = {}) {
   const mapAreaKm2 = finite(model.areaKm2, finite(model.sizeKm, 0) ** 2);
   const cellAreaKm2 = mapAreaKm2 > 0 ? mapAreaKm2 / model.height.length : model.cellSizeKm * model.cellSizeKm;
   const seaLevel = finite(params.seaLevel, 0);
+  const waterContext = aquaticContext(model, params);
+  const aquaticLinks=new Map();
+  const blockForCell=i=>Math.floor(Math.floor(i/n)/blockCellSize)*gridSize+Math.floor((i%n)/blockCellSize);
+  const connectWater=(a,b,environment)=>{
+    const from=blockForCell(a),to=blockForCell(b);if(from===to)return;
+    const key=`${Math.min(from,to)}:${Math.max(from,to)}`;
+    if(!aquaticLinks.has(key))aquaticLinks.set(key,new Set());aquaticLinks.get(key).add(environment);
+  };
+  for(const s of model.riverSegments||[]){
+    if(aquaticSite(model,waterContext,s.from)?.environment==="freshwater"&&aquaticSite(model,waterContext,s.to)?.environment==="freshwater")connectWater(s.from,s.to,"freshwater");
+  }
   const accumulators = Array.from({ length: blockCount }, (_, blockId) => createBlockAccumulator(blockId, gridSize));
   const flowAccumulation = model.flowAccumulation || [];
   let maxFlow = 1;
@@ -319,6 +333,14 @@ export function buildLandscapeBlockNetwork(model, params = {}, options = {}) {
       block.wildfireSum += clamp01(currentWildfire[i]);
       block.landslideSum += clamp01(currentLandslide[i]);
       block.hazardSum += clamp01(currentHazard[i]);
+      const site = aquaticSite(model, waterContext, i);
+      if(waterContext.marine[i]){if(x&&waterContext.marine[i-1])connectWater(i,i-1,"marine");if(y&&waterContext.marine[i-n])connectWater(i,i-n,"marine");}
+      if(site){
+        block.aquaticAreaKm2[site.environment] += site.areaFraction*cellAreaKm2;
+        const sites=block.aquaticSites[site.environment];
+        if(sites.length<32)sites.push(site);
+        else {const slot=Math.floor(deterministic01(i,block.blockId,471)*block.cellCount);if(slot<32)sites[slot]=site;}
+      }
     }
   }
 
@@ -346,6 +368,7 @@ export function buildLandscapeBlockNetwork(model, params = {}, options = {}) {
       const neighbor = blocks[neighborId];
       const diagonal = dx !== 0 && dy !== 0;
       const link = landscapeLink(block, neighbor, diagonal, links.length);
+      link.aquaticContinuity=[...(aquaticLinks.get(`${block.blockId}:${neighborId}`)||[])];
       links.push(link);
       block.linkIds.push(link.linkId);
       neighbor.linkIds.push(link.linkId);
@@ -983,6 +1006,7 @@ function guildState(guildId, value) {
 
 function createBlockAccumulator(blockId, gridSize) {
   return {
+    aquaticSites:{freshwater:[],marine:[]}, aquaticAreaKm2:{freshwater:0,marine:0},
     blockId,
     blockX: blockId % gridSize,
     blockY: Math.floor(blockId / gridSize),
@@ -1047,6 +1071,7 @@ function finalizeLandscapeBlock(row, context) {
   const x1Km = Math.min(context.sizeKm, (Math.max(x0Cell + 1, x1Cell - 1) / Math.max(1, context.n - 1)) * context.sizeKm);
   const y1Km = Math.min(context.sizeKm, (Math.max(y0Cell + 1, y1Cell - 1) / Math.max(1, context.n - 1)) * context.sizeKm);
   return {
+    aquaticSites:row.aquaticSites, aquaticAreaKm2:row.aquaticAreaKm2,
     blockId: row.blockId,
     blockX: row.blockX,
     blockY: row.blockY,
@@ -1175,6 +1200,10 @@ function landscapeLink(a, b, diagonal, linkId) {
 }
 
 function habitatSuitability(speciesRecord, block, sensitivity) {
+  if(speciesRecord.aquaticEnvironment){
+    const sites=block.aquaticSites?.[speciesRecord.aquaticEnvironment]||[];
+    return mean(sites,site=>aquaticFit(speciesRecord,site))*clamp01(1-block.disturbancePressure)*clamp01(1-block.meanImpervious);
+  }
   const elevation = closeness(block.meanElevationM, speciesRecord.elevation[0], speciesRecord.elevation[1]);
   const slope = closeness(clamp01(block.meanSlopeDeg / 45), speciesRecord.slope[0], speciesRecord.slope[1]);
   const vegetation = closeness(block.meanVegetation, speciesRecord.vegetation[0], speciesRecord.vegetation[1]);
@@ -1221,6 +1250,7 @@ function functionalConnectivity(speciesRecord, block) {
 }
 
 function speciesEffectiveHabitatAreaKm2(speciesRecord, block) {
+  if(speciesRecord.aquaticEnvironment)return block.aquaticAreaKm2?.[speciesRecord.aquaticEnvironment]||0;
   const aquatic = speciesRecord.aquaticAffinity >= 0.5;
   const baseFraction = aquatic
     ? clamp01(block.waterFraction + block.landFraction * block.hydrologicConnectivity * 0.32)
@@ -1238,6 +1268,8 @@ function buildMigrationLinks(network, suitabilityBySpecies, migrationStrength) {
     const suitability = suitabilityBySpecies[speciesRecord.id];
     const candidates = [];
     for (const link of network.links) {
+      if(speciesRecord.movementKmPerDay<=0)continue;
+      if(speciesRecord.aquaticEnvironment && !link.aquaticContinuity?.includes(speciesRecord.aquaticEnvironment))continue;
       const habitat = Math.min(suitability[link.fromBlockId], suitability[link.toBlockId]);
       const strength = clamp01(habitat * link.connectivity * migrationStrength * (0.72 + speciesRecord.movementKmPerDay / 50));
       if (strength < 0.16) continue;
@@ -1312,13 +1344,17 @@ function buildWildlifeAgents(model, network, populations, suitabilityBySpecies, 
       const block = selected.block;
       const rx = deterministic01(ordinal, block.blockId, speciesRecord.id.length * 101 + 7);
       const ry = deterministic01(block.blockId, ordinal, speciesRecord.id.length * 137 + 13);
+      const sites=speciesRecord.aquaticEnvironment?(block.aquaticSites?.[speciesRecord.aquaticEnvironment]||[]).filter(site=>aquaticFit(speciesRecord,site)>0):null;
+      if(sites && !sites.length)continue;
+      const waterSite=sites?.[Math.min(sites.length-1,Math.floor(rx*sites.length))];
       agents.push({
         agentId: `${speciesRecord.id}-${ordinal}`,
         speciesId: speciesRecord.id,
         geometryClass: speciesRecord.geometryClass,
         blockId: block.blockId,
-        xKm: lerp(block.x0Km, block.x1Km, 0.08 + rx * 0.84),
-        yKm: lerp(block.y0Km, block.y1Km, 0.08 + ry * 0.84),
+        xKm: waterSite?(waterSite.index%model.n)/(model.n-1)*model.sizeKm:lerp(block.x0Km, block.x1Km, 0.08 + rx * 0.84),
+        yKm: waterSite?Math.floor(waterSite.index/model.n)/(model.n-1)*model.sizeKm:lerp(block.y0Km, block.y1Km, 0.08 + ry * 0.84),
+        waterSite,
         elevationM: block.meanElevationM,
         headingRad: deterministic01(ordinal, block.blockId, 509) * Math.PI * 2,
         speedKmPerDay: speciesRecord.movementKmPerDay * (0.72 + deterministic01(block.blockId, ordinal, 613) * 0.56),

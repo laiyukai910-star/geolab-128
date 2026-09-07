@@ -1,4 +1,7 @@
 import * as THREE from "three";
+import { createGeologyMaterial } from "./geologyMaterial.js";
+import { createCaveDisplay, disposeCaveDisplay } from "./caveGeometry.js";
+import { createHabitatAssemblies, sessileHabitatSites } from "./habitatAssemblies.js";
 import { buildTerrainVolume, volumeDisplayConfig, sampleTerrainHeight, underwaterFocus, constrainTerrainCamera } from "./terrainVolume.js";
 
 function createSky() {
@@ -89,28 +92,6 @@ function createWaterMaterial(config) {
   return material;
 }
 
-function createRockSectionMaterial() {
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
-  // Display-only fill keeps unlit geological faces readable without changing surface lighting.
-  material.userData.inspectionFill = 0.8;
-  material.customProgramCacheKey = () => "geolab-section-rock-v2";
-  material.onBeforeCompile = shader => {
-    shader.uniforms.sectionInspectionFill = { value: material.userData.inspectionFill };
-    shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 sectionPosition;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nsectionPosition=position;");
-    shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 sectionPosition;\nuniform float sectionInspectionFill;")
-      .replace("#include <color_fragment>", `#include <color_fragment>
-        float footprint=max(length(dFdx(sectionPosition)),length(dFdy(sectionPosition)));
-        float band=sin(sectionPosition.y*37.0+sin(sectionPosition.x*6.0+sectionPosition.z*7.0));
-        float grain=sin(dot(sectionPosition,vec3(119.0,173.0,127.0)))*sin(sectionPosition.y*233.0);
-        diffuseColor.rgb*=0.91+band*0.055*(1.0-smoothstep(0.02,0.12,footprint))
-          +grain*0.045*(1.0-smoothstep(0.002,0.025,footprint));`)
-      .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
-        totalEmissiveRadiance += diffuseColor.rgb * sectionInspectionFill;`);
-  };
-  return material;
-}
-
 export class SceneVolume {
   constructor(scene) {
     this.scene = scene;
@@ -125,6 +106,9 @@ export class SceneVolume {
   }
 
   clear() {
+    disposeCaveDisplay(this.caveDisplay);this.caveDisplay=null;
+    disposeCaveDisplay(this.habitatDisplay);this.habitatDisplay=null;
+    this.habitatFocus=null;
     for (const mesh of [...this.group.children]) {
       // Water surfaces borrow the exact terrain geometry and must never dispose it.
       if (!mesh.userData.borrowedTerrainGeometry) mesh.geometry.dispose();
@@ -142,7 +126,7 @@ export class SceneVolume {
     const volume = buildTerrainVolume(model, this.config);
     this.baseY = volume.baseY;
     this.plane.constant = this.config.cutX;
-    const solid = new THREE.Mesh(volume.solid, createRockSectionMaterial());
+    const solid = new THREE.Mesh(volume.solid, createGeologyMaterial(this.config.cave));
     solid.name = "modeled columns and unclassified closure";
     this.group.add(solid);
     const sides = new THREE.Mesh(volume.waterSides, new THREE.MeshStandardMaterial({ vertexColors: true,
@@ -163,6 +147,13 @@ export class SceneVolume {
       this.waterMeshes.push(water);
     }
     this.focus = underwaterFocus(model, this.config);
+    const edgeDistance=site=>Math.min(site.index%model.n,model.n-1-site.index%model.n,Math.floor(site.index/model.n),model.n-1-Math.floor(site.index/model.n));
+    const habitat=sessileHabitatSites(model).map(row=>row.site).sort((a,b)=>edgeDistance(b)-edgeDistance(a))[0];
+    if(habitat){
+      const x=(habitat.index%model.n)/(model.n-1)*model.sizeKm-model.sizeKm/2;
+      const z=Math.floor(habitat.index/model.n)/(model.n-1)*model.sizeKm-model.sizeKm/2;
+      this.focus={x,z,y:habitat.bedM*this.config.verticalScale/1000,depthKm:habitat.depthM*this.config.verticalScale/1000,habitat:true};
+    }
     this.stats = { mode: this.config.mode, boundarySamples: volume.boundarySamples,
       modeledLayerCount: volume.modeledLayerCount, modeledDepthM: this.config.depthM,
       undergroundDisplayExaggeration: this.config.depthScale, baseYKm: volume.baseY,
@@ -170,6 +161,9 @@ export class SceneVolume {
       underwaterAvailable: Boolean(this.focus), underwater: false,
       closure: "unclassified below modeled columns", waterModel: "sea-level surface and optical display; not a 3D fluid solver" };
     this.setVisibility(params, viewMode);
+    if(this.config.cave){this.caveDisplay=createCaveDisplay(this.config.cave,this.clippingPlanes);this.scene.add(this.caveDisplay);this.stats.cave=this.caveDisplay.userData.cave;}
+    this.stats.sessileLife={count:0,deferred:true};
+    this.stats.stratumColors="continuous display reconstruction; categorical scientific columns unchanged";
     globalThis.__geoLabVolumeStats = this.stats;
   }
 
@@ -178,6 +172,7 @@ export class SceneVolume {
     this.waterVisible = params.water3DEnabled !== false && viewMode === "landscape";
     for (const mesh of this.waterMeshes) mesh.visible = this.waterVisible;
     if (this.waterSides) this.waterSides.visible = this.waterVisible;
+    if(this.habitatDisplay)this.habitatDisplay.visible=this.waterVisible&&this.stats.underwater;
   }
 
   applyClipping(groups) {
@@ -197,9 +192,19 @@ export class SceneVolume {
     const h = sampleTerrainHeight(this.model, camera.position.x, camera.position.z);
     const submerged = this.waterVisible && h !== null && (mode !== "section" || camera.position.x <= cutX)
       && camera.position.y < seaLevel * verticalScale / 1000 && camera.position.y > h * verticalScale / 1000;
+    // Build meter-scale organisms only around an immersed camera, never for a regional overview.
+    if(submerged&&(!this.habitatFocus||Math.hypot(camera.position.x-this.habitatFocus.x,camera.position.z-this.habitatFocus.z)>Math.max(0.25,sizeKm/(this.model.n-1))*0.5)){
+      disposeCaveDisplay(this.habitatDisplay);
+      this.habitatFocus={x:camera.position.x,z:camera.position.z};
+      this.habitatDisplay=createHabitatAssemblies(this.model,this.params,mode==="section"?this.clippingPlanes:null,this.habitatFocus);
+      this.scene.add(this.habitatDisplay);this.stats.sessileLife=this.habitatDisplay.userData.habitat;
+    }
+    if(this.habitatDisplay)this.habitatDisplay.visible=submerged;
     this.sky.visible = this.params.sky3DEnabled !== false && !submerged;
     this.sky.material.uniforms.time.value = seconds;
     for (const water of this.waterMeshes) water.material.userData.waterUniforms.waterTime.value = seconds;
+    for(const mesh of this.habitatDisplay?.children||[])mesh.material.userData.organismTime.value=seconds;
+    for(const mesh of this.caveDisplay?.children||[])if(mesh.material?.userData.organismTime)mesh.material.userData.organismTime.value=seconds;
     if (!this.scene.fog) this.scene.fog = new THREE.FogExp2();
     this.scene.fog.color.set(submerged ? 0x19566a : this.sky.visible ? 0xacc4ce : 0x081210);
     this.scene.fog.density = submerged ? 1 / Math.max(0.01, (seaLevel - h) * verticalScale / 1000 * 3) : 0.035 / sizeKm;

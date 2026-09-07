@@ -100,6 +100,11 @@ async function prepareVendorRuntime() {
     path.join(vendorRoot, "three", "addons", "controls", "OrbitControls.js")
   );
   await cp(path.join(here, "node_modules", "three", "LICENSE"), path.join(vendorRoot, "three", "LICENSE"));
+  for (const asset of ["utils/BufferGeometryUtils.js", "objects/MarchingCubes.js"]) {
+    const destination = path.join(vendorRoot,"three","addons",asset);
+    await mkdir(path.dirname(destination),{recursive:true});
+    await cp(path.join(here,"node_modules","three","examples","jsm",asset),destination);
+  }
   await build({
     entryPoints: [path.join(here, "node_modules", "geotiff", "dist-module", "geotiff.js")],
     outfile: path.join(vendorRoot, "geotiff.bundle.js"),

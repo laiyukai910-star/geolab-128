@@ -89,6 +89,8 @@ The natural-surface view blends rock, soil, vegetation, and sealed ground with m
 
 Terrain now has closed sides and a base. Solid, geological-section, and underwater views expose the modeled ground and sea-level water from different positions, with a local sky environment. Underground display exaggeration changes presentation only. [Volume views and their limits](docs/v1-readiness/WORLD_VOLUME.md).
 
+The Layers drawer also provides a 13-model organism viewer and an adjustable karst-cave scenario. Eight aquatic functional profiles distinguish river and marine habitat, constrain releases by water depth and salinity, and require water connections for cross-block migration. Coral and kelp load near an immersed camera at compatible sampled seabed sites. [Organisms, habitat rules, and cave controls](docs/v1-readiness/BIOMES_AND_CAVES.md).
+
 Available analysis layers include elevation, climate, precipitation, temperature, flow accumulation, velocity, shear stress, sediment, erosion, deposition, hazards, vegetation, land cover, soil, groundwater, aquifer potential, imperviousness, wetness, confidence, ecological connectivity, and wildlife richness.
 
 ## Data And Exports

@@ -110,6 +110,7 @@ const ids = [
   "terrainDetail3DEnabled",
   "subsurface3DEnabled",
   "worldView",
+  "caveLengthM", "caveRadiusM", "caveDepthM",
   "sectionPosition",
   "subsurfaceDisplayScale",
   "sky3DEnabled",
@@ -856,6 +857,8 @@ function bindUi() {
   });
   document.getElementById("playTime").addEventListener("click", toggleTimePlayback);
   document.getElementById("queueWildlifeRelease")?.addEventListener("click", queueWildlifeReleaseBatch);
+  document.getElementById("inspectOrganism")?.addEventListener("click",()=>renderer.inspectOrganism(document.getElementById("specimenKind").value));
+  document.getElementById("leaveOrganismInspector")?.addEventListener("click",()=>renderer.leaveOrganismInspector());
   document.getElementById("executeWildlifeReleases")?.addEventListener("click", executeWildlifeReleaseBatches);
   document.getElementById("clearWildlifeReleases")?.addEventListener("click", clearWildlifeReleaseBatches);
   document.getElementById("exportEcologicalIntegrity")?.addEventListener("click", exportEcologicalIntegrity);
@@ -925,8 +928,10 @@ function bindUi() {
     ui[id]?.addEventListener("change", refreshSceneVisibilityControls);
   });
 
-  ["worldView", "sectionPosition", "subsurfaceDisplayScale", "sky3DEnabled", "water3DEnabled"].forEach(id => {
+  ["worldView", "sectionPosition", "subsurfaceDisplayScale", "sky3DEnabled", "water3DEnabled", "caveLengthM", "caveRadiusM", "caveDepthM"].forEach(id => {
     ui[id]?.addEventListener("change", () => {
+      renderer.leaveOrganismInspector();
+      if(id==="worldView" && ui.worldView.value==="cave")ui.subsurfaceDisplayScale.value="1";
       if (id === "worldView" && ui.worldView.value === "underwater") {
         viewMode.value = "landscape";
         ui.water3DEnabled.checked = true;
@@ -937,7 +942,7 @@ function bindUi() {
       const stats = renderer.updateWorldViewOptions(params);
       const message = document.getElementById("worldViewMessage");
       message.hidden = !(params.worldView === "underwater" && stats?.underwaterAvailable === false);
-      ui.sectionPosition.disabled = params.worldView !== "section";
+      ui.sectionPosition.disabled = !["section","cave"].includes(params.worldView);
     });
   });
 
@@ -3347,6 +3352,9 @@ function readParams() {
     terrainDetail3DEnabled: ui.terrainDetail3DEnabled?.checked === true,
     subsurface3DEnabled: ui.subsurface3DEnabled?.checked === true,
     worldView: ui.worldView?.value || "solid",
+    caveLengthM: Number(ui.caveLengthM?.value)||480,
+    caveRadiusM: Number(ui.caveRadiusM?.value)||12,
+    caveDepthM: Number(ui.caveDepthM?.value)||100,
     sectionPosition: clamp(Number(ui.sectionPosition?.value ?? 50), 5, 95),
     subsurfaceDisplayScale: clamp(Number(ui.subsurfaceDisplayScale?.value ?? 20), 1, 100),
     sky3DEnabled: ui.sky3DEnabled?.checked !== false,
@@ -5046,7 +5054,7 @@ function buildPipelineAudit() {
       vegetation: "土地覆盖/NDVI 冠层融合，包含 LAI、根系固结、截留、蒸散和水量平衡诊断",
       terrainDiagnostics: "可调多尺度域扭曲、分形噪声、山脊与微地形生成，并计算坡度、坡向、曲率、地形位置指数、局地粗糙度、地形湿润指数和亚格双线性检查器",
       landscapeConnectivity: "面积闭合的八邻域生态区块图，将地形、水文、P/PET 干湿度、植被、人造干扰与灾害合成为边缘压力、核心生境代理、连通度、阻力和跨区通量",
-      wildlife: "36 类区域物种的限制因子生态位 + 有效栖息面积承载力 + 代表性成年体重生物量 + 猎物资源支持 + 干扰死亡 + 功能连通网络 + 受约束投放筛查；不替代种群生存力分析",
+      wildlife: "区域物种与水生功能形态的限制因子生态位 + 淡水/海水隔离与可用水深筛查 + 有效栖息面积承载力 + 功能连通网络；不替代种群生存力分析",
       ecologicalIntegrity: "以可展开的生境、连通性、核心生境、气候—植被一致性、Shannon/Hill 多样性、功能群和营养资源分项构成筛查指数，并保留专业解释边界",
       proceduralAssets: "109 类语义程序化资产工厂，以曲线、挤压、旋转体、桁架、肋板、非规则多面体和多部件装配构造自然物件、人造设施与动物解剖",
       continentTemplates: "15 套全球与区域模板联动地貌、气候、风、水文、植被、生态区系和随机种子",

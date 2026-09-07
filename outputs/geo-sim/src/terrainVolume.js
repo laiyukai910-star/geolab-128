@@ -1,20 +1,36 @@
 import * as THREE from "three";
+import { caveContains } from "./caveField.js";
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 
 export function volumeDisplayConfig(model, params = {}) {
   const sizeKm = Number(model.sizeKm) || 128;
-  const mode = ["solid", "section", "underwater"].includes(params.worldView) ? params.worldView : "solid";
+  const caveFocus=params.worldView==="cave";
+  const mode = caveFocus?"section":["solid", "section", "underwater"].includes(params.worldView) ? params.worldView : "solid";
   const cutIndex = mode === "section" && model.n > 2
     ? clamp(Math.round((Number(params.sectionPosition) || 50) / 100 * (model.n - 1)), 1, model.n - 2)
     : model.n - 1;
-  return {
+  const config = {
     mode, sizeKm, cutIndex, cutX: (cutIndex / (model.n - 1) - 0.5) * sizeKm,
     verticalScale: Number(params.verticalScale) || 1,
     depthScale: clamp(Number(params.subsurfaceDisplayScale) || 20, 1, 100),
     seaLevel: Number(params.seaLevel) || 0,
     depthM: Number(model.subsurface?.depthEdgesM?.[model.subsurface.layerCount]) || Number(params.subsurfaceDepthM) || 240
   };
+  if(caveFocus){
+    const span=Math.min(clamp(Number(params.caveLengthM)||480,80,800)/2000,sizeKm*0.08,(config.cutX+sizeKm/2)/1.35);
+    const radius=Math.min(clamp(Number(params.caveRadiusM)||12,3,25),config.depthM*0.15)/1000;
+    const roofDepth=clamp(Number(params.caveDepthM)||100,Math.min(20,config.depthM*0.4)+radius*1800,config.depthM-radius*1800);
+    let h=Infinity;
+    for(let z=-1;z<=1;z++)for(let x=-1;x<=1;x++){
+      const sample=sampleTerrainHeight(model,config.cutX-span*0.24+x*span,z*radius/0.24);
+      if(sample!==null)h=Math.min(h,sample);
+    }
+    config.caveFocus=true;
+    config.cave={center:[config.cutX-span*0.24,(h-roofDepth*config.depthScale)*config.verticalScale/1000,0],
+      halfSize:[span,radius/0.24*config.verticalScale*config.depthScale,radius/0.24]};
+  }
+  return config;
 }
 
 export function subsurfaceColumnIndex(model, surfaceIndex) {
@@ -29,28 +45,44 @@ export function subsurfaceColumnIndex(model, surfaceIndex) {
 
 const LITHOLOGY = [0x626569, 0x9a7048, 0x897b5c, 0xb79b61, 0x777b79, 0x5f666b, 0x725f59];
 const UNCLASSIFIED_COLOR = 0x72787e;
-function layerColor(model, surfaceIndex, layer) {
-  const volume = model.subsurface, column = subsurfaceColumnIndex(model, surfaceIndex);
-  if (column < 0 || layer < 0) return new THREE.Color(UNCLASSIFIED_COLOR);
-  const voxel = layer * volume.columnCellCount + column;
-  const color = new THREE.Color(LITHOLOGY[volume.lithologyCode?.[voxel] || 0] || LITHOLOGY[0]);
-  const saturation = clamp(Number(volume.groundwaterSaturation?.[voxel]) || 0, 0, 1);
-  color.lerp(new THREE.Color(0x447b88), saturation * 0.28);
-  return color;
+const LITHOLOGY_COLORS = LITHOLOGY.map(hex => new THREE.Color(hex));
+const WET_ROCK = new THREE.Color(0x59615e);
+function splineWeights(t) {
+  return [(1-t)**3/6, (3*t**3-6*t*t+4)/6, (-3*t**3+3*t*t+3*t+1)/6, t**3/6];
+}
+
+export function sampleStratumColor(model, surfaceX, surfaceY, layer) {
+  const volume = model.subsurface;
+  if (!volume?.columnCellCount || layer < 0) return new THREE.Color(UNCLASSIFIED_COLOR);
+  const grid = volume.columnCellCount === model.n * model.n ? model.n : volume.gridN;
+  const x = surfaceX / (model.n - 1) * (grid - 1), y = surfaceY / (model.n - 1) * (grid - 1);
+  const ix = Math.floor(x), iy = Math.floor(y), wx = splineWeights(x-ix), wy = splineWeights(y-iy);
+  const color = new THREE.Color(0,0,0);
+  let saturation = 0;
+  // Reconstruct display colors, never interpolate categorical IDs or rewrite scientific columns.
+  for (let j=0;j<4;j++) for (let i=0;i<4;i++) {
+    const voxel = layer * volume.columnCellCount + clamp(iy+j-1,0,grid-1)*grid + clamp(ix+i-1,0,grid-1);
+    const weight = wx[i]*wy[j];
+    const tone = LITHOLOGY_COLORS[volume.lithologyCode?.[voxel]] || LITHOLOGY_COLORS[0];
+    color.r += tone.r*weight; color.g += tone.g*weight; color.b += tone.b*weight;
+    saturation += clamp(Number(volume.groundwaterSaturation?.[voxel]) || 0,0,1)*weight;
+  }
+  return color.lerp(WET_ROCK, saturation*0.12);
 }
 
 function geometryBuilder() {
-  const positions = [], colors = [], indices = [];
+  const positions = [], colors = [], indices = [], depths = [];
   return {
-    polygon(points, tones) {
+    polygon(points, tones, depthValues = []) {
       const start = positions.length / 3;
-      points.forEach((point, i) => { positions.push(...point); colors.push(tones[i].r, tones[i].g, tones[i].b); });
+      points.forEach((point, i) => { positions.push(...point); colors.push(tones[i].r, tones[i].g, tones[i].b); depths.push(depthValues[i] || 0); });
       for (let i = 1; i < points.length - 1; i++) indices.push(start, start + i, start + i + 1);
     },
     finish() {
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
       geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+      geometry.setAttribute("stratumDepth", new THREE.Float32BufferAttribute(depths, 1));
       geometry.setIndex(indices);
       geometry.computeVertexNormals();
       geometry.computeBoundingBox();
@@ -75,6 +107,14 @@ export function buildTerrainVolume(model, config) {
   for (let y = 0; y < n; y++) for (let x = 0; x <= cutIndex; x++) minHeight = Math.min(minHeight, model.height[y * n + x]);
   const baseY = (minHeight - depthM * depthScale) * verticalScale / 1000;
   const edges = model.subsurface?.depthEdgesM || [0, depthM];
+  const layerTones=Array.from({length:edges.length-1},(_,layer)=>{
+    const color=new THREE.Color(0,0,0);
+    for(let y=0;y<8;y++)for(let x=0;x<8;x++){
+      const sample=sampleStratumColor(model,(x+0.5)/8*(n-1),(y+0.5)/8*(n-1),layer);
+      color.r+=sample.r/64;color.g+=sample.g/64;color.b+=sample.b/64;
+    }
+    return color;
+  });
   const solid = geometryBuilder(), water = geometryBuilder();
   const unknown = new THREE.Color(UNCLASSIFIED_COLOR);
   const seaY = seaLevel * verticalScale / 1000;
@@ -86,10 +126,11 @@ export function buildTerrainVolume(model, config) {
       const top = edges[layer] * depthScale * verticalScale / 1000;
       const low = edges[layer + 1] * depthScale * verticalScale / 1000;
       const last = layer === edges.length - 1;
-      const ca = last ? unknown : layerColor(model, ia, layer);
-      const cb = last ? unknown : layerColor(model, ib, layer);
+      const ca = last ? unknown : sampleStratumColor(model, ia % n, Math.floor(ia/n), layer).lerp(layerTones[layer],0.92);
+      const cb = last ? unknown : sampleStratumColor(model, ib % n, Math.floor(ib/n), layer).lerp(layerTones[layer],0.92);
       solid.polygon([[a[0], a[1] - top, a[2]], [b[0], b[1] - top, b[2]],
-        [b[0], last ? baseY : b[1] - low, b[2]], [a[0], last ? baseY : a[1] - low, a[2]]], [ca, cb, cb, ca]);
+        [b[0], last ? baseY : b[1] - low, b[2]], [a[0], last ? baseY : a[1] - low, a[2]]], [ca, cb, cb, ca],
+        [edges[layer], edges[layer], last ? (b[1]-baseY)*1000/(depthScale*verticalScale) : edges[layer+1], last ? (a[1]-baseY)*1000/(depthScale*verticalScale) : edges[layer+1]]);
     }
     solid.polygon([[(config.cutX - sizeKm / 2) / 2, baseY, 0], [a[0], baseY, a[2]], [b[0], baseY, b[2]]], [unknown, unknown, unknown]);
     if (a[1] < seaY || b[1] < seaY) {
@@ -116,6 +157,7 @@ export function sampleTerrainHeight(model, xKm, zKm) {
 }
 
 export function containsTerrainPoint(model, config, baseY, point) {
+  if(caveContains(config.cave,point,0.015))return false;
   if (point.y <= baseY || (config.mode === "section" && point.x >= config.cutX)) return false;
   const height = sampleTerrainHeight(model, point.x, point.z);
   return height !== null && point.y < height * config.verticalScale / 1000;

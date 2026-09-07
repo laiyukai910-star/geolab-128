@@ -5,6 +5,10 @@
 The rendered terrain now forms a closed boundary: the existing heightfield,
 elevation-following perimeter walls, and a bottom surface. Walls sample the
 existing subsurface columns for lithology and groundwater-saturation colors.
+The natural display reconstructs these colors continuously and blends local
+tones toward the regional mean of each layer to suppress coarse checkerboard
+patterns. It is not a fine-scale lithology map. Categorical analysis layers,
+column IDs, and scientific arrays are preserved.
 Extensions beneath modeled columns use an unclassified base color; they are
 geometric closure, not additional geological evidence.
 
@@ -24,7 +28,7 @@ fill nor its color represents subsurface light, temperature, or a new rock type.
 
 The Layers drawer provides a Volume view selector. Geological section removes
 the part of the region beyond a movable grid-aligned plane and closes the exposed
-face. Terrain, vegetation, infrastructure, wildlife, river lines, and diagnostic
+face. Terrain, vegetation, infrastructure, wildlife, river surfaces, and diagnostic
 objects share the same clipping plane. Selecting an underground analysis layer
 also opens the section view.
 
@@ -65,10 +69,14 @@ off independently. Water is hidden on analytical surface palettes so it does
 not conceal their colors.
 
 These are display systems, not a calibrated atmosphere, wave spectrum, or 3D
-fluid solver. River centerlines remain the existing river representation; this
-stage does not add surveyed channel bathymetry. The terrain top is still a
-heightfield: caves, overhangs, and fully volumetric geological mechanics are
-not implemented by closing its boundary.
+fluid solver. River surfaces use routed endpoints and hydraulic widths/depths;
+curved sub-grid display ribbons do not add surveyed channel bathymetry. The
+terrain top remains a heightfield, not a fully volumetric geological solver.
+
+An explicit **Karst cave scenario** now adds a closed passage mesh and a matching
+opening in the section face. It is user-authored illustrative geometry, not a
+cave inferred from the subsurface columns. See [organisms and caves](BIOMES_AND_CAVES.md)
+for controls, habitat constraints, source references, and remaining limitations.
 
 ## Verification
 

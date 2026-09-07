@@ -5,6 +5,9 @@ import { FoliageInstances } from "./foliageInstances.js";
 import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal } from "./terrainAppearance.js";
 import { createTerrainSurfaceMaterial, updateTerrainSurfaceMaterial } from "./terrainSurfaceMaterial.js";
 import { SceneVolume } from "./sceneVolume.js";
+import { ORGANISM_KINDS, createOrganismMaterial } from "./organismGeometry.js";
+import { OrganismInspector } from "./organismInspector.js";
+import { buildRiverGeometry } from "./riverGeometry.js";
 import {
   buildAdaptiveInfrastructurePlacementPlan,
   buildBlockDetailAtlas,
@@ -514,6 +517,7 @@ export class TerrainRenderer {
   }
 
   setModel(model, params, viewMode) {
+    this.leaveOrganismInspector();
     this.cancelDeferredDetailBuild();
     const loadStart = performance.now();
     const stageTimings = [];
@@ -549,7 +553,7 @@ export class TerrainRenderer {
     timedBuild("terrain-surface", () => this.buildTerrainMesh());
     timedBuild("rivers", () => this.buildRivers());
     timedBuild("wind-arrows", () => this.buildWindArrows());
-    if (["section", "underwater"].includes(params.worldView)) this.focusVolumeView();
+    if (["section", "underwater", "cave"].includes(params.worldView)) this.focusVolumeView();
     this.applySceneVisibility();
     this.renderLoadStats = {
       mode: "staged-detail-layers",
@@ -754,7 +758,7 @@ export class TerrainRenderer {
     this.viewMode = viewMode;
     this.updateSceneScale(previousSizeKm !== modelSizeKm(model));
     this.buildTerrainMesh(dirtyBounds);
-    if (["section", "underwater"].includes(params.worldView)) this.focusVolumeView();
+    if (["section", "underwater", "cave"].includes(params.worldView)) this.focusVolumeView();
     if (typeof globalThis !== "undefined") {
       globalThis.__geoLabTerrainRefreshStats = this.lastTerrainRefreshStats;
       globalThis.__geoLabTerrainTileStats = this.lastTerrainTileStats;
@@ -794,7 +798,7 @@ export class TerrainRenderer {
     if (this.shouldShowSubsurface3D()) this.buildSubsurface3D();
     this.applySceneVisibility();
     const next = this.sceneVolume.config;
-    if (previous?.mode !== next.mode || (next.mode === "section" && (previous.cutX !== next.cutX || previous.depthScale !== next.depthScale))) this.focusVolumeView();
+    if (previous?.mode !== next.mode || previous?.caveFocus!==next.caveFocus || JSON.stringify(previous?.cave)!==JSON.stringify(next.cave) || (next.mode === "section" && (previous.cutX !== next.cutX || previous.depthScale !== next.depthScale))) this.focusVolumeView();
     this.sceneDiagnosticsDirty = true;
     return this.sceneVolume.stats;
   }
@@ -802,14 +806,28 @@ export class TerrainRenderer {
   focusVolumeView() {
     const volume = this.sceneVolume;
     if (!volume?.config) return;
+    // Consume the previous gesture before replacing the camera pose.
+    const damping=this.controls.enableDamping;
+    this.controls.enableDamping=false;this.controls.update();this.controls.enableDamping=damping;
     const { mode, sizeKm, cutX } = volume.config;
-    if (mode === "underwater") {
+    if(volume.config.caveFocus){
+      const {center,halfSize}=volume.config.cave;
+      this.controls.minDistance=0.0002;this.camera.near=0.00001;
+      this.controls.target.set(center[0]-halfSize[0]*0.36,center[1],center[2]);
+      const fit=Math.max(1,1/this.camera.aspect);
+      this.camera.position.set(cutX-halfSize[0]*0.04/fit,center[1]+halfSize[1]*0.025,center[2]+halfSize[2]*0.04);
+    } else if (mode === "underwater") {
       if (!volume.focus) return;
       const { x, y, z, depthKm } = volume.focus;
       this.controls.minDistance = Math.max(0.0001, depthKm * 0.05);
       this.camera.near = Math.max(0.00001, depthKm * 0.001);
       this.controls.target.set(x, y + depthKm * 0.25, z - depthKm);
       this.camera.position.set(x, y + depthKm * 0.65, z);
+      if(volume.focus.habitat){
+        const offset=Math.min(depthKm*0.25,0.004);
+        this.controls.target.set(x,y+Math.min(depthKm*0.2,0.001),z);
+        this.camera.position.set(x,y+Math.min(depthKm*0.65,0.006),z+offset);
+      }
     } else if (mode === "section") {
       const targetY = (volume.baseY + terrainCameraFocusY(this.model, this.params)) * 0.5;
       this.controls.target.set(cutX - sizeKm * 0.1, targetY, 0);
@@ -820,6 +838,15 @@ export class TerrainRenderer {
     }
     this.camera.updateProjectionMatrix();
     this.controls.update();
+  }
+
+  inspectOrganism(kind) {
+    if(!this.organismInspector)this.organismInspector=new OrganismInspector(this.renderer);
+    this.controls.enabled=false;this.organismInspector.show(kind);
+  }
+
+  leaveOrganismInspector() {
+    this.organismInspector?.hide();this.controls.enabled=true;
   }
 
   updateView(viewMode, dirtyBounds = null) {
@@ -1122,6 +1149,7 @@ export class TerrainRenderer {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.organismInspector?.dispose();
     this.cancelDeferredDetailBuild();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
@@ -1152,6 +1180,7 @@ export class TerrainRenderer {
   animate() {
     this.frame = requestAnimationFrame(this.animate);
     if (!this.isDocumentVisible || this.renderContextState.status !== "ready") return;
+    if(this.organismInspector?.active){this.organismInspector.render(performance.now()*0.001);return;}
     this.controls.update();
     const now = performance.now();
     const t = now * 0.001;
@@ -1489,30 +1518,10 @@ export class TerrainRenderer {
     }
     const model = this.model;
     const params = this.params;
-    const maxSegments = Math.min(model.riverSegments.length, 120000);
-    const positions = new Float32Array(maxSegments * 6);
-    let cursor = 0;
-    for (let s = 0; s < maxSegments; s += 1) {
-      const segment = model.riverSegments[s];
-      const a = this.indexToWorld(segment.from, segment.order);
-      const b = this.indexToWorld(segment.to, segment.order);
-      positions[cursor++] = a.x;
-      positions[cursor++] = a.y;
-      positions[cursor++] = a.z;
-      positions[cursor++] = b.x;
-      positions[cursor++] = b.y;
-      positions[cursor++] = b.z;
-    }
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const material = new THREE.LineBasicMaterial({
-      color: 0x7ce8ff,
-      transparent: true,
-      opacity: params.riverThreshold > 4 ? 0.86 : 0.96,
-      depthWrite: false
-    });
-    this.rivers = new THREE.LineSegments(geometry, material);
+    const geometry = buildRiverGeometry(model,params);
+    const material = new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.32,metalness:0,
+      transparent:true,opacity:0.84,depthWrite:false,side:THREE.DoubleSide});
+    this.rivers = new THREE.Mesh(geometry, material);
     this.rivers.renderOrder = 3;
     this.scene.add(this.rivers);
   }
@@ -6769,6 +6778,15 @@ function wildlifeAgentRenderState(model, params, agent, species, visualScale) {
   const surfaceHeightM = Math.max(Number(model.height?.[index]) || 0, species.aquaticAffinity >= 0.5 ? waterSurface : 0);
   const bodySize = Math.max(0.0007, Math.min(0.006, 0.0024 * Math.max(0.35, Number(agent.scale) || 1))) * visualScale;
   const flying = (species.geometryClass === "bird" || species.geometryClass === "raptor") && species.id !== "cassowary";
+  if(species.aquaticEnvironment && agent.waterSite){
+    const site=agent.waterSite,depthKm=site.depthM*verticalScale/1000;
+    const scale=Math.min(bodySize,depthKm*0.22,site.widthM/1000*0.18);
+    const benthic=["mussel","crab","octopus","ray"].includes(species.geometryClass);
+    return {baseX:Number(agent.xKm)-sizeKm/2,baseZ:Number(agent.yKm)-sizeKm/2,
+      baseY:site.bedM*verticalScale/1000+(benthic?scale*0.5:depthKm*0.5),
+      heading:Number(agent.headingRad)||0,phase:Number(agent.animationPhase)||0,bodySize:scale,
+      flying:false,motionRate:0.8,travelRadius:0,aquatic:true,habitatSuitability:clamp01(agent.habitatSuitability)};
+  }
   return {
     baseX: Number(agent.xKm) - sizeKm / 2,
     baseY: (surfaceHeightM / 1000) * verticalScale + bodySize * (flying ? 2.8 : 0.32),
@@ -6784,6 +6802,7 @@ function wildlifeAgentRenderState(model, params, agent, species, visualScale) {
 }
 
 function wildlifePartPlan(species) {
+  if(ORGANISM_KINDS.includes(species.geometryClass))return [{id:"organism",offset:[0,0,0],scale:[1,1,1],colorHex:0xffffff}];
   const p = (id, labelZh, geometry, offset, scale, options = {}) => ({ id, labelZh, geometry, offset, scale, ...options });
   const body = species.geometryClass;
   if (body === "ungulate") {
@@ -7024,7 +7043,7 @@ function addWildlifeInstancedBatch(group, batch, renderDetailQuality = "ultra") 
     }, variantCount);
     partitions[variant].push(entry);
   }
-  const material = createProceduralAssetMaterial(batch.kind, 0x9a8d78, {
+  const material = batch.kind.startsWith("wildlife-organism-")?createOrganismMaterial(batch.kind.slice(18)):createProceduralAssetMaterial(batch.kind, 0x9a8d78, {
     roughness: 0.82,
     metalness: 0.01,
     emissive: 0x1b211e,
@@ -7103,6 +7122,7 @@ function writeWildlifeBatchMatrices(mesh, entries, timeSeconds, refreshBounds = 
 
 function animateWildlifeRenderSets(renderSets, timeSeconds) {
   for (const renderSet of renderSets || []) {
+    if(renderSet.mesh.material.userData.organismTime)renderSet.mesh.material.userData.organismTime.value=timeSeconds;
     writeWildlifeBatchMatrices(renderSet.mesh, renderSet.entries, timeSeconds);
   }
 }

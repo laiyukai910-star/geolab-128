@@ -2,6 +2,13 @@ const STORAGE_KEY = "geolab.locale";
 const DEFAULT_LOCALE = "en";
 
 const EXACT = Object.freeze({
+  "洞穴长度 m":"Cave length m","洞室半径 m":"Chamber radius m","洞室中心埋深 m":"Chamber center depth m",
+  "喀斯特洞穴情景":"Karst cave scenario",
+  "生物形态":"Organism anatomy","模型近观":"Inspect specimen","返回沙盘":"Return to terrain",
+  "溪流鳟鱼型":"Stream trout morphotype","淡水鲈鱼型":"Freshwater perch morphotype","珊瑚礁鱼型":"Reef fish morphotype",
+  "近岸鳐鱼型":"Coastal ray morphotype","礁栖章鱼型":"Reef octopus morphotype","钵水母型":"Jellyfish morphotype",
+  "近岸蟹型":"Shore crab morphotype","淡水蚌型":"Freshwater mussel morphotype",
+  "蝙蝠":"Bat","蕨类":"Fern","菌类":"Fungi","枝状珊瑚":"Branching coral","海藻":"Kelp",
   "立体观察": "Volume view",
   "完整地块": "Solid terrain",
   "地下剖面": "Geological section",
