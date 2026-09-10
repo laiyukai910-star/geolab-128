@@ -16,6 +16,7 @@ import {
 } from "./modelKernel.js";
 import { createRustWasmKernel } from "./wasmAbi.js";
 import { createRetryableAsyncResource } from "./modelWorkerClient.js";
+import { setAquaticConnectivityKernel } from "./aquaticHabitats.js";
 const MAX_AUTHORITATIVE_RESOLUTION = 512;
 const scope = globalThis;
 let taskQueue = Promise.resolve();
@@ -27,6 +28,11 @@ scope.addEventListener("message", (event) => {
 async function handleRequest(request) {
   try {
     const params = request.params || {};
+    try {
+      setAquaticConnectivityKernel((await getWasmKernel()).waterContext);
+    } catch (error) {
+      setAquaticConnectivityKernel(null, error instanceof Error ? error.message : String(error));
+    }
     let result;
     if (request.op === "build") {
       result = buildModel(params);

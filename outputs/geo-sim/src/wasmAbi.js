@@ -1,4 +1,24 @@
 // Generated from src-ts/wasmAbi.ts. Run npm run browser:build to regenerate.
+const MAX_WATER_AXIS = 4096;
+const WATER_MARINE = 1;
+const WATER_RIVER = 2;
+function validateWaterInput(input) {
+  const { width, height, seaLevel, elevation, riverNodes } = input;
+  if (![width, height].every((value) => Number.isInteger(value) && value > 0 && value <= MAX_WATER_AXIS)) {
+    throw new RangeError("Water grid axes must be integers between 1 and 4096");
+  }
+  const count = width * height;
+  if (!(elevation instanceof Float32Array) || elevation.length !== count || !Number.isFinite(seaLevel)) {
+    throw new RangeError("Water grid requires matching Float32 elevations and a finite sea level");
+  }
+  if (!(riverNodes instanceof Uint32Array) || riverNodes.length > count * 2) {
+    throw new RangeError("Water grid requires at most two Uint32 river endpoints per cell");
+  }
+  for (const index of riverNodes) {
+    if (index >= count) throw new RangeError("River endpoint is outside the water grid");
+  }
+  return count;
+}
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 async function createRustWasmKernel(moduleBytes) {
@@ -15,8 +35,35 @@ async function createRustWasmKernel(moduleBytes) {
       }
       if (!envelope.report) throw new Error("Rust WASM returned no simulation report");
       return { report: envelope.report };
-    }
+    },
+    waterContext: (input) => invokeWaterContext(exports, input)
   };
+}
+function invokeWaterContext(base, input) {
+  const count = validateWaterInput(input);
+  const exports = base;
+  if ([exports.geolab_alloc_words, exports.geolab_dealloc_words, exports.geolab_water_context_f32].some((value) => typeof value !== "function")) {
+    throw new Error("Bundled Rust WASM does not expose the binary water kernel");
+  }
+  const words = count + input.riverNodes.length;
+  const pointer = exports.geolab_alloc_words(words);
+  if (!pointer) throw new Error("Rust WASM could not allocate water grid memory");
+  let outputPointer = 0;
+  let outputLength = 0;
+  try {
+    new Float32Array(exports.memory.buffer, pointer, count).set(input.elevation);
+    new Uint32Array(exports.memory.buffer, pointer + count * 4, input.riverNodes.length).set(input.riverNodes);
+    const packed = exports.geolab_water_context_f32(pointer, words, input.width, input.height, input.seaLevel);
+    outputPointer = Number(packed & 0xffffffffn);
+    outputLength = Number(packed >> 32n);
+    if (!outputPointer || outputLength !== count) {
+      throw new Error("Rust water kernel rejected the grid: elevations must be finite");
+    }
+    return new Uint8Array(exports.memory.buffer, outputPointer, outputLength).slice();
+  } finally {
+    if (outputPointer && outputLength) exports.geolab_dealloc(outputPointer, outputLength);
+    exports.geolab_dealloc_words(pointer, words);
+  }
 }
 function validateExports(exports) {
   const candidate = exports;
@@ -63,5 +110,9 @@ function decodePackedJson(exports, packed) {
   }
 }
 export {
-  createRustWasmKernel
+  MAX_WATER_AXIS,
+  WATER_MARINE,
+  WATER_RIVER,
+  createRustWasmKernel,
+  validateWaterInput
 };

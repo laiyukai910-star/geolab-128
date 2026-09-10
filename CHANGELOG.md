@@ -12,6 +12,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Fixed
 
+- Rejected malformed water grids, non-finite inputs, and out-of-range river endpoints; excluded aquatic sites with invalid channel dimensions.
 - Removed checkerboard underground presentation by reconstructing continuous display colors and filtering rock detail; categorical scientific layers remain unchanged.
 - Closed cave branch endpoints, bounded cavity size in shallow columns, and shared the cavity field between clipping, mesh extraction, and camera access.
 - Deferred nearby coral and kelp geometry until underwater entry; regional overviews no longer preload or draw meter-scale benthic models.
@@ -22,6 +23,8 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Changed
 
+- Moved aquatic sea-connectivity traversal and river-node classification to Rust with a binary WebAssembly interface, used by the model Worker in browser and desktop runtimes up to 4096 x 4096 cells.
+- Migrated aquatic habitat contracts and fallback logic to strict TypeScript. Added active-backend diagnostics, legacy-result parity tests, block/wildlife comparisons, and allocation-lifetime checks.
 - Replaced bright river lines with hydraulic-width water ribbons and curved display centerlines. Routing data is unchanged; sub-grid curves are not surveyed bathymetry.
 - Closed terrain into a solid display block with elevation-following sides, modeled underground layers, a base, and a movable geological section. Underground display exaggeration is independent of scientific depth.
 - Added a local sky environment, sea-level water surfaces and boundary walls, seabed shading, and an underwater camera with depth-dependent fog.

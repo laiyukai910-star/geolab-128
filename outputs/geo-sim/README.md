@@ -34,13 +34,14 @@ Open <http://127.0.0.1:5179/>. The bundled Rust WASM Worker is used automaticall
 | `src/geoEngine.js` | Browser terrain, climate, hydrology, subsurface, ecology, infrastructure, time, and hazard model. |
 | `src/terrainRenderer.js` | Three.js terrain, water, vegetation, wildlife, infrastructure, wind, hazard, and subsurface rendering. |
 | `src-ts/assetPipeline.ts` | Strict detail budgets, refinement profiles, PBR material classes, and deterministic spatial asset variants. |
+| `src-ts/aquaticHabitats.ts` | Typed aquatic profiles, site screening, Rust water-kernel integration, and fallback diagnostics. |
 | `src-ts/backendClient.ts` | Strict scenario types, bounded resampling, native/WASM selection, request control, and comparison reporting. |
 | `src-ts/modelKernel.ts` | Two-phase validation, JS/Rust comparison metrics, rollback, and atomic working-layer commit. |
 | `src-ts/modelWorkerClient.ts` | Recoverable typed Worker lifecycle, request isolation, diagnostics, cancellation, and transient-resource retry. |
 | `src-ts/modelWorker.ts` | Serialized model jobs, native/WASM execution selection, commit orchestration, and zero-copy return transfers. |
-| `src-ts/wasmAbi.ts` | Validated Rust WASM memory ABI and JSON envelope decoding. |
+| `src-ts/wasmAbi.ts` | Validated Rust WASM memory ABI, binary water-grid buffers, and full-scenario JSON envelopes. |
 | `src-ts/rustKernelWorker.ts` | Off-main-thread Rust kernel loading and execution. |
-| `src/assetPipeline.js`, `src/backendClient.js`, `src/modelKernel.js`, `src/modelWorkerClient.js`, `src/modelWorker.js`, `src/wasmAbi.js`, `src/rustKernelWorker.js` | Generated browser modules; edit the TypeScript sources instead. |
+| `src/assetPipeline.js`, `src/aquaticHabitats.js`, `src/backendClient.js`, `src/modelKernel.js`, `src/modelWorkerClient.js`, `src/modelWorker.js`, `src/wasmAbi.js`, `src/rustKernelWorker.js` | Generated browser modules; edit the TypeScript sources instead. |
 | `src/dataAdapters.js` | GeoTIFF, CSV, JSON, and GeoJSON parsing, unit normalization, bounds interpretation, and provenance. |
 | `src/physicalCoupling.js` | Cross-system conservation gates and directional coupling ledger. |
 | `src/landscapeEcology.js` | Habitat blocks, ecological connectivity, biodiversity, carrying capacity, and release screening. |
@@ -61,7 +62,9 @@ The browser engine supports:
 - multi-year vegetation, water, erosion, compound hazard, damage, and recovery scenarios;
 - source coverage, provenance, calibration, uncertainty, process gates, and interpretation boundaries.
 
-The Rust core has two roles. First, it independently resamples the current scenario to a bounded audit grid and reports terrain, water, groundwater, sediment, habitat, and process gates. Second, on working grids up to 512 x 512, it returns a focused authoritative surface profile. TypeScript validates physical ranges, the complete sparse MFD graph, downhill edges, acyclic topology, and all conservation gates; it then atomically replaces thirteen compatible model layers and rebuilds dependent river, hydraulic, subsurface, hazard, infrastructure, ecology, wildlife, statistics, and 3D state in graph-topological order. Electron uses the native Rust process; the static application executes the same crate as WASM inside the model Worker.
+The Rust core independently resamples the current scenario to a bounded audit grid and reports terrain, water, groundwater, sediment, habitat, and process gates. On working grids up to 512 x 512, it also returns a focused authoritative surface profile. TypeScript validates physical ranges, the complete sparse MFD graph, downhill edges, acyclic topology, and all conservation gates; it then atomically replaces thirteen compatible model layers and rebuilds dependent river, hydraulic, subsurface, hazard, infrastructure, ecology, wildlife, statistics, and 3D state in graph-topological order. Electron uses the native Rust process for these scenarios; the static application executes the same crate as WASM inside the model Worker.
+
+Aquatic habitat connectivity uses a separate Rust binary kernel for grids up to 4096 x 4096. It runs in the model Worker on both platforms, passing Float32 elevations and Uint32 river endpoints without JSON serialization. Its cell flags feed water-connected ecological links and habitat placement. `model.stats.landscapeNetwork.waterConnectivity` records the active backend, elapsed time, cell count, and fallback reason. The TypeScript fallback preserves the same boundary-inundation rules; this screening does not infer lakes or estuarine salinity.
 
 The 3D asset pipeline is also a reviewed TypeScript boundary. It controls monotonic quality profiles, resolution-aware layer budgets, semantic physical materials, and stable spatial variant selection. The Three.js geometry implementation consumes that contract to build multi-template vegetation, buildings, infrastructure, terrain details, and wildlife. Runtime diagnostics expose the active pipeline version and actual template/instance complexity, while the Electron smoke test verifies the rendered WebGL pixel distribution and writes a canvas capture.
 

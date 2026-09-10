@@ -42,7 +42,7 @@ npm ci
 npm start
 ```
 
-The desktop runtime starts a loopback-only Rust service and the Electron workspace. Browser assets, Three.js, and the WebAssembly fallback are bundled locally.
+The desktop runtime starts a loopback-only Rust service and the Electron workspace. Browser assets, Three.js, and WebAssembly modules are bundled locally.
 
 ### Browser
 
@@ -66,6 +66,8 @@ terrain and climate -> routing, water and sediment -> subsurface and ecology
 ```
 
 `engine/geolab-core` contains typed Rust calculations used by the native service and WebAssembly worker. The browser owns interaction and rendering; compatible working layers can be replaced atomically by validated Rust results. A failed process gate leaves the existing scenario state intact.
+
+Water-connected habitat uses a Rust raster kernel up to 4096 x 4096 cells. It reads binary elevation and river arrays inside the model Worker, identifying boundary-connected seawater and river nodes for ecological blocks and wildlife placement. TypeScript defines the habitat contracts and provides a diagnosed fallback when the kernel is unavailable.
 
 ## Scientific Scope
 

@@ -9,6 +9,7 @@ mod ecology;
 mod routing;
 mod sediment;
 mod subsurface;
+pub mod water_connectivity;
 
 use ecology::simulate_ecology;
 use routing::{FlowNetwork, build_flow_network, route_accumulation};

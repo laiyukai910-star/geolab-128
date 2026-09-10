@@ -10,7 +10,7 @@ The Rust workspace is GeoLab 128's independent computation and verification path
 | `geolab-server` | Loopback-only Axum API with bounded concurrency, a 64 MiB body limit, a 30-second timeout, structured errors, and a 512 x 512 request limit. |
 | `geolab-wasm` | Minimal 32-bit memory ABI that executes the same core in a browser Worker without duplicating process formulas. |
 
-Embedded callers may use up to 1,048,576 cells. API requests are limited to 262,144 cells so one desktop audit cannot monopolize the host.
+The complete scenario solver accepts up to 1,048,576 cells for embedded callers. API requests are limited to 262,144 cells so one desktop audit cannot monopolize the host. The separate water-connectivity kernel accepts axes from 1 to 4096; this does not raise the complete solver's limits.
 
 ## Grid Contract
 
@@ -153,6 +153,32 @@ cargo build --release --target wasm32-unknown-unknown --manifest-path engine/Car
 cargo run --release --manifest-path engine/Cargo.toml --package geolab-server -- --port 48129
 ```
 
-The WebAssembly boundary exchanges UTF-8 JSON through explicit allocation, simulation, capability, and deallocation exports. `outputs/geo-sim/src-ts/wasmAbi.ts` owns memory validation and decoding; `rustKernelWorker.ts` keeps numerical execution off the rendering thread. CI instantiates the produced module and runs a complete scenario through this ABI.
+The full-scenario WebAssembly boundary exchanges UTF-8 JSON through explicit allocation, simulation, capability, and deallocation exports. `outputs/geo-sim/src-ts/wasmAbi.ts` owns memory validation and decoding; `rustKernelWorker.ts` keeps numerical execution off the rendering thread. CI instantiates the produced module and runs a complete scenario through this ABI.
 
 The live model path uses `modelWorker.ts` and `modelKernel.ts`. It validates every returned array, physical range, MFD offset, local target, fraction, dominant receiver, downhill edge, acyclic topology, conservation residual, process gate, engine version, and grid dimension before mutating the model. The validated topological order also drives river reconstruction through filled flats. A failed condition preserves the original browser arrays. The atomic profile is currently limited to 512 x 512 so native HTTP and browser WASM transports share the same commit envelope.
+
+## Binary Water Kernel
+
+`geolab_core::water_connectivity::classify_water_cells` is the shared Rust implementation for water-connected habitat. It preserves four-neighbor boundary inundation: only cells strictly below sea level and connected to a wet boundary cell are marine. Closed depressions and diagonal-only links are excluded. River endpoints are marked independently; the habitat layer admits freshwater river sites only above sea level with valid channel dimensions. This is a connectivity screen, not a lake, tidal, salinity-transport, or bathymetry solver.
+
+The browser and Electron model Workers reuse the bundled WASM instance for this kernel, including when full-scenario reconciliation uses the native service. The binary path does not send raster JSON to the sidecar.
+
+| Export | Contract |
+| --- | --- |
+| `geolab_alloc_words(words)` | Allocate four-byte-aligned input storage; zero signals a rejected size. |
+| `geolab_water_context_f32(pointer, words, width, height, seaLevel)` | Read `width * height` Float32 elevations followed by up to two Uint32 river endpoints per cell. Sea level is Float64. Return packed output length/pointer, or zero for invalid input. |
+| `geolab_dealloc_words(pointer, words)` | Free the original input allocation exactly once with its original word count. |
+| `geolab_dealloc(pointer, bytes)` | Free the returned byte buffer exactly once with its returned length. |
+
+Output is one byte per row-major cell: bit 0 marks connected seawater; bit 1 marks river-node membership. Both bits can be set at a river mouth. Input dimensions, finite elevations, finite sea level, and endpoint bounds are validated. The caller must retain an exact live input allocation during the synchronous call. Output length occupies the upper 32 bits of the returned `u64`; its pointer occupies the lower 32 bits.
+
+The TypeScript bridge reacquires memory views after execution, copies output before freeing WASM memory, and releases allocations in `finally` blocks. Model-owned arrays are not modified. An unavailable kernel activates the typed fallback and records its reason in `model.stats.landscapeNetwork.waterConnectivity`; invalid data is rejected by both implementations. Sea-level changes and in-place elevation edits recompute connectivity without identity-based caching.
+
+Run parity, boundary, malformed-input, model-integration, memory-lifetime, and maximum-grid tests with:
+
+```powershell
+node outputs/geo-sim/tests/aquaticKernel.test.mjs
+node outputs/geo-sim/tests/aquaticKernel.test.mjs --benchmark
+```
+
+The optional benchmark compares the pre-migration JavaScript traversal with Rust using prepared typed arrays, including ABI input/output copies and validation. It covers marine, dry, and seeded mixed grids. Dry grids still incur full-array validation and copying even when inundation has no work to do, so this path is not faster for every input. The benchmark excludes terrain generation and rendering and does not measure whole-application speed.

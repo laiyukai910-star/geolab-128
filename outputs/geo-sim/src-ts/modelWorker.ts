@@ -19,6 +19,7 @@ import {
 } from "./modelKernel.js";
 import { createRustWasmKernel } from "./wasmAbi.js";
 import { createRetryableAsyncResource } from "./modelWorkerClient.js";
+import { setAquaticConnectivityKernel } from "./aquaticHabitats.js";
 
 type ModelOperation = "build" | "run" | "temporal" | "erode";
 
@@ -59,6 +60,11 @@ scope.addEventListener("message", (event) => {
 async function handleRequest(request: ModelRequest) {
   try {
     const params = request.params || {};
+    try {
+      setAquaticConnectivityKernel((await getWasmKernel()).waterContext);
+    } catch (error) {
+      setAquaticConnectivityKernel(null, error instanceof Error ? error.message : String(error));
+    }
     let result: KernelMutableModel;
     if (request.op === "build") {
       result = buildModel(params) as KernelMutableModel;

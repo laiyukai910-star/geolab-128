@@ -1,4 +1,4 @@
-import { aquaticContext, aquaticSite, aquaticFit, AQUATIC_PROFILES } from "./aquaticHabitats.js";
+import { aquaticContext, aquaticSite, aquaticFit, AQUATIC_PROFILES, WATER_MARINE } from "./aquaticHabitats.js";
 
 const REPRESENTATIVE_ADULT_BODY_MASS_KG = Object.freeze({
   red_deer: 180,
@@ -334,7 +334,7 @@ export function buildLandscapeBlockNetwork(model, params = {}, options = {}) {
       block.landslideSum += clamp01(currentLandslide[i]);
       block.hazardSum += clamp01(currentHazard[i]);
       const site = aquaticSite(model, waterContext, i);
-      if(waterContext.marine[i]){if(x&&waterContext.marine[i-1])connectWater(i,i-1,"marine");if(y&&waterContext.marine[i-n])connectWater(i,i-n,"marine");}
+      if(waterContext.flags[i]&WATER_MARINE){if(x&&(waterContext.flags[i-1]&WATER_MARINE))connectWater(i,i-1,"marine");if(y&&(waterContext.flags[i-n]&WATER_MARINE))connectWater(i,i-n,"marine");}
       if(site){
         block.aquaticAreaKm2[site.environment] += site.areaFraction*cellAreaKm2;
         const sites=block.aquaticSites[site.environment];
@@ -435,6 +435,7 @@ export function buildLandscapeBlockNetwork(model, params = {}, options = {}) {
     methodReferences: ECOLOGICAL_METHOD_REFERENCES,
     summary: {
       blockCount,
+      waterConnectivity: waterContext.diagnostics,
       linkCount: links.length,
       meanConnectivity: round(meanConnectivity, 5),
       meanHabitatQuality: round(meanHabitatQuality, 5),

@@ -28,6 +28,7 @@ jobs:
         run: |
           cargo +1.96.0 fmt --manifest-path engine/Cargo.toml --all -- --check
           cargo +1.96.0 clippy --manifest-path engine/Cargo.toml --workspace --all-targets -- -D warnings
+          cargo +1.96.0 clippy --manifest-path engine/Cargo.toml --package geolab-wasm --target wasm32-unknown-unknown -- -D warnings
           cargo +1.96.0 test --manifest-path engine/Cargo.toml --workspace
 
       - name: Set up Node.js
@@ -63,6 +64,7 @@ jobs:
           node outputs/geo-sim/tests/terrainSurface.test.mjs
           node outputs/geo-sim/tests/terrainVolume.test.mjs
           node outputs/geo-sim/tests/aquaticHabitats.test.mjs
+          node outputs/geo-sim/tests/aquaticKernel.test.mjs
           node outputs/geo-sim/tests/biomeGeometry.test.mjs
           node outputs/geo-sim/tests/scenarioSynthesis.test.mjs
           node outputs/geo-sim/tests/landscapeEcology.test.mjs
@@ -88,6 +90,7 @@ jobs:
           test -f outputs/geo-sim/src/modelWorkerClient.js
           test -f outputs/geo-sim/src/assetPipeline.js
           test -f outputs/geo-sim/src-ts/assetPipeline.ts
+          test -f outputs/geo-sim/src-ts/aquaticHabitats.ts
           test -f outputs/geo-sim/src-ts/backendClient.ts
           test -f outputs/geo-sim/src-ts/rustKernelWorker.ts
           test -f outputs/geo-sim/src-ts/wasmAbi.ts
@@ -111,6 +114,7 @@ jobs:
           test -f engine/geolab-core/src/subsurface.rs
           test -f engine/geolab-core/src/sediment.rs
           test -f engine/geolab-core/src/ecology.rs
+          test -f engine/geolab-core/src/water_connectivity.rs
           test -f engine/geolab-server/src/lib.rs
           test -f engine/geolab-server/src/main.rs
           test -f engine/geolab-wasm/src/lib.rs

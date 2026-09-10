@@ -112,6 +112,72 @@ pub extern "C" fn geolab_simulate_json(pointer: u32, length: u32) -> u64 {
     leak_bytes(simulate_json(input))
 }
 
+#[cfg(target_arch = "wasm32")]
+#[unsafe(no_mangle)]
+pub extern "C" fn geolab_alloc_words(length: u32) -> u32 {
+    use geolab_core::water_connectivity::MAX_WATER_CELLS;
+    if length == 0 || length as usize > MAX_WATER_CELLS * 3 {
+        return 0;
+    }
+    let words = vec![0_u32; length as usize].into_boxed_slice();
+    Box::into_raw(words) as *mut u32 as u32
+}
+
+#[cfg(target_arch = "wasm32")]
+/// # Safety
+/// Return a live `geolab_alloc_words` allocation exactly once with its original word count.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn geolab_dealloc_words(pointer: u32, length: u32) {
+    if pointer == 0 || length == 0 {
+        return;
+    }
+    let slice = std::ptr::slice_from_raw_parts_mut(pointer as *mut u32, length as usize);
+    // SAFETY: the caller returns the original geolab_alloc_words pointer and exact word count once.
+    unsafe { drop(Box::from_raw(slice)) };
+}
+
+#[cfg(target_arch = "wasm32")]
+/// # Safety
+/// `pointer` must reference a live `geolab_alloc_words(words)` allocation for this call.
+/// Write Float32 elevations into its first grid-sized region and Uint32 endpoints after it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn geolab_water_context_f32(
+    pointer: u32,
+    words: u32,
+    width: u32,
+    height: u32,
+    sea_level: f64,
+) -> u64 {
+    use geolab_core::water_connectivity::{MAX_WATER_AXIS, classify_water_cells};
+    let (width, height, words) = (width as usize, height as usize, words as usize);
+    if pointer == 0
+        || !pointer.is_multiple_of(4)
+        || width == 0
+        || height == 0
+        || width > MAX_WATER_AXIS
+        || height > MAX_WATER_AXIS
+    {
+        return 0;
+    }
+    let count = width * height;
+    if words < count || words > count * 3 {
+        return 0;
+    }
+    // SAFETY: the caller supplies a live geolab_alloc_words allocation of exactly `words`.
+    // Both slices are aligned, disjoint, read-only, and f32/u32 accept all bit patterns.
+    let (elevation, river_nodes) = unsafe {
+        let base = pointer as *const u32;
+        (
+            std::slice::from_raw_parts(base.cast::<f32>(), count),
+            std::slice::from_raw_parts(base.add(count), words - count),
+        )
+    };
+    match classify_water_cells(width, height, sea_level, elevation, river_nodes) {
+        Ok(flags) => leak_bytes(flags),
+        Err(_) => 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
