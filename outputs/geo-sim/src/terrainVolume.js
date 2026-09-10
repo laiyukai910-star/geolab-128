@@ -165,20 +165,11 @@ export function containsTerrainPoint(model, config, baseY, point) {
 
 export function constrainTerrainCamera(model, config, baseY, camera, target = null) {
   if (!containsTerrainPoint(model, config, baseY, camera.position)) return false;
-  const origin = camera.position.clone();
-  const direction = target ? origin.clone().sub(target) : camera.getWorldDirection(new THREE.Vector3()).negate();
-  if (direction.lengthSq() < 1e-12) direction.set(0, 1, 0);
-  direction.normalize();
-  const point = new THREE.Vector3();
-  let low = 0, high = 2 * (config.sizeKm + Math.abs(baseY) + Math.abs(origin.y) + 1);
-  // Pull back along the viewing ray, preserving the orbit target and section orientation.
-  for (let i = 0; i < 28; i++) {
-    const distance = (low + high) * 0.5;
-    point.copy(origin).addScaledVector(direction, distance);
-    if (containsTerrainPoint(model, config, baseY, point)) low = distance; else high = distance;
-  }
+  const surfaceY = sampleTerrainHeight(model, camera.position.x, camera.position.z) * config.verticalScale / 1000;
   const clearance = Math.max(0.00005, Math.min(0.02, config.sizeKm / (model.n - 1) * 0.005));
-  camera.position.copy(origin).addScaledVector(direction, high + clearance);
+  // Resolve penetration locally: a shallow viewing ray can otherwise exit at a distant map edge.
+  camera.position.y = surfaceY + clearance;
+  if (target) camera.lookAt(target);
   return true;
 }
 

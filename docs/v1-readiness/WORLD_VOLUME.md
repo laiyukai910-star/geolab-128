@@ -13,8 +13,8 @@ Extensions beneath modeled columns use an unclassified base color; they are
 geometric closure, not additional geological evidence.
 
 The camera is kept outside opaque terrain, including when orbiting below the
-surface. If a zoom or terrain edit places it inside rock, it retreats along the
-viewing ray without moving the orbit target. Use Geological section to inspect
+surface. If a zoom or terrain edit places it inside rock, it rises just above
+the local surface without changing its map coordinates or orbit target. Use Geological section to inspect
 the interior; the removed half remains accessible. This is a camera guard, not
 a collision or excavation solver.
 

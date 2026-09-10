@@ -98,14 +98,39 @@ for (const [position, target] of [
   const oldTarget = orbitTarget.clone();
   assert.equal(containsTerrainPoint(model, config, base, camera.position), true);
   assert.equal(constrainTerrainCamera(model, config, base, camera, orbitTarget), true);
+  assert.equal(camera.position.x, position[0], 'collision correction must not move sideways to the map edge');
+  assert.equal(camera.position.z, position[2], 'collision correction must preserve the inspected location');
+  const surfaceY = sampleTerrainHeight(model, position[0], position[2]) * config.verticalScale / 1000;
+  assert.ok(camera.position.y > surfaceY && camera.position.y <= surfaceY + 0.021, 'correction must end just above local terrain');
   assert.equal(containsTerrainPoint(model, config, base, camera.position), false, 'camera cannot remain inside opaque rock');
   assert.equal(constrainTerrainCamera(model, config, base, camera, orbitTarget), false, 'camera correction must settle without oscillation');
   assert.deepEqual(orbitTarget, oldTarget);
+  const expectedDirection = orbitTarget.clone().sub(camera.position).normalize();
+  assert.ok(camera.getWorldDirection(new THREE.Vector3()).dot(expectedDirection) > 0.999999, 'the corrected frame must already face the unchanged orbit target');
+}
+for (const [x, z] of [[-0.05, 0.07], [0.12, -0.11]]) {
+  const surfaceY = sampleTerrainHeight(model, x, z) * config.verticalScale / 1000;
+  camera.position.set(x, surfaceY - 0.000001, z);
+  const origin = camera.position.clone();
+  const target = origin.clone().add(new THREE.Vector3(0.1, 0, 0));
+  assert.equal(constrainTerrainCamera(model, config, base, camera, target), true);
+  assert.equal(camera.position.x, x);
+  assert.equal(camera.position.z, z);
+  assert.ok(camera.position.distanceTo(origin) < 0.001, 'shallow penetration requires only a small local correction');
 }
 const cutConfig = volumeDisplayConfig(model, {...params, worldView:'section'});
 assert.equal(containsTerrainPoint(model, cutConfig, base, new THREE.Vector3(0.1, 0, 0)), false, 'cut-away air must remain navigable');
 assert.equal(containsTerrainPoint(model, config, base, new THREE.Vector3(-0.15, 0.025, 0)), false, 'water above the seabed is not rock');
 assert.equal(containsTerrainPoint(model, config, base, new THREE.Vector3(0, base - 0.05, 0)), false);
+for (const [safeConfig, position] of [
+  [cutConfig, new THREE.Vector3(0.1, 0, 0)],
+  [config, new THREE.Vector3(-0.15, 0.025, 0)],
+  [config, new THREE.Vector3(0, base - 0.05, 0)]
+]) {
+  camera.position.copy(position);
+  assert.equal(constrainTerrainCamera(model, safeConfig, base, camera), false);
+  assert.deepEqual(camera.position, position, 'valid section, underwater and below-base views must not be repositioned');
+}
 assert.deepEqual(model, before);
 manager.setVisibility(params, 'slope');
 assert.equal(manager.waterMeshes[0].visible, false);

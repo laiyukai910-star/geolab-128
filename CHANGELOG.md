@@ -12,6 +12,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Fixed
 
+- Kept accidental underground camera correction at the same map location instead of retreating along the viewing ray to a distant boundary.
 - Rejected malformed water grids, non-finite inputs, and out-of-range river endpoints; excluded aquatic sites with invalid channel dimensions.
 - Updated the desktop build's indirect `js-yaml` dependency to 4.3.2 to address [GHSA-2883-xcg3-v3hh](https://github.com/advisories/GHSA-2883-xcg3-v3hh).
 - Removed checkerboard underground presentation by reconstructing continuous display colors and filtering rock detail; categorical scientific layers remain unchanged.
