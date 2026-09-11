@@ -330,11 +330,11 @@ function createFracturedRockGeometry(quality) {
   const count = qualityCount(quality, 5, 8, 13);
   const parts = [];
   for (let i = 0; i < count; i += 1) {
-    const geometry = deformedPolyhedron(quality, 0.14 + i * 0.37);
+    const geometry = jointedStoneGeometry(quality, 0.14 + i * 0.37);
     const a = i * 2.399;
     parts.push(part(geometry, [Math.cos(a) * (0.16 + i * 0.025), -0.12 + (i % 3) * 0.08, Math.sin(a) * (0.18 + i * 0.02)], [0.48 - i * 0.035, 0.56 - i * 0.04, 0.44 - i * 0.025], [i * 0.31, a, i * 0.19]));
   }
-  return mergeAssembly(parts);
+  return fitMineralBounds(mergeAssembly(parts));
 }
 
 function createTalusGeometry(quality) {
@@ -343,16 +343,64 @@ function createTalusGeometry(quality) {
   for (let i = 0; i < count; i += 1) {
     const a = i * 2.17;
     const r = 0.1 + (i % 4) * 0.1;
-    parts.push(part(deformedPolyhedron("high", i + 0.7), [Math.cos(a) * r, -0.34 + (i % 3) * 0.07, Math.sin(a) * r], [0.18, 0.18 + (i % 2) * 0.08, 0.22], [a * 0.3, a, i * 0.4]));
+    const scale = 0.08 + 0.14 * (0.5 + 0.5 * Math.sin(i * 5.7));
+    parts.push(part(jointedStoneGeometry(quality, i + 0.7), [Math.cos(a) * r, -0.34 + (i % 3) * 0.07, Math.sin(a) * r], [scale, scale * 0.7, scale * 1.3], [a * 0.3, a, i * 0.4]));
   }
-  return mergeAssembly(parts);
+  return fitMineralBounds(mergeAssembly(parts));
+}
+
+function jointedStoneGeometry(quality, phase) {
+  const segments = qualityCount(quality, 20, 32, 48);
+  const geometry = new THREE.SphereGeometry(0.5, segments, segments / 2);
+  const position = geometry.getAttribute("position");
+  const colors = new Float32Array(position.count * 3);
+  const point = new THREE.Vector3();
+  const planes = Array.from({length: 5}, (_, i) => new THREE.Vector3(
+    Math.sin(i * 2.4 + phase), Math.cos(i * 1.7 + phase) * 0.65, Math.cos(i * 2.4 + phase)
+  ).normalize());
+  for (let i = 0; i < position.count; i++) {
+    point.fromBufferAttribute(position, i).normalize();
+    let radius = 0.5;
+    for (let j = 0; j < planes.length; j++) {
+      const facing = point.dot(planes[j]);
+      if (facing > 0) radius = Math.min(radius, (0.35 + j * 0.018) / facing);
+    }
+    const weathering = Math.sin(point.x * 19 + phase) * Math.sin(point.y * 15 - point.z * 11);
+    radius += weathering * 0.009;
+    const strata = Math.sin((point.y + point.x * 0.16) * 38 + phase);
+    const quartz = Math.pow(Math.max(0, Math.cos(point.x * 12 + point.z * 9 + phase)), 18);
+    const tone = Math.min(1, 0.77 + strata * 0.14 + weathering * 0.04 + quartz * 0.14);
+    colors.set([tone, tone * 0.98, tone * 0.94], i * 3);
+    position.setXYZ(i, point.x * radius, point.y * radius, point.z * radius);
+  }
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  return geometry;
+}
+
+function fitMineralBounds(geometry) {
+  geometry.computeBoundingBox();
+  const size = geometry.boundingBox.getSize(new THREE.Vector3());
+  const center = geometry.boundingBox.getCenter(new THREE.Vector3());
+  geometry.translate(-center.x, -center.y, -center.z);
+  geometry.scale(1 / size.x, 1 / size.y, 1 / size.z);
+  return geometry;
 }
 
 function createSnowDriftGeometry(quality) {
-  const d = detail(quality);
-  const parts = [part(deformedHemisphere(d.radial), [0, -0.18, 0], [1, 0.42, 1])];
-  for (let i = 0; i < 4; i += 1) parts.push(part(curvedRibbon(quality, 0.05), [-0.15 + i * 0.1, 0.03 + i * 0.015, 0], [0.72, 0.2, 0.8], [0, i * 0.28, 0]));
-  return mergeAssembly(parts);
+  const segments = qualityCount(quality, 24, 40, 64);
+  const geometry = new THREE.SphereGeometry(0.5, segments, segments / 2);
+  const position = geometry.getAttribute("position");
+  const colors = new Float32Array(position.count * 3);
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
+    const crest = Math.sin(x * 19 + z * 7) * Math.sin((y + 0.5) * Math.PI);
+    const outline = 1 + Math.sin(x * 8 - z * 11) * 0.09;
+    position.setXYZ(i, x * outline, y * 0.28 + crest * 0.012, z * outline);
+    const tone = 0.94 + crest * 0.04;
+    colors.set([tone * 0.96, tone * 0.99, tone], i * 3);
+  }
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  return fitMineralBounds(geometry);
 }
 
 function createFlutedTrunkGeometry(quality) {
@@ -1520,7 +1568,16 @@ function applyProceduralVariant(geometry, kind, quality, variant) {
   return geometry;
 }
 
+export function ensureGeometryColors(geometry) {
+  if (!geometry.hasAttribute("color")) {
+    const colors = new Float32Array(geometry.getAttribute("position").count * 3).fill(1);
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  }
+  return geometry;
+}
+
 function tagProceduralGeometry(geometry, kind, quality, variant) {
+  ensureGeometryColors(geometry);
   geometry.type = `GeoLab${kind.split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join("")}Geometry`;
   geometry.userData.proceduralKind = kind;
   geometry.userData.assetPipelineVersion = 3;

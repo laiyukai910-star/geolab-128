@@ -19,7 +19,7 @@ not a simulated forest or surveyed building scene.
 
 | Change | Result |
 | --- | --- |
-| Assembly buffers | Preserve indices, UVs, and optional vertex colors; keep source hard-edge splits |
+| Assembly buffers | Preserve indices, UVs, and authored vertex colors; fill unpainted geometry with neutral white color attributes |
 | Curved surfaces | Reconstruct smooth normals after deformation instead of flattening every merged triangle |
 | Broadleaf crown, ultra | 451 branch segments and 2,520 folded leaves per template |
 | Conifer crown, ultra | 946 branch segments and 7,938 needle-like leaf blades per template |
@@ -49,3 +49,21 @@ rendering cost; they do not establish a general performance ratio.
 
 Botanical structures are procedural visual forms, not calibrated species
 architecture or biomass measurements.
+
+## Ground Details
+
+Rock and scree templates have jointed surfaces, mineral color variation, and
+normalized bounds. Snow uses a continuous curved mesh rather than raised strip
+assemblies. Displaced instances sample the terrain at their final map position;
+display dimensions are bounded independently of coarse regional cell spacing.
+These meshes are illustrative outcrops and deposits, not sampled geological structures.
+
+Unpainted templates receive white vertex colors so instance tint remains visible.
+The geometry regression checks every registered high-quality template for complete,
+finite color buffers. `tests/fixtures/surface-details.html` renders the actual
+surface-detail materials and geometry for close inspection.
+
+Sea and river visibility share one control. Surface wetness remains in the terrain
+material, and the river renderer owns hydraulic ribbons; surface details no longer
+add a second set of water patches. Geological diagnostic overlays remain separate
+from the navigable section view.

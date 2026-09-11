@@ -361,7 +361,6 @@ let infrastructureRegionSelection = {
 };
 let lastLocalRefinementSummary = null;
 let lastSubsurfaceTransectSummary = null;
-let riversVisible = true;
 let vegetationVisible = true;
 let uploadedLayers = null;
 let externalLayers = null;
@@ -957,13 +956,6 @@ function bindUi() {
       renderer.updateWorldViewOptions(params);
     }
     drawAnalysis();
-  });
-
-  document.getElementById("toggleRivers").addEventListener("click", (event) => {
-    riversVisible = !riversVisible;
-    event.currentTarget.setAttribute("aria-pressed", String(riversVisible));
-    event.currentTarget.textContent = riversVisible ? "河流显示" : "河流隐藏";
-    renderer.setRiversVisible(riversVisible);
   });
 
   document.getElementById("toggleVegetation").addEventListener("click", (event) => {
@@ -2277,7 +2269,6 @@ async function rebuildTerrain() {
   clearModelRefreshNeeded();
   lastSubsurfaceTransectSummary = null;
   renderer.setModel(model, params, viewMode.value);
-  renderer.setRiversVisible(riversVisible);
   renderer.setVegetationVisible(vegetationVisible);
   drawAnalysis();
   updateMetrics();
@@ -2317,7 +2308,6 @@ async function runExistingModel(label = "演算") {
   clearModelRefreshNeeded();
   lastSubsurfaceTransectSummary = null;
   renderer.setModel(model, params, viewMode.value);
-  renderer.setRiversVisible(riversVisible);
   renderer.setVegetationVisible(vegetationVisible);
   drawAnalysis();
   updateMetrics();
@@ -2345,7 +2335,6 @@ async function runTemporalModel(label = "时间") {
   if (job !== modelJobSerial) return;
   model = nextModel;
   const renderStats = renderer.updateTemporalState(model, params, viewMode.value);
-  renderer.setRiversVisible(riversVisible);
   renderer.setVegetationVisible(vegetationVisible);
   drawAnalysis();
   updateMetrics();
@@ -2380,7 +2369,6 @@ async function applyErosion() {
   model = nextModel;
   lastSubsurfaceTransectSummary = null;
   renderer.setModel(model, params, viewMode.value);
-  renderer.setRiversVisible(riversVisible);
   renderer.setVegetationVisible(vegetationVisible);
   drawAnalysis();
   updateMetrics();

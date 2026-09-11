@@ -12,6 +12,8 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Fixed
 
+- Supplied neutral vertex colors for unpainted procedural and fallback geometry, preventing black instanced objects when vertex-color materials are enabled.
+- Grounded surface details at their displaced terrain positions and bounded their display dimensions instead of scaling them indefinitely with regional grid cells.
 - Kept accidental underground camera correction at the same map location instead of retreating along the viewing ray to a distant boundary.
 - Rejected malformed water grids, non-finite inputs, and out-of-range river endpoints; excluded aquatic sites with invalid channel dimensions.
 - Updated the desktop build's indirect `js-yaml` dependency to 4.3.2 to address [GHSA-2883-xcg3-v3hh](https://github.com/advisories/GHSA-2883-xcg3-v3hh).
@@ -25,6 +27,8 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Changed
 
+- Rebuilt rock and scree surfaces with joint planes, mineral banding, and size variation; replaced snow's raised strip assemblies with a continuous wind-shaped surface.
+- Consolidated sea and river visibility into one control and removed duplicate river/wetness patches from the surface-detail layer. Renamed the geological diagnostic overlay to distinguish it from the section view.
 - Moved aquatic sea-connectivity traversal and river-node classification to Rust with a binary WebAssembly interface, used by the model Worker in browser and desktop runtimes up to 4096 x 4096 cells.
 - Migrated aquatic habitat contracts and fallback logic to strict TypeScript. Added active-backend diagnostics, legacy-result parity tests, block/wildlife comparisons, and allocation-lifetime checks.
 - Replaced bright river lines with hydraulic-width water ribbons and curved display centerlines. Routing data is unchanged; sub-grid curves are not surveyed bathymetry.

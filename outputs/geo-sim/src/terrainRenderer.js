@@ -8,6 +8,7 @@ import { SceneVolume } from "./sceneVolume.js";
 import { ORGANISM_KINDS, createOrganismMaterial } from "./organismGeometry.js";
 import { OrganismInspector } from "./organismInspector.js";
 import { buildRiverGeometry } from "./riverGeometry.js";
+import { sampleTerrainHeight } from "./terrainVolume.js";
 import {
   buildAdaptiveInfrastructurePlacementPlan,
   buildBlockDetailAtlas,
@@ -20,6 +21,7 @@ import {
 import {
   createProceduralGeometry as createAssetGeometry,
   createSemanticAssetGeometry,
+  ensureGeometryColors,
   proceduralAssetDiagnostics,
   semanticAssetKind,
   wildlifeProceduralKind
@@ -899,6 +901,7 @@ export class TerrainRenderer {
   }
 
   applySceneVisibility() {
+    if (this.rivers) this.rivers.visible = this.params?.water3DEnabled !== false;
     this.subsurfaceGroup.visible = this.shouldShowSubsurface3D();
     this.terrainDetailGroup.visible = this.shouldShowTerrainDetails3D();
     this.windGroup.visible = this.shouldShowWind3D();
@@ -942,10 +945,6 @@ export class TerrainRenderer {
     };
     if (typeof globalThis !== "undefined") globalThis.__geoLabTemporalRenderStats = this.lastTemporalRenderStats;
     return this.lastTemporalRenderStats;
-  }
-
-  setRiversVisible(visible) {
-    if (this.rivers) this.rivers.visible = visible;
   }
 
   setVegetationVisible(visible) {
@@ -1527,146 +1526,84 @@ export class TerrainRenderer {
   }
 
   buildTerrainDetails() {
+    const clamp = THREE.MathUtils.clamp;
     disposeObjectTree(this.terrainDetailGroup);
     if (!this.shouldShowTerrainDetails3D()) {
-      this.terrainDetail3DStats = {
-        enabled: false,
-        samplingStep: 0,
-        budgetMode: "on-demand",
-        maxInstanceBudget: 0,
-        usedInstanceCount: 0
-      };
-      if (typeof globalThis !== "undefined") globalThis.__geoLabTerrainDetail3DStats = this.terrainDetail3DStats;
+      this.terrainDetail3DStats = { enabled: false, samplingStep: 0, budgetMode: "on-demand", maxInstanceBudget: 0, usedInstanceCount: 0 };
+      globalThis.__geoLabTerrainDetail3DStats = this.terrainDetail3DStats;
       return;
     }
     const model = this.model;
     if (!model?.height) return;
-
     const cell = model.cellSizeKm || modelSizeKm(model) / Math.max(1, model.n - 1);
     const seed = Number(this.params.seed) || 0;
-    const budgetPlan = this.activeDetailBudgetPlan || detailBudgetPlan(model);
-    this.terrainDetailGroup.userData.assetQuality = budgetPlan.quality;
-    const step = budgetPlan.terrainDetailStep;
+    const seaLevel = Number(this.params.seaLevel) || 0;
+    const verticalScale = Number(this.params.verticalScale) || 1;
+    const plan = this.activeDetailBudgetPlan || detailBudgetPlan(model);
+    this.terrainDetailGroup.userData.assetQuality = plan.quality;
+    const step = plan.terrainDetailStep;
     const maxElevation = model.stats?.maxElevation ?? maxFiniteValue(model.height, 0);
-    const buckets = {
-      rocks: [],
-      scree: [],
-      snow: [],
-      wetMargins: []
+    const buckets = { rocks: [], scree: [], snow: [] };
+    let remaining = plan.maxTerrainDetailInstances;
+    const place = (bucket, transform) => {
+      if (remaining <= 0) return;
+      const height = sampleTerrainHeight(model, transform.x, transform.z);
+      if (height === null || height <= seaLevel) return;
+      // Ground each displaced object at its actual location, with a partially embedded base.
+      transform.y = height * verticalScale / 1000 + transform.sy * 0.36;
+      bucket.push(transform);
+      remaining--;
     };
-    let budget = budgetPlan.maxTerrainDetailInstances;
-    const initialBudget = budget;
-
-    for (let y = 0; y < model.n && budget > 0; y += step) {
-      for (let x = 0; x < model.n && budget > 0; x += step) {
-        const i = y * model.n + x;
-        const elevation = model.height[i];
-        if (elevation <= Number(this.params.seaLevel)) continue;
+    for (let y = 0; y < model.n && remaining > 0; y += step) {
+      for (let x = 0; x < model.n && remaining > 0; x += step) {
+        const i = y * model.n + x, elevation = model.height[i];
+        if (elevation <= seaLevel) continue;
         const slope = model.slope?.[i] ?? 0;
         const roughness = model.terrainDiagnostics?.roughness?.[i] ?? 0;
-        const wetness = model.wetnessIndex?.[i] ?? 0;
         const temperature = model.temperature?.[i] ?? 8;
-        const base = this.indexToWorld(i, 1.15);
+        const base = this.indexToWorld(i, 0);
         const angle = infrastructureAngle(model, i, x, y, "terrain", seed);
         const size = cell * step;
-        const detailNoise = hash01(x, y, seed + 5011);
-
-        if (slope > 28 && roughness > 4 && detailNoise < Math.min(0.38, slope / 92)) {
-          buckets.rocks.push({
-            x: base.x + (hash01(x, y, seed + 37) - 0.5) * size * 0.5,
-            y: base.y + Math.max(0.012, size * 0.018),
-            z: base.z + (hash01(y, x, seed + 43) - 0.5) * size * 0.5,
-            sx: Math.max(0.018, size * (0.045 + roughness * 0.002)),
-            sy: Math.max(0.018, size * (0.03 + slope * 0.0012)),
-            sz: Math.max(0.018, size * (0.035 + detailNoise * 0.06)),
-            ry: angle,
-            color: terrainRockColor(elevation, maxElevation, detailNoise)
+        const noise = hash01(x, y, seed + 5011);
+        const px = base.x + (hash01(x, y, seed + 37) - 0.5) * size * 0.5;
+        const pz = base.z + (hash01(y, x, seed + 43) - 0.5) * size * 0.5;
+        if (slope > 28 && roughness > 4 && noise < Math.min(0.38, slope / 92)) {
+          place(buckets.rocks, {
+            x: px, z: pz, ry: angle,
+            sx: clamp(size * (0.035 + noise * 0.02), 0.002, 0.018),
+            sy: clamp(size * (0.02 + noise * 0.015), 0.0015, 0.012),
+            sz: clamp(size * (0.025 + noise * 0.025), 0.002, 0.018),
+            color: terrainRockColor(elevation, maxElevation, noise)
           });
-          budget -= 1;
         }
-
         if (slope > 18 && roughness > 8 && hash01(x, y, seed + 801) < 0.18) {
-          buckets.scree.push({
-            x: base.x,
-            y: base.y + 0.008,
-            z: base.z,
-            sx: Math.max(0.026, size * 0.18),
-            sy: 0.008,
-            sz: Math.max(0.014, size * 0.055),
-            ry: angle,
-            color: 0x857b68
+          place(buckets.scree, {
+            x: px, z: pz, ry: angle,
+            sx: clamp(size * 0.1, 0.006, 0.04), sy: clamp(size * 0.012, 0.001, 0.005),
+            sz: clamp(size * 0.07, 0.004, 0.025), color: 0x99958b
           });
-          budget -= 1;
         }
-
         if (elevation > maxElevation * 0.72 && temperature < 2.5 && hash01(x, y, seed + 1999) < 0.55) {
-          buckets.snow.push({
-            x: base.x,
-            y: base.y + 0.012,
-            z: base.z,
-            sx: Math.max(0.035, size * (0.28 + detailNoise * 0.18)),
-            sy: 0.01,
-            sz: Math.max(0.035, size * (0.18 + hash01(y, x, seed + 2001) * 0.14)),
-            ry: angle,
-            color: 0xe3ebe8
+          place(buckets.snow, {
+            x: px, z: pz, ry: angle,
+            sx: clamp(size * (0.2 + noise * 0.12), 0.005, 0.07),
+            sy: clamp(size * 0.006, 0.0005, 0.003),
+            sz: clamp(size * (0.12 + noise * 0.1), 0.005, 0.05), color: 0xe3ebe8
           });
-          budget -= 1;
-        }
-
-        if (wetness > 8.5 && slope < 8 && hash01(x, y, seed + 2711) < 0.2) {
-          buckets.wetMargins.push({
-            x: base.x,
-            y: base.y + 0.01,
-            z: base.z,
-            sx: Math.max(0.035, size * 0.22),
-            sy: 0.008,
-            sz: Math.max(0.026, size * 0.13),
-            ry: angle,
-            color: 0x4f9d86
-          });
-          budget -= 1;
         }
       }
     }
-
-    const riverStep = Math.max(1, Math.ceil((model.riverSegments?.length || 0) / 18000));
-    for (let s = 0; s < (model.riverSegments?.length || 0) && budget > 0; s += riverStep) {
-      const segment = model.riverSegments[s];
-      const a = this.indexToWorld(segment.from, 0.75);
-      const b = this.indexToWorld(segment.to, 0.75);
-      const dx = b.x - a.x;
-      const dz = b.z - a.z;
-      const length = Math.max(0.02, Math.hypot(dx, dz));
-      const angle = Math.atan2(-dz, dx);
-      const width = Math.max(cell * (0.05 + segment.order * 0.01), 0.018);
-      buckets.wetMargins.push({
-        x: (a.x + b.x) / 2,
-        y: Math.max(a.y, b.y) + 0.003,
-        z: (a.z + b.z) / 2,
-        sx: length,
-        sy: 0.006,
-        sz: width,
-        ry: angle,
-        color: segment.order > 2 ? 0x5ebbc4 : 0x4d9aad
-      });
-      budget -= 1;
-    }
-
+    // Moisture is already represented by the terrain material; rivers have hydraulic ribbons.
     addInstancedBox(this.terrainDetailGroup, "岩石露头", buckets.rocks, 0x7d786d, { roughness: 0.96, metalness: 0.01 });
-    addInstancedBox(this.terrainDetailGroup, "坡麓碎屑", buckets.scree, 0x857b68, { roughness: 0.98 });
+    addInstancedBox(this.terrainDetailGroup, "坡麓碎屑", buckets.scree, 0x99958b, { roughness: 0.98 });
     addInstancedBox(this.terrainDetailGroup, "高山雪斑", buckets.snow, 0xe3ebe8, { roughness: 0.72, metalness: 0.01 });
-    addInstancedBox(this.terrainDetailGroup, "河岸湿缘", buckets.wetMargins, 0x4d9aad, { roughness: 0.74, transparent: true, opacity: 0.88 });
     this.terrainDetail3DStats = {
-      samplingStep: step,
-      budgetMode: budgetPlan.mode,
-      maxInstanceBudget: initialBudget,
-      usedInstanceCount: initialBudget - budget,
-      rockCount: buckets.rocks.length,
-      screeCount: buckets.scree.length,
-      snowCount: buckets.snow.length,
-      wetMarginCount: buckets.wetMargins.length
+      enabled: true, samplingStep: step, budgetMode: plan.mode,
+      maxInstanceBudget: plan.maxTerrainDetailInstances, usedInstanceCount: plan.maxTerrainDetailInstances - remaining,
+      rockCount: buckets.rocks.length, screeCount: buckets.scree.length, snowCount: buckets.snow.length,
+      wetMarginCount: 0, wetnessSource: "terrain-material", riverSource: "hydraulic-ribbons"
     };
-    if (typeof globalThis !== "undefined") globalThis.__geoLabTerrainDetail3DStats = this.terrainDetail3DStats;
+    globalThis.__geoLabTerrainDetail3DStats = this.terrainDetail3DStats;
   }
 
   buildVegetation() {
@@ -7201,6 +7138,7 @@ function addInstancedAsset(group, name, transforms, fallbackColor, options, prim
         || createSemanticAssetGeometry(name, assetQuality, variant)
         || createFallbackAssetGeometry(primitiveType, options)
     );
+    ensureGeometryColors(geometry);
     if (semanticKind === "broadleaf-canopy" || semanticKind === "layered-conifer") {
       const distant = sharedGeometry(group, `${cacheKey}:distant`, () => createFoliageGeometry(semanticKind === "layered-conifer", "distant", variant));
       const lod = new FoliageInstances(geometry, distant, material, variantTransforms, fallbackColor);

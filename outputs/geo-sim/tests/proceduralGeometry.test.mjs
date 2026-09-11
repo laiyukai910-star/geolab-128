@@ -5,21 +5,73 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     return nextResolve(specifier === "three"
       ? new URL("../vendor/three/three.module.js", import.meta.url).href
-      : specifier, context);
+      : specifier.startsWith("three/addons/")
+        ? new URL(`../vendor/three/addons/${specifier.slice(13)}`, import.meta.url).href
+        : specifier, context);
   }
 });
 const { createProceduralGeometry, PROCEDURAL_ASSET_KINDS } = await import("../src/proceduralAssets.js");
 const THREE = await import("three");
+const { TerrainRenderer } = await import("../src/terrainRenderer.js");
 const { createFoliageGeometry } = await import("../src/foliageGeometry.js");
 const { FoliageInstances } = await import("../src/foliageInstances.js");
 
 for (const kind of PROCEDURAL_ASSET_KINDS) {
   const geometry = createProceduralGeometry(kind, "high");
   const position = geometry.getAttribute("position");
+  const color = geometry.getAttribute("color");
+  assert.equal(color?.count, position.count, `${kind}: vertex-color materials require a complete color buffer`);
+  for (const value of color.array) assert.ok(Number.isFinite(value) && value >= 0 && value <= 1, kind);
   assert.ok(position.count > 0, kind);
   for (const value of position.array) assert.ok(Number.isFinite(value), kind);
   for (const index of geometry.index?.array || []) assert.ok(index >= 0 && index < position.count, kind);
   geometry.dispose();
+}
+
+for (const kind of ["fractured-rock", "talus-cluster"]) {
+  let vertices = 0;
+  for (const quality of ["high", "ultra", "exhaustive"]) {
+    const geometry = createProceduralGeometry(kind, quality);
+    assert.ok(geometry.attributes.position.count > vertices, 'mineral refinement must add surface detail');
+    vertices = geometry.attributes.position.count;
+    const tones = new Set(Array.from(geometry.attributes.color.array, value => value.toFixed(3)));
+    assert.ok(tones.size > 20, 'rock needs intrinsic mineral variation');
+    const size = geometry.boundingBox.getSize(new THREE.Vector3());
+    assert.ok(size.toArray().every(value => Math.abs(value - 1) < 1e-5), 'instance dimensions must match normalized mineral bounds');
+    geometry.dispose();
+  }
+}
+
+const detailModel = { n: 17, sizeKm: 4, cellSizeKm: 0.25,
+  height: Float32Array.from({length: 289}, (_, i) => 400 + (i % 17) * 15),
+  slope: new Float32Array(289).fill(40), temperature: new Float32Array(289).fill(-3),
+  terrainDiagnostics: {roughness: new Float32Array(289).fill(12)},
+  wetnessIndex: new Float32Array(289).fill(12), riverSegments: [{from: 0, to: 1, order: 3}] };
+const snapshot = structuredClone(detailModel);
+const detailRenderer = Object.create(TerrainRenderer.prototype);
+Object.assign(detailRenderer, {model: detailModel, params: {terrainDetail3DEnabled: true, seed: 42, seaLevel: 0, verticalScale: 2}, terrainDetailGroup: new THREE.Group()});
+detailRenderer.buildTerrainDetails();
+assert.ok(detailRenderer.terrainDetail3DStats.rockCount > 0);
+assert.equal(detailRenderer.terrainDetail3DStats.wetMarginCount, 0, 'do not duplicate river/wetness surfaces');
+assert.ok(detailRenderer.terrainDetailGroup.children.every(mesh => mesh.userData.assetKind !== 'wetland-ribbon'));
+for (const mesh of detailRenderer.terrainDetailGroup.children) {
+  assert.equal(mesh.geometry.attributes.color.count, mesh.geometry.attributes.position.count);
+  const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3();
+  for (let i = 0; i < mesh.count; i++) {
+    mesh.getMatrixAt(i, matrix); matrix.decompose(position, rotation, scale);
+    const surfaceY = (400 + (position.x / 4 + 0.5) * 16 * 15) * 2 / 1000;
+    assert.ok(Math.abs(position.y - surfaceY - scale.y * 0.36) < 1e-6, 'jittered details must use local terrain elevation');
+    assert.ok(scale.x <= 0.071 && scale.y <= 0.013 && scale.z <= 0.051, 'regional cells must not inflate local models');
+  }
+  mesh.geometry.dispose(); mesh.material.dispose();
+}
+assert.deepEqual(detailModel, snapshot);
+detailRenderer.rivers = new THREE.Group();
+for (const name of ['subsurfaceGroup','windGroup','wildlifeGroup','hazardGroup']) detailRenderer[name] = new THREE.Group();
+for (const visible of [false, true]) {
+  detailRenderer.params.water3DEnabled = visible;
+  detailRenderer.applySceneVisibility();
+  assert.equal(detailRenderer.rivers.visible, visible, 'one water control must also control river visibility');
 }
 
 for (const kind of ["process-tank", "setback-tower", "fluted-trunk"]) {

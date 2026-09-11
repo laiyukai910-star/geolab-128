@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Surface detail regression</title>
+<link rel="icon" href="data:,">
+<style>html,body{margin:0;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"../../vendor/three/three.module.js","three/addons/":"../../vendor/three/addons/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {TerrainRenderer} from '../../src/terrainRenderer.js';
+const renderer = new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.append(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xdce7ea);
+scene.add(new THREE.HemisphereLight(0xf2f7ff,0x737969,2));
+const sun = new THREE.DirectionalLight(0xffffff,3); sun.position.set(-3,5,4); scene.add(sun);
+const n=17;
+const terrain = Object.create(TerrainRenderer.prototype);
+Object.assign(terrain,{terrainDetailGroup:new THREE.Group(),
+  params:{terrainDetail3DEnabled:true,verticalScale:1,seaLevel:0,seed:42},
+  activeDetailBudgetPlan:{quality:'ultra',terrainDetailStep:1,maxTerrainDetailInstances:1000,mode:'fixture'},
+  model:{n,sizeKm:4,cellSizeKm:0.25,height:Float32Array.from({length:n*n},(_,i)=>400+(i%n)*15),
+    slope:new Float32Array(n*n).fill(40),temperature:new Float32Array(n*n).fill(-3),
+    terrainDiagnostics:{roughness:new Float32Array(n*n).fill(12)},wetnessIndex:new Float32Array(n*n).fill(12)}
+});
+terrain.buildTerrainDetails();
+const kinds=['fractured-rock','talus-cluster','snow-drift'];
+const specimens=kinds.map((kind,i)=>{
+  const source=terrain.terrainDetailGroup.children.find(mesh=>mesh.userData.assetKind===kind);
+  if(!source) throw new Error(`Missing specimen ${kind}`);
+  const mesh=new THREE.InstancedMesh(source.geometry,source.material,1);
+  const color=new THREE.Color();source.getColorAt(0,color);mesh.setColorAt(0,color);
+  const transform=new THREE.Matrix4(),scale=new THREE.Vector3();source.getMatrixAt(0,transform);
+  transform.decompose(new THREE.Vector3(),new THREE.Quaternion(),scale);
+  scale.multiplyScalar(1/Math.max(scale.x,scale.z));
+  mesh.setMatrixAt(0,new THREE.Matrix4().makeScale(scale.x,scale.y,scale.z));mesh.position.x=(i-1)*1.5;scene.add(mesh);return mesh;
+});
+const camera=new THREE.PerspectiveCamera(40,1,0.01,100);
+const controls=new OrbitControls(camera,renderer.domElement);
+function resize(){
+  camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+  const distance=Math.max(5,4.5/camera.aspect);
+  camera.position.set(distance*0.15,distance*0.5,distance);controls.target.set(0,0,0);controls.update();
+  renderer.setSize(innerWidth,innerHeight);
+}
+resize();addEventListener('resize',resize);
+function pixels(){const gl=renderer.getContext(),data=new Uint8Array(gl.drawingBufferWidth*gl.drawingBufferHeight*4);gl.readPixels(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight,gl.RGBA,gl.UNSIGNED_BYTE,data);return data;}
+function audit(){
+  renderer.render(scene,camera);const color=pixels();
+  const background=scene.background;scene.background=new THREE.Color(0);scene.overrideMaterial=new THREE.MeshBasicMaterial({color:0xffffff});
+  renderer.render(scene,camera);const mask=pixels();scene.overrideMaterial.dispose();scene.overrideMaterial=null;scene.background=background;
+  let count=0,dark=0,sum=0;const tones=new Set();
+  for(let i=0;i<color.length;i+=4)if(mask[i]>10){count++;const luminance=(color[i]+color[i+1]+color[i+2])/3;sum+=luminance;if(luminance<20)dark++;tones.add(`${color[i]>>3},${color[i+1]>>3},${color[i+2]>>3}`);}
+  renderer.render(scene,camera);return{pixels:count,darkFraction:dark/Math.max(1,count),mean:sum/Math.max(1,count),tones:tones.size,stats:terrain.terrainDetail3DStats};
+}
+renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera);});
+globalThis.review={audit,camera,controls,terrain,renderer};globalThis.reviewReady=true;
+</script></html>
