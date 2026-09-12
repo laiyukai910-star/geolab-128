@@ -100,7 +100,7 @@ async function prepareVendorRuntime() {
     path.join(vendorRoot, "three", "addons", "controls", "OrbitControls.js")
   );
   await cp(path.join(here, "node_modules", "three", "LICENSE"), path.join(vendorRoot, "three", "LICENSE"));
-  for (const asset of ["utils/BufferGeometryUtils.js", "objects/MarchingCubes.js"]) {
+  for (const asset of ["utils/BufferGeometryUtils.js", "objects/MarchingCubes.js", "geometries/RoundedBoxGeometry.js"]) {
     const destination = path.join(vendorRoot,"three","addons",asset);
     await mkdir(path.dirname(destination),{recursive:true});
     await cp(path.join(here,"node_modules","three","examples","jsm",asset),destination);

@@ -75,7 +75,8 @@ const HIGH_FACILITY_TYPES = Object.freeze([
 const ULTRA_FACILITY_TYPES = Object.freeze([
   ...HIGH_FACILITY_TYPES,
   "apartment", "school", "data_center", "bridge", "port", "powerplant", "greenhouse",
-  "flood_pump_station", "observatory", "mountain_refuge", "ranger_station", "water_treatment_plant"
+  "flood_pump_station", "observatory", "mountain_refuge", "ranger_station", "water_treatment_plant",
+  "tunnel_portal", "metro_station"
 ]);
 
 const ORGANIC_KINDS = new Set([

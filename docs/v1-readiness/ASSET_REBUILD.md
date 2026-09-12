@@ -1,69 +1,81 @@
-# Procedural Asset Construction
+# Model Construction and Surface Rendering
 
-This document covers rendering geometry and foliage selection. It does not change
-terrain elevation, ecological abundance, canopy-height inputs, or geographic
-process equations. The following local captures use identical camera, lighting,
-quality (`ultra`), instance dimensions, and colors.
+Rendering geometry is separate from terrain elevation, hydraulic state, ecological
+abundance, and facility placement. All assets below are generated locally and ship
+with the desktop application.
 
-## Before
+## Facility Geometry
 
-![Original procedural meshes](media/models-before.png)
+The construction factory replaces 21 body/component templates. Facility types
+reuse these components; this is not a claim that every facility has a new,
+individually authored model.
 
-## After
-
-![Indexed assemblies and branched foliage](media/models-after.png)
-
-The isolated comparison scene uses the same asset constructors and instanced
-foliage implementation as the application. It is a model inspection fixture,
-not a simulated forest or surveyed building scene.
-
-| Change | Result |
+| Templates | Geometry |
 | --- | --- |
-| Assembly buffers | Preserve indices, UVs, and authored vertex colors; fill unpainted geometry with neutral white color attributes |
-| Curved surfaces | Reconstruct smooth normals after deformation instead of flattening every merged triangle |
-| Broadleaf crown, ultra | 451 branch segments and 2,520 folded leaves per template |
-| Conifer crown, ultra | 946 branch segments and 7,938 needle-like leaf blades per template |
-| Crown material | Opaque, double-sided foliage; no transparent enclosing shell |
-| Distance selection | Shared distant mesh below a 16-pixel projected size; at most 128 detailed instances per variant batch |
+| Setback tower, courtyard midrise, L-plan lowrise, civic building | Fitted windows, mullions, raised sills, roof cornices, closed building bodies |
+| Industrial building, hipped roof | Recessed loading doors, roof courses, capped ridges, service exhaust |
+| Tapered landmark | Revolved shell, continuous floor rings and roof cap |
+| Process tank, water-tower tank | Domed lid, seam rings, inspection ladder and service pipe |
+| Dam, spillway, bridge pier | Buttresses, gate ribs, stepped chute, bearing pads and foundations |
+| Road, solar panel | Crowned pavement, curbs, cell divisions and busbars |
+| Turbine blade | Spanwise tapered, twisted closed section; not an aerodynamic design |
+| Greenhouse, stadium, observatory | Roof ribs and panels, continuous terraced bowl, slotted dome |
+| Crane boom | Longitudinal chords, diagonal bracing and hoist cable |
+| Tunnel portal, utility gallery | Open arch, lining ribs, invert slab, ceiling fixtures and service pipes |
 
-At equal triangle counts, the example storage tank uses 923 vertices instead of
-4,104; the tower uses 532 instead of 1,692. Detailed crowns intentionally contain
-more geometry. These counts are not claims of faster overall application startup.
+All templates retain normalized placement bounds, finite vertex colors, indexed
+buffers and quality tiers. Per-vertex roughness and metalness distinguish glazing,
+metal fittings and masonry within the same instanced assembly. Existing site-specific colors still tint the assemblies.
+Generic facade grids and extra roofs are suppressed on integrated envelopes to
+avoid detached or intersecting details. Service yards and facility-specific
+equipment remain separate.
 
-A same-machine browser check recorded approximately 5.79 s startup / 11.84 s
-rebuild for the new renderer, versus 5.08 s / 10.48 s when serving the previous
-renderer and asset modules. These single observations indicate additional
-rendering cost; they do not establish a general performance ratio.
+Other registered components retain their existing geometry. Classified masonry,
+metal, glass, technical and constructed-mineral finishes add filtered material
+variation; a material update alone is not counted as a geometry rebuild.
 
-## Verification
+## Underground Structures
 
-- New geometry regression failed on the original unindexed storage-tank assembly.
-- All registered asset kinds generate finite high-quality positions and valid indices.
-- Foliage checks cover deterministic variants, bounded geometry, unit normals,
-  per-vertex colors, and increasing detail between quality profiles.
-- Distance selection preserves instance totals and enforces the close-detail cap.
-- Browser comparison checks pass for canvas pixels, orbit interaction, and
-  1440 x 810 / 390 x 844 viewports, with no recorded shader or page errors.
-- Static application startup and temperature rebuild pass with WASM authority
-  and 13 process gates. The unchanged modeled temperature values match the baseline.
+Tunnel and metro facility types use open entrance/gallery assemblies rather than
+solid building blocks. Their passages have geometric holes, checked with raycasts.
+These are entrance-scale display structures. They do not carve the terrain,
+generate a connected underground transport network, or alter groundwater flow.
+Natural cave display and geological cutaway controls remain separate.
 
-Botanical structures are procedural visual forms, not calibrated species
-architecture or biomass measurements.
+## Terrain and Water
 
-## Ground Details
+Soil aggregates, mineral grain and damp pore shading use continuous local
+coordinates. Screen-footprint filtering suppresses detail too small to resolve.
+Procedural millimetre-scale shading is not millimetre-resolution terrain data.
 
-Rock and scree templates have jointed surfaces, mineral color variation, and
-normalized bounds. Snow uses a continuous curved mesh rather than raised strip
-assemblies. Displaced instances sample the terrain at their final map position;
-display dimensions are bounded independently of coarse regional cell spacing.
-These meshes are illustrative outcrops and deposits, not sampled geological structures.
+River geometry carries modeled channel depth, local downstream direction and mean
+velocity. The renderer uses these for depth tint, fading banks and directional
+ripples. It does not recompute discharge or simulate turbulent fluid motion.
+Width remains bounded for the regional display grid; smoothed centerlines are
+not surveyed channel geometry.
 
-Unpainted templates receive white vertex colors so instance tint remains visible.
-The geometry regression checks every registered high-quality template for complete,
-finite color buffers. `tests/fixtures/surface-details.html` renders the actual
-surface-detail materials and geometry for close inspection.
+Real streamflow assessment depends on cross-section and velocity measurements,
+not on the appearance of animated water. See the
+[USGS streamflow measurement overview](https://www.usgs.gov/water-science-school/science/how-streamflow-measured).
 
-Sea and river visibility share one control. Surface wetness remains in the terrain
-material, and the river renderer owns hydraulic ribbons; surface details no longer
-add a second set of water patches. Geological diagnostic overlays remain separate
-from the navigable section view.
+Geological surfaces add filtered lamination and mineral micrograin while retaining
+existing cave clipping and inspection lighting. They do not infer observed strata.
+
+## Desktop Verification
+
+- All registered templates: finite position/color buffers and valid indices.
+- All 21 rebuilt templates: increasing geometry detail across quality tiers and stable bounds.
+- Tunnel/gallery openings: unobstructed central ray in all three quality tiers.
+- River buffers: direction/depth/velocity attributes, malformed-input checks and scientific data isolation.
+- Local inspection fixture: 1920 x 1080 and 2560 x 1440 rendering, pixel checks, orbit interaction and moving river shading.
+- Full application: startup, terrain rebuild, analytical views, underwater and geological sections.
+- Desktop EXE: bundled local modules and Three.js addon; no remote model or texture downloads.
+
+The inspection scene is `outputs/geo-sim/tests/fixtures/facility-rebuild.html`.
+It uses normalized construction parts with representative display proportions,
+not a surveyed settlement. Mobile adaptation is paused.
+
+The implementation uses Three.js
+[extruded shapes](https://threejs.org/docs/pages/ExtrudeGeometry.html),
+indexed geometry utilities and
+[physical materials](https://threejs.org/docs/pages/MeshPhysicalMaterial.html).

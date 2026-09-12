@@ -29,7 +29,9 @@ const ULTRA_FACILITY_TYPES = Object.freeze([
   "observatory",
   "mountain_refuge",
   "ranger_station",
-  "water_treatment_plant"
+  "water_treatment_plant",
+  "tunnel_portal",
+  "metro_station"
 ]);
 const ORGANIC_KINDS = /* @__PURE__ */ new Set([
   "fluted-trunk",

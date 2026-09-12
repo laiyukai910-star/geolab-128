@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { createFoliageGeometry } from "./foliageGeometry.js";
+import { createFacilityGeometry, REBUILT_FACILITY_KINDS } from "./facilityGeometry.js";
 import { ORGANISM_KINDS, createOrganismGeometry } from "./organismGeometry.js";
 import {
   assetPipelineDiagnostics,
@@ -9,6 +10,7 @@ import {
 } from "./assetPipeline.js";
 
 const SEMANTIC_ASSET_KIND = new Map([
+  ["隧道衬砌入口", "tunnel-portal"], ["地下管廊构筑", "utility-gallery"],
   ["岩石露头", "fractured-rock"], ["坡麓碎屑", "talus-cluster"], ["高山雪斑", "snow-drift"],
   ["河岸湿缘", "wetland-ribbon"], ["树干", "fluted-trunk"], ["阔叶冠层", "broadleaf-canopy"],
   ["针叶林冠", "layered-conifer"], ["灌草斑块", "irregular-shrub"], ["林下植被", "understory-cluster"],
@@ -105,6 +107,8 @@ export function createProceduralGeometry(kind, quality = "ultra", variant = 0) {
   quality = normalizeRenderDetailQuality(quality);
   variant = Math.max(0, Math.floor(Number(variant) || 0));
   if(kind.startsWith("wildlife-organism-"))return tagProceduralGeometry(createOrganismGeometry(kind.slice(18),quality,variant),kind,quality,variant);
+  const rebuilt = createFacilityGeometry(kind, quality);
+  if (rebuilt) return tagProceduralGeometry(rebuilt, kind, quality, variant);
   let geometry;
   switch (kind) {
     case "setback-tower": geometry = createSetbackTowerGeometry(quality); break;
@@ -226,6 +230,7 @@ export function proceduralAssetDiagnostics() {
     schemaVersion: 3,
     assetKindCount: PROCEDURAL_ASSET_KINDS.length,
     semanticBindingCount: SEMANTIC_ASSET_KIND.size,
+    rebuiltFacilityKinds: REBUILT_FACILITY_KINDS,
     allKinds: PROCEDURAL_ASSET_KINDS,
     pipeline: assetPipelineDiagnostics()
   };
@@ -240,90 +245,31 @@ function qualityCount(quality, high, ultra, exhaustive) {
 }
 
 function createSetbackTowerGeometry(quality) {
-  const d = detail(quality);
-  const profile = [
-    [-0.5, 1], [-0.2, 1], [-0.2, 0.86], [0.08, 0.86], [0.08, 0.69],
-    [0.32, 0.69], [0.32, 0.52], [0.47, 0.52], [0.5, 0.34]
-  ];
-  const body = ringLoft(profile, d.radial, 0.08);
-  const parts = [{ geometry: body }];
-  for (let i = 0; i < Math.min(7, d.bars); i += 1) {
-    const a = i / Math.min(7, d.bars) * Math.PI * 2;
-    parts.push(part(new THREE.BoxGeometry(1, 1, 1), [Math.cos(a) * 0.32, 0.04, Math.sin(a) * 0.32], [0.025, 0.88, 0.025], [0, -a, 0]));
-  }
-  parts.push(part(new THREE.CylinderGeometry(0.08, 0.13, 1, d.radial), [0, 0.42, 0], [1, 0.16, 1]));
-  return mergeAssembly(parts);
+  return createFacilityGeometry("setback-tower", quality);
 }
 
 function createCourtyardMidriseGeometry(quality) {
-  const parts = [
-    part(chamferedBox(quality), [0, -0.04, -0.39], [1, 0.84, 0.22]),
-    part(chamferedBox(quality), [0, -0.08, 0.39], [1, 0.76, 0.22]),
-    part(chamferedBox(quality), [-0.39, -0.02, 0], [0.22, 0.88, 0.64]),
-    part(chamferedBox(quality), [0.39, -0.1, 0], [0.22, 0.72, 0.64]),
-    part(new THREE.CylinderGeometry(0.48, 0.48, 0.04, detail(quality).radial), [0, -0.48, 0], [0.45, 1, 0.45]),
-    part(new THREE.BoxGeometry(1, 1, 1), [-0.27, 0.42, -0.39], [0.12, 0.08, 0.13]),
-    part(new THREE.BoxGeometry(1, 1, 1), [0.27, 0.35, 0.39], [0.12, 0.08, 0.13])
-  ];
-  return mergeAssembly(parts);
+  return createFacilityGeometry("courtyard-midrise", quality);
 }
 
 function createLowriseGeometry(quality) {
-  return mergeAssembly([
-    part(chamferedBox(quality), [-0.16, -0.08, 0.08], [0.68, 0.74, 0.7]),
-    part(chamferedBox(quality), [0.3, -0.2, -0.25], [0.34, 0.5, 0.42]),
-    part(createHippedRoofGeometry(quality), [-0.16, 0.36, 0.08], [0.75, 0.28, 0.78]),
-    part(createHippedRoofGeometry(quality), [0.3, 0.08, -0.25], [0.4, 0.2, 0.48]),
-    part(new THREE.BoxGeometry(1, 1, 1), [0.48, -0.31, -0.25], [0.18, 0.08, 0.26])
-  ]);
+  return createFacilityGeometry("l-plan-lowrise", quality);
 }
 
 function createIndustrialGeometry(quality) {
-  const parts = [part(chamferedBox(quality), [0, -0.14, 0], [1, 0.72, 1])];
-  const teeth = qualityCount(quality, 4, 7, 11);
-  for (let i = 0; i < teeth; i += 1) {
-    const x = -0.42 + i * (0.84 / Math.max(1, teeth - 1));
-    parts.push(part(wedgeGeometry(), [x, 0.32, 0], [0.18, 0.25, 1], [0, 0, Math.PI / 2]));
-  }
-  parts.push(part(new THREE.CylinderGeometry(0.18, 0.22, 1, detail(quality).radial), [0.35, 0.25, 0.28], [0.22, 0.46, 0.22]));
-  return mergeAssembly(parts);
+  return createFacilityGeometry("sawtooth-industrial", quality);
 }
 
 function createCivicGeometry(quality) {
-  const d = detail(quality);
-  return mergeAssembly([
-    part(chamferedBox(quality), [0, -0.14, 0], [0.42, 0.72, 1]),
-    part(chamferedBox(quality), [0, -0.14, 0], [1, 0.72, 0.42]),
-    part(new THREE.CylinderGeometry(0.28, 0.34, 0.22, d.radial), [0, 0.3, 0]),
-    part(new THREE.SphereGeometry(0.22, d.radial, Math.ceil(d.radial / 2), 0, Math.PI * 2, 0, Math.PI / 2), [0, 0.4, 0], [1, 0.6, 1]),
-    part(new THREE.BoxGeometry(1, 1, 1), [0, -0.23, -0.52], [0.28, 0.18, 0.12])
-  ]);
+  return createFacilityGeometry("cross-plan-civic", quality);
 }
 
 function createHippedRoofGeometry(quality) {
-  const roof = wedgeRoofGeometry();
-  const d = detail(quality);
-  const parts = [{ geometry: roof }];
-  for (let i = 0; i < Math.min(5, d.bars); i += 1) {
-    const x = -0.38 + i * 0.19;
-    parts.push(part(new THREE.BoxGeometry(1, 1, 1), [x, -0.02, 0], [0.018, 0.04, 0.92]));
-  }
-  parts.push(part(new THREE.CylinderGeometry(0.04, 0.04, 1, 6), [0, 0.5, 0], [1, 0.86, 1], [0, 0, Math.PI / 2]));
-  return mergeAssembly(parts);
+  return createFacilityGeometry("hipped-roof", quality);
 }
 
 function createLandmarkGeometry(quality) {
-  const d = detail(quality);
-  const profile = [
-    new THREE.Vector2(0.36, -0.5), new THREE.Vector2(0.48, -0.4), new THREE.Vector2(0.39, -0.17),
-    new THREE.Vector2(0.3, 0.12), new THREE.Vector2(0.24, 0.32), new THREE.Vector2(0.12, 0.47), new THREE.Vector2(0.03, 0.5)
-  ];
-  const parts = [{ geometry: new THREE.LatheGeometry(profile, d.radial) }];
-  for (let i = 0; i < 6; i += 1) {
-    const a = i / 6 * Math.PI * 2;
-    parts.push(part(new THREE.BoxGeometry(1, 1, 1), [Math.cos(a) * 0.28, 0, Math.sin(a) * 0.28], [0.025, 0.82, 0.04], [0, -a, 0]));
-  }
-  return mergeAssembly(parts);
+  return createFacilityGeometry("tapered-landmark", quality);
 }
 
 function createFracturedRockGeometry(quality) {
@@ -566,13 +512,7 @@ function createPodiumBase(quality) {
 }
 
 function createCrownedRoad(quality) {
-  const parts = [{ geometry: crownedPrism() }];
-  const drains = qualityCount(quality, 4, 7, 11);
-  for (let i = 0; i < drains; i += 1) {
-    const x = -0.42 + i * 0.84 / Math.max(1, drains - 1);
-    parts.push(part(new THREE.BoxGeometry(1, 1, 1), [x, -0.38, 0.43], [0.08, 0.05, 0.08]));
-  }
-  return mergeAssembly(parts);
+  return createFacilityGeometry("crowned-road", quality);
 }
 
 function createStreetlight(quality) {
@@ -586,14 +526,7 @@ function createStreetlight(quality) {
 }
 
 function createBridgePier(quality) {
-  const d = detail(quality);
-  return mergeAssembly([
-    part(new THREE.CylinderGeometry(0.22, 0.3, 1, d.radial), [0, -0.04, 0], [1, 0.82, 1]),
-    part(chamferedBox(quality), [0, 0.39, 0], [1, 0.2, 0.42]),
-    part(new THREE.CylinderGeometry(0.3, 0.36, 0.12, d.radial), [0, -0.46, 0], [1, 1, 1]),
-    part(new THREE.BoxGeometry(1, 1, 1), [-0.32, 0.48, 0], [0.18, 0.08, 0.28]),
-    part(new THREE.BoxGeometry(1, 1, 1), [0.32, 0.48, 0], [0.18, 0.08, 0.28])
-  ]);
+  return createFacilityGeometry("bridge-pier", quality);
 }
 
 function createRailing(quality) {
@@ -644,26 +577,11 @@ function createLevee(quality) {
 }
 
 function createButtressDam(quality) {
-  const count = qualityCount(quality, 5, 8, 12);
-  const parts = [part(wedgeGeometry(), [0, 0, 0], [1, 1, 0.42], [0, Math.PI / 2, 0])];
-  for (let i = 0; i < count; i += 1) {
-    const x = -0.42 + i * 0.84 / Math.max(1, count - 1);
-    parts.push(part(wedgeGeometry(), [x, -0.12, 0.24], [0.12, 0.78, 0.46], [0, 0, Math.PI / 2]));
-  }
-  parts.push(part(new THREE.BoxGeometry(1, 1, 1), [0, 0.44, 0], [1, 0.12, 0.5]));
-  return mergeAssembly(parts);
+  return createFacilityGeometry("buttress-dam", quality);
 }
 
 function createSpillway(quality) {
-  const steps = qualityCount(quality, 6, 9, 14);
-  const parts = [];
-  for (let i = 0; i < steps; i += 1) {
-    const t = i / steps;
-    parts.push(part(new THREE.BoxGeometry(1, 1, 1), [0, 0.42 - t * 0.84, -0.4 + t * 0.8], [0.72, 0.11, 0.18]));
-  }
-  parts.push(part(new THREE.BoxGeometry(1, 1, 1), [-0.44, 0, 0], [0.12, 1, 1]));
-  parts.push(part(new THREE.BoxGeometry(1, 1, 1), [0.44, 0, 0], [0.12, 1, 1]));
-  return mergeAssembly(parts);
+  return createFacilityGeometry("stepped-spillway", quality);
 }
 
 function createSluiceGate(quality) {
@@ -685,11 +603,7 @@ function createGroovedRunway(quality) {
 }
 
 function createSolarPanel(quality) {
-  const parts = [part(chamferedBox(quality), [0, 0.08, 0], [1, 0.08, 0.68], [-0.18, 0, 0])];
-  for (const x of [-0.46, 0.46]) parts.push(part(new THREE.BoxGeometry(1, 1, 1), [x, 0.08, 0], [0.035, 0.12, 0.72], [-0.18, 0, 0]));
-  for (let i = 0; i < 4; i += 1) parts.push(part(new THREE.BoxGeometry(1, 1, 1), [-0.3 + i * 0.2, 0.115, 0], [0.018, 0.03, 0.65], [-0.18, 0, 0]));
-  parts.push(part(new THREE.BoxGeometry(1, 1, 1), [0, -0.22, -0.18], [0.7, 0.05, 0.05], [0, 0, 0.48]));
-  return mergeAssembly(parts);
+  return createFacilityGeometry("solar-panel-frame", quality);
 }
 
 function createSolarRack(quality) {
@@ -703,10 +617,7 @@ function createSolarRack(quality) {
 }
 
 function createTurbineBlade(quality) {
-  const parts = [part(airfoilBlade(quality), [0.25, 0, 0], [0.5, 1, 0.42])];
-  for (let i = 1; i < 3; i += 1) parts.push(part(airfoilBlade(quality), [Math.cos(i * 2.094) * 0.25, Math.sin(i * 2.094) * 0.25, 0], [0.5, 1, 0.42], [0, 0, i * 2.094]));
-  parts.push(part(new THREE.SphereGeometry(0.15, detail(quality).radial, 8)));
-  return mergeAssembly(parts);
+  return createFacilityGeometry("turbine-blade", quality);
 }
 
 function createTaperedMast(quality) {
@@ -746,15 +657,7 @@ function createRibbedSpire(quality) {
 }
 
 function createStadiumBowl(quality) {
-  const d = detail(quality);
-  const parts = [part(new THREE.TorusGeometry(0.34, 0.16, Math.ceil(d.radial / 2), d.radial * 2), [0, 0, 0], [1.28, 0.62, 0.9], [Math.PI / 2, 0, 0])];
-  const tiers = qualityCount(quality, 4, 7, 10);
-  for (let i = 0; i < tiers; i += 1) parts.push(part(new THREE.TorusGeometry(0.18 + i * 0.045, 0.018, 4, d.radial * 2), [0, -0.16 + i * 0.075, 0], [1.35, 1, 0.82], [Math.PI / 2, 0, 0]));
-  for (let i = 0; i < 6; i += 1) {
-    const a = i / 6 * Math.PI * 2;
-    parts.push(part(new THREE.BoxGeometry(1, 1, 1), [Math.cos(a) * 0.45, 0.22, Math.sin(a) * 0.34], [0.035, 0.46, 0.035], [0, -a, 0.26 * Math.cos(a)]));
-  }
-  return mergeAssembly(parts);
+  return createFacilityGeometry("stadium-bowl", quality);
 }
 
 function createStadiumField(quality) {
@@ -812,14 +715,7 @@ function createCoolingRack(quality) {
 }
 
 function createGreenhouseBay(quality) {
-  const d = detail(quality);
-  const parts = [];
-  for (let i = 0; i < d.bars; i += 1) {
-    const z = -0.46 + i * 0.92 / Math.max(1, d.bars - 1);
-    parts.push(part(curvedTube([[-0.48, -0.4, z], [-0.36, 0.2, z], [0, 0.48, z], [0.36, 0.2, z], [0.48, -0.4, z]], 0.025, d.curve)));
-  }
-  for (const x of [-0.48, 0, 0.48]) parts.push(part(new THREE.BoxGeometry(1, 1, 1), [x, -0.04, 0], [0.035, 0.08, 1]));
-  return mergeAssembly(parts);
+  return createFacilityGeometry("greenhouse-bay", quality);
 }
 
 function createMarketAwning(quality) {
@@ -927,14 +823,7 @@ function createTrussTower(quality) {
 }
 
 function createObservatoryDome(quality) {
-  const d = detail(quality);
-  const parts = [
-    part(new THREE.CylinderGeometry(0.5, 0.5, 0.28, d.radial * 2), [0, -0.36, 0]),
-    part(new THREE.SphereGeometry(0.5, d.radial * 2, d.radial, 0, Math.PI * 2, 0, Math.PI / 2), [0, -0.22, 0])
-  ];
-  for (let i = -2; i <= 2; i += 1) parts.push(part(new THREE.TorusGeometry(0.505, 0.012, 4, d.radial * 2, Math.PI), [0, -0.22, 0], [1, 1, 1], [Math.PI / 2, i * 0.25, 0]));
-  parts.push(part(new THREE.BoxGeometry(1, 1, 1), [0.12, 0.05, 0.42], [0.18, 0.72, 0.08], [0.18, 0, 0]));
-  return mergeAssembly(parts);
+  return createFacilityGeometry("observatory-dome", quality);
 }
 
 function createTelescopeMount(quality) {
@@ -1053,16 +942,7 @@ function createCraneTower(quality) {
 }
 
 function createCraneBoom(quality) {
-  const bays = qualityCount(quality, 6, 11, 18);
-  const parts = [];
-  for (const y of [-0.28, 0.28]) parts.push(part(new THREE.BoxGeometry(1, 1, 1), [0, y, 0], [1, 0.05, 0.05]));
-  for (let i = 0; i <= bays; i += 1) {
-    const x = -0.5 + i / bays;
-    parts.push(part(new THREE.BoxGeometry(1, 1, 1), [x, 0, 0], [0.035, 0.62, 0.035], [0, 0, i % 2 ? 0.55 : -0.55]));
-  }
-  parts.push(part(new THREE.CylinderGeometry(0.025, 0.025, 0.72, 5), [0.4, -0.15, 0]));
-  parts.push(part(new THREE.TorusGeometry(0.08, 0.025, 5, 10, Math.PI * 1.55), [0.4, -0.48, 0], [1, 1, 1], [0, 0, Math.PI / 2]));
-  return mergeAssembly(parts);
+  return createFacilityGeometry("crane-boom", quality);
 }
 
 function createWindbreak(quality) {

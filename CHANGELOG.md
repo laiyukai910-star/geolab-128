@@ -27,6 +27,10 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Changed
 
+- Rebuilt 21 facility bodies and components with indexed construction geometry, including fitted glazing and reveals, hipped roofs, tank inspection ladders, dam buttresses, terraced stands, and open tunnel/gallery linings. Existing facility placement and simulation inputs are unchanged.
+- Added classified construction finishes and removed generic facade/roof overlays from rebuilt building envelopes. Seventeen legacy geometry factories now delegate to the new implementation.
+- Refined river ribbons across and along the channel, added depth-dependent transparency and velocity-directed surface animation, and filtered small ripples by screen footprint. Animation is illustrative, not a new fluid solver.
+- Added near-view geological lamination and mineral grain, damp soil pore shading, and mineral-dependent terrain roughness. Tunnel and metro types use open entrance/gallery assemblies; they do not excavate a traversable underground network.
 - Refined near-view foliage with curved leaf surfaces, raised midribs, tapered edges, and bark shading. Ultra and exhaustive settings retain up to 256 and 384 detailed trees per variant batch, respectively.
 - Added filtered soil aggregates, mineral micrograin, and seabed sand detail down to a 2 mm procedural wavelength. These are illustrative shading layers, not additional terrain measurements or collision geometry. This update targets desktop rendering; mobile adaptation is paused.
 - Rebuilt rock and scree surfaces with joint planes, mineral banding, and size variation; replaced snow's raised strip assemblies with a continuous wind-shaped surface.

@@ -41,6 +41,14 @@ const model={n:5,sizeKm:1,cellSizeKm:0.25,height:new Float32Array(25).fill(20),r
   subsurface:{gridN:5,columnCellCount:25,lithologyCode:Uint8Array.from({length:25},(_,i)=>i%2?3:5),groundwaterSaturation:new Float32Array(25)}};
 const before=structuredClone(model),river=buildRiverGeometry(model,{seaLevel:0,verticalScale:1});
 assert.ok(river.index.count>0);
+assert.equal(river.attributes.riverData.count,river.attributes.position.count);
+assert.equal(river.attributes.riverDirection.count,river.attributes.position.count);
+const highRiver=buildRiverGeometry(model,{seaLevel:0,verticalScale:1,renderDetailQuality:"high"});
+assert.ok(highRiver.attributes.position.count<river.attributes.position.count);
+highRiver.dispose();
+const badRiver=buildRiverGeometry({...model,riverSegments:[...model.riverSegments,{from:-1,to:99999}],hydraulics:{flowVelocity:new Float32Array(25).fill(Infinity)}},{seaLevel:0,verticalScale:1});
+for(const name of ["position","riverData","riverDirection"]) for(const v of badRiver.attributes[name].array)assert.ok(Number.isFinite(v));
+badRiver.dispose();
 for(const v of river.getAttribute("position").array)assert.ok(Number.isFinite(v));
 const a=sampleStratumColor(model,1-1e-6,2,0),b=sampleStratumColor(model,1+1e-6,2,0);
 assert.ok(Math.abs(a.r-b.r)+Math.abs(a.g-b.g)+Math.abs(a.b-b.b)<1e-5,"no color jump at column boundaries");

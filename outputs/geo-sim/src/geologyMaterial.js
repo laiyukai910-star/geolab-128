@@ -4,7 +4,7 @@ import { caveFieldGLSL } from "./caveField.js";
 export function createGeologyMaterial(cave=null,inspectionFill=0.8) {
   const material = new THREE.MeshStandardMaterial({vertexColors:true, roughness:0.9, metalness:0});
   material.userData.inspectionFill = inspectionFill;
-  material.customProgramCacheKey = () => `geolab-continuous-strata-v1:${inspectionFill}:${JSON.stringify(cave)}`;
+  material.customProgramCacheKey = () => `geolab-continuous-strata-v2:${inspectionFill}:${JSON.stringify(cave)}`;
   material.onBeforeCompile = shader => {
     shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
       attribute float stratumDepth; varying vec3 rockCoord; varying vec3 rockPosition;`)
@@ -32,8 +32,12 @@ export function createGeologyMaterial(cave=null,inspectionFill=0.8) {
         vec3 beddingCoord=rockCoord*vec3(0.018,0.85,0.018);
         beddingCoord.y+=(weather-0.5)*1.4;
         float bedding=rockDetail(beddingCoord,1.0,footprint*0.85);
-        float rockHeight=mineral*0.005+grain*0.001;
+        float micrograin=rockDetail(rockCoord,0.009,footprint);
+        float seamPhase=rockCoord.y*4.0+rockDetail(rockCoord,3.5,footprint)*0.7;
+        float lamina=(0.5+0.5*sin(seamPhase))*(1.0-smoothstep(0.08,0.5,footprint));
+        float rockHeight=mineral*0.005+grain*0.001+micrograin*0.0003+lamina*0.003;
         diffuseColor.rgb *= 0.72+weather*0.32+bedding*0.12+(grain-0.5)*0.14;
+        diffuseColor.rgb*=0.98+lamina*0.045+(micrograin-0.5)*0.10;
         diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(1.08,0.99,0.87),smoothstep(0.58,0.8,weather)*0.32);
       `)
       .replace("#include <roughnessmap_fragment>", `#include <roughnessmap_fragment>

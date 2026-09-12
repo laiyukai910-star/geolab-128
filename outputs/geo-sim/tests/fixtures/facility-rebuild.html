@@ -1,0 +1,46 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Facility construction inspection</title>
+<link rel="icon" href="data:,"><style>html,body{margin:0;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"../../vendor/three/three.module.js","three/addons/":"../../vendor/three/addons/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {createProceduralGeometry} from '../../src/proceduralAssets.js';
+import {REBUILT_FACILITY_KINDS} from '../../src/facilityGeometry.js';
+import {applyConstructionFinish} from '../../src/constructionMaterial.js';
+import {buildRiverGeometry} from '../../src/riverGeometry.js';
+import {createRiverMaterial} from '../../src/riverMaterial.js';
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setClearColor(0xdce5e8);document.body.append(renderer.domElement);
+const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(38,1,0.00001,100);
+scene.add(new THREE.HemisphereLight(0xffffff,0x777c74,2));
+const sun=new THREE.DirectionalLight(0xfff6e5,3);sun.position.set(-3,6,4);scene.add(sun);
+const group=new THREE.Group();scene.add(group);const controls=new OrbitControls(camera,renderer.domElement);
+let time=0,river=null;
+function show(kind){
+ camera.near=kind==='river'?0.00001:0.02;camera.updateProjectionMatrix();
+ group.traverse(o=>{o.geometry?.dispose();o.material?.dispose()});group.clear();river=null;
+ if(kind==='river'){
+   const n=9,model={n,sizeKm:0.04,height:new Float32Array(n*n).fill(10),riverSegments:Array.from({length:6},(_,i)=>({from:37+i,to:38+i})),hydraulics:{channelWidthM:new Float32Array(n*n).fill(9),channelDepthM:new Float32Array(n*n).fill(1.4),flowVelocity:new Float32Array(n*n).fill(1.1)}};
+   river=new THREE.Mesh(buildRiverGeometry(model,{seaLevel:0,verticalScale:1}),createRiverMaterial());group.add(river);
+   const bed=new THREE.Mesh(new THREE.PlaneGeometry(0.05,0.03),new THREE.MeshStandardMaterial({color:0xb5b19b,roughness:0.95}));bed.rotation.x=-Math.PI/2;bed.position.y=0.01;group.add(bed);
+   camera.position.set(0.002,0.032,0.03);controls.target.set(0,0.011,0);
+ }else{
+   const kinds=kind==='all'?REBUILT_FACILITY_KINDS:[kind];
+   kinds.forEach((name,i)=>{
+     const material=applyConstructionFinish(new THREE.MeshPhysicalMaterial({vertexColors:true,color:0xffffff,roughness:0.65,metalness:0.025}), 'masonry',true);
+     const mesh=new THREE.InstancedMesh(createProceduralGeometry(name,'ultra',0),material,1);
+     const p=kind==='all'?[(i%6-2.5)*1.5,0,(Math.floor(i/6)-1.5)*1.6]:[0,0,0];
+     const scale=({'stadium-bowl':[1,0.28,1],'solar-panel-frame':[1,0.08,0.75],'crowned-road':[1,0.07,0.65],'hipped-roof':[1,0.35,0.8],'turbine-blade':[0.23,1,0.07],'crane-boom':[1,0.35,0.15]})[name]||[1,1,1];
+     mesh.setMatrixAt(0,new THREE.Matrix4().makeScale(...scale).setPosition(...p));group.add(mesh);
+   });
+   controls.target.set(0,0,0);camera.position.set(...(kind==='all'?[5.5,6.6,10.2]:[1.45,0.9,2.2]));
+ }
+ controls.update();renderer.render(scene,camera);
+}
+function resize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)}
+addEventListener('resize',resize);resize();show('all');
+function audit(){renderer.render(scene,camera);const gl=renderer.getContext(),data=new Uint8Array(gl.drawingBufferWidth*gl.drawingBufferHeight*4);gl.readPixels(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight,gl.RGBA,gl.UNSIGNED_BYTE,data);const colors=new Set();let foreground=0,dark=0;for(let i=0;i<data.length;i+=16){colors.add(`${data[i]>>3},${data[i+1]>>3},${data[i+2]>>3}`);if(Math.abs(data[i]-data[0])+Math.abs(data[i+1]-data[1])+Math.abs(data[i+2]-data[2])>25)foreground++;if(data[i]+data[i+1]+data[i+2]<45)dark++;}return{colors:colors.size,foreground,dark,vertices:group.children.map(m=>m.geometry.attributes.position.count)}}
+globalThis.review={show,audit,setTime:t=>{time=t},camera,controls,renderer};
+renderer.setAnimationLoop(()=>{if(river)river.material.userData.riverUniforms.riverTime.value=time;controls.update();renderer.render(scene,camera)});
+globalThis.reviewReady=true;
+</script></html>

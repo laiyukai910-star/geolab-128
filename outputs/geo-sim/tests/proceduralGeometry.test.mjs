@@ -15,6 +15,29 @@ const THREE = await import("three");
 const { TerrainRenderer } = await import("../src/terrainRenderer.js");
 const { createFoliageGeometry } = await import("../src/foliageGeometry.js");
 const { FoliageInstances } = await import("../src/foliageInstances.js");
+const { REBUILT_FACILITY_KINDS } = await import("../src/facilityGeometry.js");
+for (const kind of REBUILT_FACILITY_KINDS) {
+  let previousCount = 0;
+  for (const quality of ["high", "ultra", "exhaustive"]) {
+    const geometry = createProceduralGeometry(kind, quality);
+    assert.equal(geometry.userData.facilityRebuild.kind, kind);
+    assert.equal(geometry.attributes.constructionResponse.count,geometry.attributes.position.count);
+    for(const value of geometry.attributes.constructionResponse.array)assert.ok(Number.isFinite(value)&&value>=0&&value<=1);
+    assert.ok(geometry.index && geometry.attributes.position.count > previousCount, `${kind}: indexed quality refinement`);
+    previousCount = geometry.attributes.position.count;
+    const size = geometry.boundingBox.getSize(new THREE.Vector3());
+    for (const value of size.toArray()) assert.ok(Math.abs(value - 1) < 1e-5, `${kind}: normalized display envelope`);
+    for (const value of geometry.attributes.normal.array) assert.ok(Number.isFinite(value), kind);
+    if (kind === "tunnel-portal" || kind === "utility-gallery") {
+      const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
+      mesh.updateMatrixWorld();
+      const ray = new THREE.Raycaster(new THREE.Vector3(0,0,2), new THREE.Vector3(0,0,-1));
+      assert.equal(ray.intersectObject(mesh).length,0,`${kind}: passage must stay open`);
+      mesh.material.dispose();
+    }
+    geometry.dispose();
+  }
+}
 
 for (const kind of PROCEDURAL_ASSET_KINDS) {
   const geometry = createProceduralGeometry(kind, "high");

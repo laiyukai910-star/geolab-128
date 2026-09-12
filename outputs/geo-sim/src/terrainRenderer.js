@@ -2,6 +2,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createFoliageGeometry } from "./foliageGeometry.js";
 import { FoliageInstances } from "./foliageInstances.js";
+import { applyConstructionFinish } from "./constructionMaterial.js";
+import { REBUILT_FACILITY_KINDS } from "./facilityGeometry.js";
+import { createRiverMaterial } from "./riverMaterial.js";
 import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal } from "./terrainAppearance.js";
 import { createTerrainSurfaceMaterial, updateTerrainSurfaceMaterial } from "./terrainSurfaceMaterial.js";
 import { SceneVolume } from "./sceneVolume.js";
@@ -1184,6 +1187,7 @@ export class TerrainRenderer {
     this.controls.update();
     const now = performance.now();
     const t = now * 0.001;
+    if (this.rivers?.material.userData.riverUniforms) this.rivers.material.userData.riverUniforms.riverTime.value = t;
     this.sceneVolume?.update(this.camera, t, this.controls.target);
     if (this.windGroup.visible) {
       this.windGroup.children.forEach((arrow, index) => {
@@ -1519,8 +1523,7 @@ export class TerrainRenderer {
     const model = this.model;
     const params = this.params;
     const geometry = buildRiverGeometry(model,params);
-    const material = new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.32,metalness:0,
-      transparent:true,opacity:0.84,depthWrite:false,side:THREE.DoubleSide});
+    const material = createRiverMaterial();
     this.rivers = new THREE.Mesh(geometry, material);
     this.rivers.renderOrder = 3;
     this.scene.add(this.rivers);
@@ -1951,6 +1954,8 @@ export class TerrainRenderer {
     const seed = Number(this.params.seed) || 0;
     const buckets = {
       highrise: [],
+      tunnelPortals: [],
+      utilityGalleries: [],
       midrise: [],
       lowrise: [],
       roofs: [],
@@ -2195,9 +2200,11 @@ export class TerrainRenderer {
             color
           };
 
+          transform.authoredEnvelope = true;
+          if (type === "tunnel_portal" || type === "metro_station") continue;
           if (type === "highrise" || (localHeightM >= 95 && density > 0.35)) {
             buckets.highrise.push(transform);
-            buckets.caps.push({
+            if (!transform.authoredEnvelope) buckets.caps.push({
               ...transform,
               y: base.y + visualHeight + Math.min(0.08, visualHeight * 0.08) / 2,
               sx: footprint * 0.72,
@@ -2205,18 +2212,18 @@ export class TerrainRenderer {
               sz: depth * 0.72,
               color: materialPlan.colorHexes.roofColor
             });
-            pushFacadeBands(buckets.facadeBands, transform, footprint, depth, localAngle, type);
+            if (!transform.authoredEnvelope) pushFacadeBands(buckets.facadeBands, transform, footprint, depth, localAngle, type);
           } else if (INDUSTRIAL_SILHOUETTE_TYPES.has(type)) {
             buckets.industrial.push({ ...transform, sx: footprint * 1.45, sz: depth * 1.25, color });
           } else if (CIVIC_SILHOUETTE_TYPES.has(type)) {
             buckets.civic.push(transform);
-            pushFacadeBands(buckets.facadeBands, transform, footprint, depth, localAngle, type);
+            if (!transform.authoredEnvelope) pushFacadeBands(buckets.facadeBands, transform, footprint, depth, localAngle, type);
           } else if (MIDRISE_SILHOUETTE_TYPES.has(type) || localHeightM >= 22) {
             buckets.midrise.push(transform);
-            pushFacadeBands(buckets.facadeBands, transform, footprint, depth, localAngle, type);
+            if (!transform.authoredEnvelope) pushFacadeBands(buckets.facadeBands, transform, footprint, depth, localAngle, type);
           } else {
             buckets.lowrise.push(transform);
-            if (LOWRISE_ROOF_TYPES.has(type)) {
+            if (!transform.authoredEnvelope && LOWRISE_ROOF_TYPES.has(type)) {
               buckets.roofs.push({
                 x: transform.x,
                 y: base.y + visualHeight + Math.max(0.018, visualHeight * 0.16) / 2,
@@ -2317,6 +2324,8 @@ export class TerrainRenderer {
     const ecosystemVisualPlan = pushInfrastructureEcosystemVisualLayers(buckets, ecosystemVisualCandidates, cell, ecosystemVisualControls);
 
     addInstancedBox(this.infrastructureGroup, "退台高层塔楼", buckets.highrise, 0xb8c5c7, { geometryFactory: (variant) => createAssetGeometry("setback-tower", budgetPlan.quality, variant), roughness: 0.55, metalness: 0.08 });
+    addInstancedBox(this.infrastructureGroup, "隧道衬砌入口", buckets.tunnelPortals, 0xd0d0c7);
+    addInstancedBox(this.infrastructureGroup, "地下管廊构筑", buckets.utilityGalleries, 0xd0d0c7);
     addInstancedBox(this.infrastructureGroup, "围合中高层组团", buckets.midrise, 0xb8aa96, { geometryFactory: (variant) => createAssetGeometry("courtyard-midrise", budgetPlan.quality, variant), roughness: 0.7, metalness: 0.02 });
     addInstancedBox(this.infrastructureGroup, "错落低层住宅", buckets.lowrise, 0xc2aa8a, { geometryFactory: (variant) => createAssetGeometry("l-plan-lowrise", budgetPlan.quality, variant), roughness: 0.82, metalness: 0.01 });
     addInstancedBox(this.infrastructureGroup, "锯齿顶工业厂房", buckets.industrial, 0x9c9a91, { geometryFactory: (variant) => createAssetGeometry("sawtooth-industrial", budgetPlan.quality, variant), roughness: 0.78, metalness: 0.04 });
@@ -2738,6 +2747,13 @@ function addFacilityCell(buckets, cellInfo) {
   } = cellInfo;
   let used = 0;
   const thinY = 0.012;
+  if (type === "tunnel_portal" || type === "metro_station") {
+    const width = Math.min(0.07, Math.max(0.016, cell * 0.3));
+    const height = width * 0.72;
+    const bucket = type === "tunnel_portal" ? buckets.tunnelPortals : buckets.utilityGalleries;
+    bucket.push({x:base.x,y:base.y+height/2,z:base.z,sx:width,sy:height,sz:width*1.4,ry:angle,color:0xd0d0c7});
+    return 1;
+  }
   const localHash = hash01(x, y, seed + 2311);
   const scaledVertical = Number.isFinite(verticalScale) && verticalScale > 0 ? verticalScale : 1;
   const roofDetailY = (fallbackHeightM = 12) => base.y + visualBuildingHeight(Math.max(heightM || 0, fallbackHeightM), scaledVertical) + 0.018;
@@ -5450,6 +5466,7 @@ function pushBuildingFineDetails(buckets, transform, type, width, depth, angle, 
     }
   };
   const add = (bucketName, item) => {
+    if (transform.authoredEnvelope && bucketName !== "entrances") return false;
     if (result.added >= remainingBudget) {
       result.skipped += 1;
       return false;
@@ -5589,6 +5606,7 @@ function pushBuildingRealityDetails(buckets, transform, type, width, depth, angl
     skipped: 0
   };
   const add = (bucketName, item) => {
+    if (transform.authoredEnvelope && !["buildingServiceYards", "buildingServiceDropoffs"].includes(bucketName)) return false;
     if (result.added >= remainingBudget) {
       result.skipped += 1;
       return false;
@@ -7215,6 +7233,9 @@ function createProceduralAssetMaterial(kind, fallbackColor, options = {}, primit
   });
   material.userData.assetPipelineVersion = 3;
   material.userData.materialClass = profile.materialClass;
+  if (semanticAssetKind(kind) || /^[a-z]+(?:-[a-z]+)+$/.test(kind)) {
+    if (!["fractured-rock", "talus-cluster", "snow-drift"].includes(kind)) applyConstructionFinish(material, profile.materialClass, REBUILT_FACILITY_KINDS.includes(kind));
+  }
   return material;
 }
 

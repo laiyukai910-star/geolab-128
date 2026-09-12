@@ -104,7 +104,11 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
     + bevel * 0.07 + grain * 0.06 + grit * 0.008, rock) * (1.0 - sealed * 0.85);
   geoHeight += (particles * 0.00065 + pores * 0.00012) * (1.0 - sealed)
     + looseSoil * aggregate * 0.006;
-  geoRoughness = clamp(mix(0.94, 0.79, rock) + (grain - 0.5) * 0.1 - wet * 0.27, 0.42, 0.99);
+  float mineralSpark = smoothstep(0.61, 0.78, particles) * rock;
+  float dampPores = wet * (1.0 - smoothstep(0.35, 0.65, grain)) * (1.0 - sealed);
+  diffuseColor.rgb *= 1.0 - dampPores * 0.09;
+  geoRoughness = clamp(mix(0.94, 0.79, rock) + (grain - 0.5) * 0.1 - wet * 0.27
+    - mineralSpark * 0.12 - dampPores * 0.06, 0.42, 0.99);
 } else if (geoSurfaceEnabled > 0.5) {
   float sediment = geoFilteredNoise(p, 0.18, footprint);
   float sand = geoFilteredNoise(p + 191.0, 0.008, footprint);
