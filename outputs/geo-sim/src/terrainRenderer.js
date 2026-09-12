@@ -7,7 +7,7 @@ import { REBUILT_FACILITY_KINDS } from "./facilityGeometry.js";
 import { ScannedAssetLibrary } from "./scannedAssets.js";
 import { ScannedRockInstances } from "./scannedRockInstances.js";
 import { createRiverMaterial } from "./riverMaterial.js";
-import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal } from "./terrainAppearance.js";
+import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal, surfaceDetailSuitability } from "./terrainAppearance.js";
 import { createTerrainSurfaceMaterial, updateTerrainSurfaceMaterial } from "./terrainSurfaceMaterial.js";
 import { SceneVolume } from "./sceneVolume.js";
 import { ORGANISM_KINDS, createOrganismMaterial } from "./organismGeometry.js";
@@ -1593,9 +1593,10 @@ export class TerrainRenderer {
         const angle = infrastructureAngle(model, i, x, y, "terrain", seed);
         const size = cell * step;
         const noise = hash01(x, y, seed + 5011);
+        const suitability=surfaceDetailSuitability(model,i);
         const px = base.x + (hash01(x, y, seed + 37) - 0.5) * size * 0.5;
         const pz = base.z + (hash01(y, x, seed + 43) - 0.5) * size * 0.5;
-        if (slope > 28 && roughness > 4 && noise < Math.min(0.38, slope / 92)) {
+        if (slope > 28 && roughness > 4 && noise < Math.min(0.38, slope / 92)*suitability.rock) {
           place(buckets.rocks, {
             x: px, z: pz, ry: angle,
             sx: clamp(size * (0.035 + noise * 0.02), 0.002, 0.018),
@@ -1604,7 +1605,7 @@ export class TerrainRenderer {
             color: terrainRockColor(elevation, maxElevation, noise)
           });
         }
-        if (slope > 18 && roughness > 8 && hash01(x, y, seed + 801) < 0.18) {
+        if (slope > 18 && roughness > 8 && hash01(x, y, seed + 801) < 0.18*suitability.scree) {
           place(buckets.scree, {
             x: px, z: pz, ry: angle,
             sx: clamp(size * 0.1, 0.006, 0.04), sy: clamp(size * 0.012, 0.001, 0.005),

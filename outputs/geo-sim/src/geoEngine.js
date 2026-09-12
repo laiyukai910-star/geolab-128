@@ -1,4 +1,5 @@
 import { naturalTerrainColor } from "./terrainAppearance.js";
+import { solveRectangularNormalDepth } from "./channelHydraulics.js";
 import {
   buildEcologicalIntegrityReport,
   buildLandscapeBlockNetwork,
@@ -16972,6 +16973,9 @@ function computeHydraulicDiagnostics(model, params) {
   const erosionRisk = new Float32Array(len);
   const depositionRisk = new Float32Array(len);
   const channelMask = new Uint8Array(len);
+  const normalDepthDiagnostics = {method:"finite-width-rectangular-manning",solvedCells:0,dryCells:0,depthLimitedCells:0,
+    regularizedSlopeCells:0,supercriticalCells:0,maximumRelativeResidual:0,
+    assumptions:"Uniform flow; estimated width, roughness and 2.35x mean discharge. Not a backwater or flood-wave solver."};
 
   for (let i = 0; i < len; i += 1) {
     if (model.height[i] <= seaLevel) continue;
@@ -17003,7 +17007,7 @@ function computeHydraulicDiagnostics(model, params) {
     const meanDischargeM3s = Math.max(0, (model.discharge?.[i] ?? 0) / annualSeconds);
     const localRunoffM3s = Math.max(0, (model.localRunoffAnnualM3?.[i] ?? 0) / annualSeconds);
     const designDischargeM3s = isChannel
-      ? Math.max(0.001, meanDischargeM3s * 2.35)
+      ? meanDischargeM3s * 2.35
       : Math.max(0.000001, localRunoffM3s * 0.42);
 
     let width = cellM;
@@ -17013,18 +17017,25 @@ function computeHydraulicDiagnostics(model, params) {
         2.7 * Math.pow(designDischargeM3s + 0.02, 0.42) +
           0.38 * Math.sqrt(Math.max(0.01, model.flowAccumulation?.[i] ?? 0)) +
           orderBoost * 1.1,
-        1.2,
+        Math.min(1.2, cellM * 0.72),
         cellM * 0.72
       );
     }
 
-    const hydraulicDepth = clamp(
+    const normalDepth = isChannel ? solveRectangularNormalDepth(designDischargeM3s,width,energySlope,manningN) : null;
+    const hydraulicDepth = normalDepth?.depthM ?? clamp(
       Math.pow((designDischargeM3s * manningN) / Math.max(0.000001, width * Math.sqrt(energySlope)), 3 / 5),
-      isChannel ? 0.035 : 0.001,
-      isChannel ? 15 : 0.18
+      0.001,
+      0.18
     );
-    const velocity = clamp(designDischargeM3s / Math.max(0.000001, width * hydraulicDepth), 0, isChannel ? 6 : 1.15);
-    const shear = 1000 * 9.80665 * hydraulicDepth * energySlope;
+    const velocity = normalDepth?.velocityMps ?? clamp(designDischargeM3s / Math.max(0.000001, width * hydraulicDepth), 0, 1.15);
+    const shear = 1000 * 9.80665 * (normalDepth?.hydraulicRadiusM ?? hydraulicDepth) * energySlope;
+    if(normalDepth) {
+      normalDepthDiagnostics[normalDepth.status==="dry"?"dryCells":normalDepth.status==="solved"?"solvedCells":"depthLimitedCells"]++;
+      if(drop/receiverDistance<0.00003 || drop/receiverDistance>0.35)normalDepthDiagnostics.regularizedSlopeCells++;
+      if(hydraulicDepth>0 && velocity/Math.sqrt(9.80665*hydraulicDepth)>1)normalDepthDiagnostics.supercriticalCells++;
+      normalDepthDiagnostics.maximumRelativeResidual=Math.max(normalDepthDiagnostics.maximumRelativeResidual,normalDepth.relativeResidual);
+    }
     const unitStreamPower = 1000 * 9.80665 * (designDischargeM3s / Math.max(width, 0.001)) * energySlope;
     const criticalShear = (isChannel ? 7.5 : 1.8) + rootCohesion * (isChannel ? 36 : 10) + vegetation * (isChannel ? 11 : 7) + infiltration * 7;
     const erodibility = clamp(1.18 - rootCohesion * 0.48 - vegetation * 0.22 - infiltration * 0.18 + impervious * 0.18, 0.22, 1.7);
@@ -17052,7 +17063,7 @@ function computeHydraulicDiagnostics(model, params) {
 
     flowVelocity[i] = velocity;
     channelWidthM[i] = isChannel ? width : 0;
-    channelDepthM[i] = isChannel ? hydraulicDepth : hydraulicDepth;
+    channelDepthM[i] = hydraulicDepth;
     shearStressPa[i] = shear;
     streamPowerWm2[i] = unitStreamPower;
     sedimentTransportIndex[i] = transport;
@@ -17069,7 +17080,8 @@ function computeHydraulicDiagnostics(model, params) {
     sedimentTransportIndex,
     erosionRisk,
     depositionRisk,
-    channelMask
+    channelMask,
+    normalDepthDiagnostics
   };
 }
 
@@ -19273,6 +19285,7 @@ function computeStats(model, params) {
     flowRouting: model.flowRouting || "d8",
     meanFlowDivergence: meanFlowDivergence / divisor,
     hydraulicDiagnostics: {
+      normalDepth: model.hydraulics?.normalDepthDiagnostics || null,
       meanFlowVelocityMs: meanFlowVelocity / divisor,
       meanChannelVelocityMs: channelHydraulicCells ? meanChannelVelocity / channelHydraulicCells : null,
       maxFlowVelocityMs: maxFlowVelocity,

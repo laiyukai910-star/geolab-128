@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>River network reconstruction</title>
+<link rel="icon" href="data:,"><style>html,body{margin:0;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"../../vendor/three/three.module.js","three/addons/":"../../vendor/three/addons/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {buildRiverGeometry} from '../../src/riverGeometry.js';
+import {createRiverMaterial} from '../../src/riverMaterial.js';
+import {createTerrainSurfaceMaterial,updateTerrainSurfaceMaterial} from '../../src/terrainSurfaceMaterial.js';
+import {sampleTerrainHeight} from '../../src/terrainVolume.js';
+const n=193,size=0.32;
+const paths=[[[15,15],[24,24],[33,36],[48,48],[54,57],[54,72],[60,84]],[[78,12],[69,24],[60,36],[48,48]]].map(path=>path.map(([x,z])=>[x*2,z*2]));
+const segments=paths.flatMap(path=>path.slice(1).map((p,i)=>({from:path[i][1]*n+path[i][0],to:p[1]*n+p[0]})));
+function distance(x,z,a,b){const dx=b[0]-a[0],dz=b[1]-a[1],t=THREE.MathUtils.clamp(((x-a[0])*dx+(z-a[1])*dz)/(dx*dx+dz*dz),0,1);return Math.hypot(x-a[0]-t*dx,z-a[1]-t*dz)*size*1000/(n-1);}
+const model={n,sizeKm:size,height:Float32Array.from({length:n*n},(_,i)=>{
+ const x=i%n,z=Math.floor(i/n),d=Math.min(...paths.flatMap(path=>path.slice(1).map((b,j)=>distance(x,z,path[j],b))));
+ return 80+(192-z)*0.0125+Math.min(20,d*d*0.04)+Math.sin(x*0.85+z*0.35)*0.02;
+}),riverSegments:segments,hydraulics:{channelWidthM:new Float32Array(n*n).fill(11),channelDepthM:new Float32Array(n*n).fill(1.2),flowVelocity:new Float32Array(n*n).fill(0.6)}};
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setClearColor(0xcbd7dc);document.body.append(renderer.domElement);
+const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(40,1,0.00005,10);
+scene.add(new THREE.HemisphereLight(0xffffff,0x7a8072,2));const sun=new THREE.DirectionalLight(0xfff5de,2.6);sun.position.set(-1,2,1);scene.add(sun);
+const terrain=new THREE.PlaneGeometry(size,size,192,192);terrain.rotateX(-Math.PI/2);
+const position=terrain.attributes.position,colors=[],surface=[];
+for(let i=0;i<position.count;i++){
+ const h=sampleTerrainHeight(model,position.getX(i),position.getZ(i))??80;position.setY(i,h/1000);
+ const x=(position.getX(i)/size+0.5)*(n-1),z=(position.getZ(i)/size+0.5)*(n-1);
+ const d=Math.min(...paths.flatMap(path=>path.slice(1).map((b,j)=>distance(x,z,path[j],b))));
+ const wet=1-THREE.MathUtils.smoothstep(d,4,10),color=new THREE.Color(0x668558).lerp(new THREE.Color(0x8c9571),wet);
+ colors.push(color.r,color.g,color.b);surface.push(0.08,0.65-wet*0.5,0.15+wet*0.55,0);
+}
+terrain.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));terrain.setAttribute('terrainSurface',new THREE.Float32BufferAttribute(surface,4));terrain.computeVertexNormals();
+const landMaterial=createTerrainSurfaceMaterial();updateTerrainSurfaceMaterial(landMaterial,{seaLevel:0,verticalScale:1},'landscape');scene.add(new THREE.Mesh(terrain,landMaterial));
+const water=new THREE.Mesh(buildRiverGeometry(model,{seaLevel:0,verticalScale:1,renderDetailQuality:'exhaustive'}),createRiverMaterial());water.renderOrder=3;scene.add(water);
+const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,0.085,0.005);camera.position.set(0.2,0.36,0.36);controls.update();
+function resize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)}addEventListener('resize',resize);resize();
+let time=0;
+function audit(){renderer.render(scene,camera);const gl=renderer.getContext(),data=new Uint8Array(gl.drawingBufferWidth*gl.drawingBufferHeight*4);gl.readPixels(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight,gl.RGBA,gl.UNSIGNED_BYTE,data);const colors=new Set();for(let i=0;i<data.length;i+=32)colors.add(`${data[i]>>3},${data[i+1]>>3},${data[i+2]>>3}`);return {colors:colors.size,triangles:water.geometry.index.count/3,...water.geometry.userData.riverNetwork};}
+globalThis.riverReview={audit,setTime:t=>time=t,camera,controls};
+renderer.setAnimationLoop(()=>{water.material.userData.riverUniforms.riverTime.value=time;controls.update();renderer.render(scene,camera)});
+</script></html>

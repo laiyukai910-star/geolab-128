@@ -88,18 +88,18 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   float bevel = smoothstep(0.0, 0.17, stone.y) * cellFade * weathering;
   float stoneTone = 0.75 + chips * 0.26 + layers * 0.15 - fracture * 0.16
     + (grain - 0.5) * 0.48 + (grit - 0.5) * 0.22 - joint * 0.28 + (stone.x - 0.5) * cellFade * 0.3;
-  float earthTone = 0.76 + blocks * 0.22 + grain * 0.34 + (grit - 0.5) * 0.3;
+  float earthTone = 0.84 + blocks * 0.16 + grain * 0.16 + (grit - 0.5) * 0.14;
   float aggregate = smoothstep(0.38, 0.65, grain) - 0.5;
   float looseSoil = (1.0 - rock) * (1.0 - vegetation) * (1.0 - sealed);
   earthTone += aggregate * 0.12 + (particles - 0.5) * 0.22;
   stoneTone += (particles - 0.5) * 0.16 + (pores - 0.5) * 0.08;
-  float turfTone = 0.60 + blocks * 0.36 + chips * 0.22 + grain * 0.12;
+  float turfTone = 0.83 + blocks * 0.18 + chips * 0.07 + grain * 0.035;
   float tone = mix(mix(earthTone, turfTone, vegetation), stoneTone, rock);
   diffuseColor.rgb *= mix(tone, 0.94 + grain * 0.1, sealed);
   diffuseColor.rgb += rock * (chips - 0.5) * vec3(0.022, 0.026, 0.03);
   diffuseColor.rgb += looseSoil * (grit - 0.5) * vec3(0.035, 0.021, 0.008);
   diffuseColor.rgb = max(diffuseColor.rgb, vec3(0.0));
-  geoHeight = mix(0.035 * grain + 0.07 * chips + 0.008 * grit,
+  geoHeight = mix(mix(0.035 * grain + 0.07 * chips + 0.008 * grit,0.007 * grain + 0.012 * chips,vegetation),
     0.32 * blocks + 0.12 * chips + layers * 0.035 - fracture * 0.09
     + bevel * 0.07 + grain * 0.06 + grit * 0.008, rock) * (1.0 - sealed * 0.85);
   geoHeight += (particles * 0.00065 + pores * 0.00012) * (1.0 - sealed)

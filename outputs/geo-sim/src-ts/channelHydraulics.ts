@@ -1,0 +1,40 @@
+export interface NormalDepth {
+  depthM: number;
+  areaM2: number;
+  hydraulicRadiusM: number;
+  velocityMps: number;
+  relativeResidual: number;
+  status: "dry" | "solved" | "depth-limit" | "zero-slope";
+}
+
+// SI Manning equation for a finite-width rectangular, uniform-flow section.
+export function rectangularDischarge(depthM: number, widthM: number, slope: number, roughness: number): number {
+  const area = widthM * depthM;
+  const radius = area / (widthM + 2 * depthM);
+  return area * Math.pow(radius, 2 / 3) * Math.sqrt(slope) / roughness;
+}
+
+export function solveRectangularNormalDepth(dischargeM3s: number, widthM: number, slope: number, roughness: number, maximumDepthM = 1000): NormalDepth {
+  if (![dischargeM3s, widthM, slope, roughness, maximumDepthM].every(Number.isFinite)
+    || dischargeM3s < 0 || widthM <= 0 || slope < 0 || roughness <= 0 || maximumDepthM <= 0) {
+    throw new RangeError("Normal-depth inputs must be finite and physically admissible");
+  }
+  const empty = {depthM:0,areaM2:0,hydraulicRadiusM:0,velocityMps:0,relativeResidual:0};
+  if (dischargeM3s === 0) return {...empty,status:"dry"};
+  if (slope === 0) return {...empty,relativeResidual:1,status:"zero-slope"};
+  let lower = 0;
+  let upper = Math.min(maximumDepthM, Math.max(0.001, 2 * Math.pow(dischargeM3s * roughness / (widthM * Math.sqrt(slope)), 0.6)));
+  while (upper < maximumDepthM && rectangularDischarge(upper,widthM,slope,roughness) < dischargeM3s) upper = Math.min(maximumDepthM,upper*2);
+  const limited = rectangularDischarge(upper,widthM,slope,roughness) < dischargeM3s;
+  let depth = upper;
+  if (!limited) for (let iteration=0; iteration<60; iteration++) {
+    depth = (lower+upper)*0.5;
+    const capacity = rectangularDischarge(depth,widthM,slope,roughness);
+    if (Math.abs(capacity-dischargeM3s) <= dischargeM3s*1e-9) break;
+    if (capacity < dischargeM3s) lower=depth; else upper=depth;
+  }
+  const area=widthM*depth;
+  return {depthM:depth,areaM2:area,hydraulicRadiusM:area/(widthM+2*depth),velocityMps:dischargeM3s/area,
+    relativeResidual:Math.abs(rectangularDischarge(depth,widthM,slope,roughness)-dischargeM3s)/dischargeM3s,
+    status:limited?"depth-limit":"solved"};
+}

@@ -9,9 +9,24 @@ export function terrainSurfaceWeights(model, params, index) {
   if (model.height[index] <= (Number(params?.seaLevel) || 0)) return [0, 0, 0, 0];
   const cover = unit(model.surface?.vegetation?.[index]);
   const sealed = unit(model.surface?.imperviousFraction?.[index]);
-  const rock = smooth(18, 58, model.slope?.[index]) * (1 - cover * 0.45) * (1 - sealed);
+  const deposition=unit(model.hydraulics?.depositionRisk?.[index]);
+  const erosion=unit(model.hydraulics?.erosionRisk?.[index]);
+  const rock = unit(smooth(18, 58, model.slope?.[index]) * (1 - cover * 0.45) * (1 - sealed)
+    * (1-deposition*0.55) * (1+erosion*0.2));
   const vegetation = cover * (1 - rock) * (1 - sealed);
   return [rock, vegetation, smooth(4, 14, model.wetnessIndex?.[index]), sealed];
+}
+
+// Display suitability, not a prediction of rockfall deposits or soil moisture.
+export function surfaceDetailSuitability(model,index) {
+  const sealed=unit(model.surface?.imperviousFraction?.[index]);
+  const vegetation=unit(model.surface?.vegetation?.[index]);
+  const wet=smooth(4,14,model.wetnessIndex?.[index]);
+  const deposition=unit(model.hydraulics?.depositionRisk?.[index]);
+  const erosion=model.hydraulics?.erosionRisk?unit(model.hydraulics.erosionRisk[index]):1;
+  if(model.hydraulics?.channelMask?.[index] && model.hydraulics.channelDepthM?.[index]>0)return {rock:0,scree:0};
+  return {rock:(1-sealed)*(1-vegetation*0.65)*(1-wet*0.5)*(1-deposition*0.6),
+    scree:(1-sealed)*(1-vegetation*0.85)*(1-wet*0.7)*(0.5+erosion*0.5)};
 }
 
 export function naturalTerrainColor(model, params, index, weights = null) {

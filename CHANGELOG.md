@@ -6,6 +6,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Added
 
+- Added a strict TypeScript normal-depth solver for finite-width rectangular channels, with discharge residuals, dry-flow handling and explicit depth-limit diagnostics.
 - Bundled one CC0 Poly Haven rock reference with photographed PBR textures, a Blender preparation script, and a full-canvas inspection view. Nearby terrain rocks can load the shared asset on demand; overview startup does not fetch it.
 - Added detailed and distant reference meshes (12,416 and 2,730 triangles), embedded textures, source attribution, and asset lifecycle tests. This is a reference asset pipeline, not a replacement of every facility model.
 - Added 13 locally generated organism models with a full-canvas specimen viewer: three fish forms, ray, octopus, jellyfish, crab, mussel, bat, fern, fungus, branching coral, and kelp.
@@ -14,6 +15,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Fixed
 
+- Removed independent channel depth/velocity clipping that broke discharge consistency; channel shear stress now uses hydraulic radius rather than water depth. Reported slope regularization and supercritical conditions remain limitations of the uniform-flow approximation.
 - Grounded scanned rocks using their actual thickness and the local terrain normal, preventing the previous block-shaped placement offset from leaving thin scans suspended above slopes. Cached placement transforms are reused during camera motion.
 - Removed the map-size-dependent minimum orbit distance that prevented close inspection on large maps. Terrain collision correction remains enabled.
 - Supplied neutral vertex colors for unpainted procedural and fallback geometry, preventing black instanced objects when vertex-color materials are enabled.
@@ -31,6 +33,9 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Changed
 
+- Rebuilt river meshes around shared reach sections and separate confluence mouths with triangulated junction patches. Deduplicated display links, screened cycle-affected components, preserved modeled receiver directions and removed the renderer's cell-width clamp.
+- Made water animation continuous along network coordinates and preserved inclined surface normals. Reduced high-contrast turf/soil mottling and increased shallow-river surface visibility.
+- Conditioned exposed rock and scree display density on vegetation, wetness proxies, sealed ground and active channels. Erosion/deposition diagnostics also affect mineral exposure; these are visual rules, not observed lithology or sediment deposition geometry.
 - Rebuilt 21 facility bodies and components with indexed construction geometry, including fitted glazing and reveals, hipped roofs, tank inspection ladders, dam buttresses, terraced stands, and open tunnel/gallery linings. Existing facility placement and simulation inputs are unchanged.
 - Added classified construction finishes and removed generic facade/roof overlays from rebuilt building envelopes. Seventeen legacy geometry factories now delegate to the new implementation.
 - Refined river ribbons across and along the channel, added depth-dependent transparency and velocity-directed surface animation, and filtered small ripples by screen footprint. Animation is illustrative, not a new fluid solver.
