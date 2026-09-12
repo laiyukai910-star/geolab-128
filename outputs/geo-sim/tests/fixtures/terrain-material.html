@@ -34,7 +34,8 @@ if(before) for(const tile of terrain.terrainTiles) {
 const controls=new OrbitControls(camera,renderer.domElement);
 function resize(){
  camera.aspect=innerWidth/innerHeight;
- if(query.get('shot')==='close') {controls.target.set(-0.016,0.025,0.008);camera.position.set(-0.045,0.032,0.044)}
+ if(query.get('shot')==='micro') {const h=model.height[128*n+128]/1000;controls.target.set(0,h,0);camera.position.set(0.0002,h+0.0006,0.0006)}
+ else if(query.get('shot')==='close') {controls.target.set(-0.016,0.025,0.008);camera.position.set(-0.045,0.032,0.044)}
  else {const scale=Math.max(1,0.85/camera.aspect);controls.target.set(0,0.02,0);camera.position.set(-0.12*scale,0.12*scale,0.16*scale)}
  camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);controls.update();
 }

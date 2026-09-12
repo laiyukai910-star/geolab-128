@@ -159,6 +159,13 @@ export function proceduralDetailProfile(value: unknown): ProceduralDetailProfile
   return { ...QUALITY_PROFILES[normalizeRenderDetailQuality(value)] };
 }
 
+export function foliageDetailProfile(value: unknown): { maximumDetail: number; pixelThreshold: number } {
+  const quality = normalizeRenderDetailQuality(value);
+  return quality === "exhaustive" ? { maximumDetail: 384, pixelThreshold: 10 }
+    : quality === "ultra" ? { maximumDetail: 256, pixelThreshold: 12 }
+      : { maximumDetail: 128, pixelThreshold: 16 };
+}
+
 export function createRenderDetailBudgetPlan(input: DetailBudgetInput = {}): DetailBudgetPlan {
   const resolution = Math.max(1, Math.round(Number(input.n ?? input.resolution ?? 256) || 256));
   const quality = normalizeRenderDetailQuality(input.renderDetailQuality);

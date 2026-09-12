@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Desktop foliage inspection</title>
+<style>html,body{margin:0;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"../../vendor/three/three.module.js","three/addons/":"../../vendor/three/addons/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {createFoliageGeometry} from '../../src/foliageGeometry.js';
+const renderer = new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setClearColor(0xe2e8eb);document.body.append(renderer.domElement);
+const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(38,1,0.001,100);
+scene.add(new THREE.HemisphereLight(0xffffff,0x788073,2));
+const sun = new THREE.DirectionalLight(0xfff5e5,3);sun.position.set(2,3,4);scene.add(sun);
+for (const conifer of [false,true]) {
+  const geometry = createFoliageGeometry(conifer,'ultra',1);
+  const material = new THREE.MeshStandardMaterial({color:0x71934a,vertexColors:true,roughness:0.88,side:THREE.DoubleSide});
+  const mesh = new THREE.Mesh(geometry,material);mesh.position.x=conifer?0.6:-0.6;scene.add(mesh);
+}
+const controls = new OrbitControls(camera,renderer.domElement);
+camera.position.set(1,0.4,3.8);controls.update();
+function resize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)}
+addEventListener('resize',resize);resize();
+globalThis.review={renderer,scene,camera,controls};
+renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera);globalThis.reviewReady=true});
+</script></html>

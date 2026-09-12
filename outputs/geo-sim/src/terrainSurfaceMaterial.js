@@ -68,6 +68,8 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   float chips = geoFilteredNoise(p + 71.0, 2.2, footprint);
   float grain = geoFilteredNoise(p, 0.18, footprint);
   float grit = geoFilteredNoise(p + 103.0, 0.045, footprint);
+  float particles = geoFilteredNoise(p + 191.0, 0.008, footprint);
+  float pores = geoFilteredNoise(p + 233.0, 0.002, footprint);
   float vegetation = clamp(vGeoSurface.y + (macro - 0.5) * 0.18, 0.0, 1.0);
   float rock = clamp(vGeoSurface.x + (blocks - 0.5) * 0.24, 0.0, 1.0);
   float wet = vGeoSurface.z, sealed = vGeoSurface.w;
@@ -87,21 +89,29 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   float stoneTone = 0.75 + chips * 0.26 + layers * 0.15 - fracture * 0.16
     + (grain - 0.5) * 0.48 + (grit - 0.5) * 0.22 - joint * 0.28 + (stone.x - 0.5) * cellFade * 0.3;
   float earthTone = 0.76 + blocks * 0.22 + grain * 0.34 + (grit - 0.5) * 0.3;
+  float aggregate = smoothstep(0.38, 0.65, grain) - 0.5;
+  float looseSoil = (1.0 - rock) * (1.0 - vegetation) * (1.0 - sealed);
+  earthTone += aggregate * 0.12 + (particles - 0.5) * 0.22;
+  stoneTone += (particles - 0.5) * 0.16 + (pores - 0.5) * 0.08;
   float turfTone = 0.60 + blocks * 0.36 + chips * 0.22 + grain * 0.12;
   float tone = mix(mix(earthTone, turfTone, vegetation), stoneTone, rock);
   diffuseColor.rgb *= mix(tone, 0.94 + grain * 0.1, sealed);
   diffuseColor.rgb += rock * (chips - 0.5) * vec3(0.022, 0.026, 0.03);
+  diffuseColor.rgb += looseSoil * (grit - 0.5) * vec3(0.035, 0.021, 0.008);
   diffuseColor.rgb = max(diffuseColor.rgb, vec3(0.0));
   geoHeight = mix(0.035 * grain + 0.07 * chips + 0.008 * grit,
     0.32 * blocks + 0.12 * chips + layers * 0.035 - fracture * 0.09
     + bevel * 0.07 + grain * 0.06 + grit * 0.008, rock) * (1.0 - sealed * 0.85);
+  geoHeight += (particles * 0.00065 + pores * 0.00012) * (1.0 - sealed)
+    + looseSoil * aggregate * 0.006;
   geoRoughness = clamp(mix(0.94, 0.79, rock) + (grain - 0.5) * 0.1 - wet * 0.27, 0.42, 0.99);
 } else if (geoSurfaceEnabled > 0.5) {
   float sediment = geoFilteredNoise(p, 0.18, footprint);
+  float sand = geoFilteredNoise(p + 191.0, 0.008, footprint);
   float ripple = sin(p.x * 3.8 + geoFilteredNoise(p, 2.2, footprint) * 4.0)
     * (1.0 - smoothstep(0.2, 1.4, footprint));
-  diffuseColor.rgb *= 0.86 + sediment * 0.22 + ripple * 0.08;
-  geoHeight = sediment * 0.015 + ripple * 0.018;
+  diffuseColor.rgb *= 0.86 + sediment * 0.22 + ripple * 0.08 + (sand - 0.5) * 0.16;
+  geoHeight = sediment * 0.015 + ripple * 0.018 + sand * 0.0006;
   geoRoughness = 0.75;
 }
 `;
@@ -114,13 +124,13 @@ export function createTerrainSurfaceMaterial() {
     geoVerticalScale: { value: 1 }
   };
   material.userData.terrainSurface = {
-    version: 1,
+    version: 2,
     representation: "illustrative procedural surface, not surveyed microtopography",
     coordinates: "unexaggerated local metres",
-    wavelengthsM: [160, 36, 14, 2.2, 1.7, 0.18, 0.045],
+    wavelengthsM: [160, 36, 14, 2.2, 1.7, 0.18, 0.045, 0.008, 0.002],
     uniforms
   };
-  material.customProgramCacheKey = () => "geolab-terrain-surface-v1";
+  material.customProgramCacheKey = () => "geolab-terrain-surface-v2";
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader

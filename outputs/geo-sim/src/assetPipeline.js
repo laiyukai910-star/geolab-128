@@ -153,6 +153,10 @@ function normalizeRenderDetailQuality(value) {
 function proceduralDetailProfile(value) {
   return { ...QUALITY_PROFILES[normalizeRenderDetailQuality(value)] };
 }
+function foliageDetailProfile(value) {
+  const quality = normalizeRenderDetailQuality(value);
+  return quality === "exhaustive" ? { maximumDetail: 384, pixelThreshold: 10 } : quality === "ultra" ? { maximumDetail: 256, pixelThreshold: 12 } : { maximumDetail: 128, pixelThreshold: 16 };
+}
 function createRenderDetailBudgetPlan(input = {}) {
   const resolution = Math.max(1, Math.round(Number(input.n ?? input.resolution ?? 256) || 256));
   const quality = normalizeRenderDetailQuality(input.renderDetailQuality);
@@ -239,6 +243,7 @@ export {
   assetPipelineDiagnostics,
   block3DRendererFacilityTypes,
   createRenderDetailBudgetPlan,
+  foliageDetailProfile,
   normalizeRenderDetailQuality,
   proceduralAssetVariantCount,
   proceduralAssetVariantIndex,

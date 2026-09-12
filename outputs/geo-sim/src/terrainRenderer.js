@@ -32,7 +32,8 @@ import {
   createRenderDetailBudgetPlan as detailBudgetPlan,
   proceduralAssetVariantCount,
   proceduralAssetVariantIndex,
-  proceduralMaterialProfile
+  proceduralMaterialProfile,
+  foliageDetailProfile
 } from "./assetPipeline.js";
 
 function cameraHome(sizeKm, aspect = 1.5) {
@@ -7141,7 +7142,9 @@ function addInstancedAsset(group, name, transforms, fallbackColor, options, prim
     ensureGeometryColors(geometry);
     if (semanticKind === "broadleaf-canopy" || semanticKind === "layered-conifer") {
       const distant = sharedGeometry(group, `${cacheKey}:distant`, () => createFoliageGeometry(semanticKind === "layered-conifer", "distant", variant));
-      const lod = new FoliageInstances(geometry, distant, material, variantTransforms, fallbackColor);
+      const foliageDetail = foliageDetailProfile(assetQuality);
+      const lod = new FoliageInstances(geometry, distant, material, variantTransforms, fallbackColor,
+        foliageDetail.maximumDetail, foliageDetail.pixelThreshold);
       lod.name = `${name} V${variant + 1}`;
       for (const mesh of [lod.far, lod.near]) {
         mesh.name = `${lod.name} ${mesh === lod.near ? "detail" : "distant"}`;

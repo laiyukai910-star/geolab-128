@@ -2,10 +2,11 @@ import * as THREE from "three";
 
 // THREE.LOD.update runs before child traversal, keeping both instance buffers in sync.
 export class FoliageInstances extends THREE.LOD {
-  constructor(geometry, distantGeometry, material, transforms, fallbackColor, maximumDetail = 128) {
+  constructor(geometry, distantGeometry, material, transforms, fallbackColor, maximumDetail = 128, pixelThreshold = 16) {
     super();
     this.type = "GeoLabFoliageInstances";
     this.sources = transforms;
+    this.pixelThreshold = pixelThreshold;
     this.capacity = Math.min(transforms.length, maximumDetail);
     this.near = new THREE.InstancedMesh(geometry, material, this.capacity);
     this.far = new THREE.InstancedMesh(distantGeometry, material, transforms.length);
@@ -34,7 +35,7 @@ export class FoliageInstances extends THREE.LOD {
     const extraRadius = Math.max(0, geometry.boundingSphere.radius - distantGeometry.boundingSphere.radius);
     this.near.boundingSphere.radius += extraRadius * transforms.reduce((largest, source) => Math.max(largest, source.sx, source.sy, source.sz), 0);
     this.previousView = "";
-    this.userData.foliageLod = { nearCount: 0, farCount: transforms.length, pixelThreshold: 16, maximumDetail: this.capacity };
+    this.userData.foliageLod = { nearCount: 0, farCount: transforms.length, pixelThreshold, maximumDetail: this.capacity };
   }
 
   update(camera) {
@@ -52,7 +53,7 @@ export class FoliageInstances extends THREE.LOD {
       sphere.center.set(source.x, source.y, source.z).applyMatrix4(this.matrixWorld);
       sphere.radius = Math.max(source.sx, source.sy, source.sz) * groupScale * 0.8;
       const pixels = 2 * sphere.radius * projectedScale / (camera.isOrthographicCamera ? 1 : Math.max(camera.near, sphere.center.distanceTo(cameraPosition)));
-      if (pixels >= 16 && frustum.intersectsSphere(sphere)) candidates.push({ index, pixels });
+      if (pixels >= this.pixelThreshold && frustum.intersectsSphere(sphere)) candidates.push({ index, pixels });
     });
     candidates.sort((a, b) => b.pixels - a.pixels || a.index - b.index);
     const near = new Set(candidates.slice(0, this.capacity).map(item => item.index));

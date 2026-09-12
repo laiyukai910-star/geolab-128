@@ -27,6 +27,8 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Changed
 
+- Refined near-view foliage with curved leaf surfaces, raised midribs, tapered edges, and bark shading. Ultra and exhaustive settings retain up to 256 and 384 detailed trees per variant batch, respectively.
+- Added filtered soil aggregates, mineral micrograin, and seabed sand detail down to a 2 mm procedural wavelength. These are illustrative shading layers, not additional terrain measurements or collision geometry. This update targets desktop rendering; mobile adaptation is paused.
 - Rebuilt rock and scree surfaces with joint planes, mineral banding, and size variation; replaced snow's raised strip assemblies with a continuous wind-shaped surface.
 - Consolidated sea and river visibility into one control and removed duplicate river/wetness patches from the surface-detail layer. Renamed the geological diagnostic overlay to distinguish it from the section view.
 - Moved aquatic sea-connectivity traversal and river-node classification to Rust with a binary WebAssembly interface, used by the model Worker in browser and desktop runtimes up to 4096 x 4096 cells.

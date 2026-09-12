@@ -25,7 +25,7 @@ export function createFoliageGeometry(conifer, quality, variant = 0) {
   const branch = (a, b, radius) => {
     const [axis, side, normal] = frame(b.clone().sub(a));
     const sides = distant ? 3 : 5 + tier * 2;
-    const rings = distant ? 1 : 3;
+    const rings = distant ? 1 : 3 + tier * 2;
     const first = positions.length / 3;
     for (let ring = 0; ring <= rings; ring++) {
       const t = ring / rings;
@@ -33,7 +33,8 @@ export function createFoliageGeometry(conifer, quality, variant = 0) {
       for (let i = 0; i < sides; i++) {
         const angle = i / sides * Math.PI * 2;
         const r = radius * (1 - t * 0.72) * (1 + 0.08 * Math.cos(i * 3));
-        vertex(center.clone().addScaledVector(side, Math.cos(angle) * r).addScaledVector(normal, Math.sin(angle) * r), [0.42, 0.31, 0.2]);
+        const bark = distant ? 1 : 0.88 + 0.12 * Math.cos(angle * 3 + t * 0.8);
+        vertex(center.clone().addScaledVector(side, Math.cos(angle) * r).addScaledVector(normal, Math.sin(angle) * r), [0.42 * bark, 0.31 * bark, 0.2 * bark]);
       }
     }
     for (let ring = 0; ring < rings; ring++) for (let i = 0; i < sides; i++) {
@@ -55,6 +56,29 @@ export function createFoliageGeometry(conifer, quality, variant = 0) {
     const fold = new THREE.Vector3().crossVectors(axis, lateral);
     const shade = 0.62 + random() * 0.34;
     const color = [shade * 0.88, shade, shade * 0.71];
+    if (!distant) {
+      const segments = conifer ? 3 + tier : 5 + tier * 2;
+      const first = positions.length / 3;
+      for (let row = 0; row <= segments; row++) {
+        const t = row / segments;
+        const envelope = Math.max(0.001, Math.pow(Math.sin(Math.PI * t), conifer ? 0.65 : 0.8));
+        const center = origin.clone().addScaledVector(axis, length * t)
+          .addScaledVector(fold, width * (0.3 * Math.sin(Math.PI * t) - 0.15 * t * t));
+        for (const edge of [-1, 0, 1]) {
+          const serration = conifer ? 1 : 1 + 0.07 * Math.sin(row * Math.PI * 0.5);
+          const point = center.clone().addScaledVector(lateral, edge * width * envelope * serration)
+            .addScaledVector(fold, -Math.abs(edge) * width * envelope * 0.24);
+          const tone = edge === 0 ? 1.06 : 0.92 + 0.04 * Math.sin(row * 1.7);
+          vertex(point, color.map(channel => Math.min(1, channel * tone)));
+        }
+      }
+      for (let row = 0; row < segments; row++) for (let side = 0; side < 2; side++) {
+        const a = first + row * 3 + side;
+        indices.push(a, a + 1, a + 3, a + 1, a + 4, a + 3);
+      }
+      leafCount++;
+      return;
+    }
     const base = vertex(origin, color);
     const left = vertex(origin.clone().addScaledVector(axis, length * 0.42).addScaledVector(lateral, width), color);
     const ridge = vertex(origin.clone().addScaledVector(axis, length * 0.48).addScaledVector(fold, width * 0.38), color);

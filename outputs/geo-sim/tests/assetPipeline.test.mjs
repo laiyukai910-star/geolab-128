@@ -8,10 +8,15 @@ import {
   proceduralAssetVariantIndex,
   proceduralDetailProfile,
   proceduralMaterialClass,
-  proceduralMaterialProfile
+  proceduralMaterialProfile,
+  foliageDetailProfile
 } from "../src/assetPipeline.js";
 
 assert.equal(ASSET_PIPELINE_SCHEMA_VERSION, 3);
+assert.deepEqual(foliageDetailProfile("high"), { maximumDetail: 128, pixelThreshold: 16 });
+assert.deepEqual(foliageDetailProfile("ultra"), { maximumDetail: 256, pixelThreshold: 12 });
+assert.deepEqual(foliageDetailProfile("exhaustive"), { maximumDetail: 384, pixelThreshold: 10 });
+assert.deepEqual(foliageDetailProfile(undefined), foliageDetailProfile("ultra"));
 
 const high = proceduralDetailProfile("high");
 const ultra = proceduralDetailProfile("ultra");
