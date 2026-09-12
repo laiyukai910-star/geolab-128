@@ -1570,6 +1570,15 @@ export class TerrainRenderer {
       if (height === null || height <= seaLevel) return;
       // Ground each displaced object at its actual location, with a partially embedded base.
       transform.y = height * verticalScale / 1000 + transform.sy * 0.36;
+      if(bucket===buckets.rocks) {
+        transform.surfaceY=height*verticalScale/1000;
+        const radius=Math.max(0.0005,Math.min(transform.sx,transform.sz)*0.5);
+        const sample=(x,z)=>sampleTerrainHeight(model,x,z)??height;
+        const dx=(sample(transform.x+radius,transform.z)-sample(transform.x-radius,transform.z))*verticalScale/(2000*radius);
+        const dz=(sample(transform.x,transform.z+radius)-sample(transform.x,transform.z-radius))*verticalScale/(2000*radius);
+        const length=Math.hypot(dx,1,dz);
+        transform.surfaceNormal=[-dx/length,1/length,-dz/length];
+      }
       bucket.push(transform);
       remaining--;
     };

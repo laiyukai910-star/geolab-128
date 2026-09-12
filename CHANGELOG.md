@@ -14,6 +14,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Fixed
 
+- Grounded scanned rocks using their actual thickness and the local terrain normal, preventing the previous block-shaped placement offset from leaving thin scans suspended above slopes. Cached placement transforms are reused during camera motion.
 - Removed the map-size-dependent minimum orbit distance that prevented close inspection on large maps. Terrain collision correction remains enabled.
 - Supplied neutral vertex colors for unpainted procedural and fallback geometry, preventing black instanced objects when vertex-color materials are enabled.
 - Grounded surface details at their displaced terrain positions and bounded their display dimensions instead of scaling them indefinitely with regional grid cells.

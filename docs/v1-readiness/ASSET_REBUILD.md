@@ -82,6 +82,9 @@ approximating its shape with assembled primitives.
   The script downloads hash-checked source files only during preparation.
 - In terrain: nearby rock batches load a shared reference on demand, preserve its
   proportions and use screen-size LOD. A failed load leaves procedural rocks visible.
+- Placement uses the local surface normal and scanned mesh bounds, embedding 12%
+  of its thickness in the tangent plane. This is a visual contact approximation,
+  not a rigid-body settling simulation or excavation of the terrain.
 - Imported coordinates are not independently surveyed dimensions. Display placement
   is illustrative and does not change geology, erosion or collision calculations.
 
