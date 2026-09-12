@@ -4,6 +4,8 @@ import { createFoliageGeometry } from "./foliageGeometry.js";
 import { FoliageInstances } from "./foliageInstances.js";
 import { applyConstructionFinish } from "./constructionMaterial.js";
 import { REBUILT_FACILITY_KINDS } from "./facilityGeometry.js";
+import { ScannedAssetLibrary } from "./scannedAssets.js";
+import { ScannedRockInstances } from "./scannedRockInstances.js";
 import { createRiverMaterial } from "./riverMaterial.js";
 import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal } from "./terrainAppearance.js";
 import { createTerrainSurfaceMaterial, updateTerrainSurfaceMaterial } from "./terrainSurfaceMaterial.js";
@@ -432,7 +434,7 @@ export class TerrainRenderer {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.06;
-    this.controls.minDistance = 0.28;
+    this.controls.minDistance = 0.0005;
     this.controls.maxDistance = Math.max(68, MAP_SIZE_KM * 3.4);
     this.controls.maxPolarAngle = Math.PI * 0.97;
     this.controls.target.set(0, 0.6, 0);
@@ -455,6 +457,7 @@ export class TerrainRenderer {
     this.renderLoadStats = null;
     this.blockDetailAtlasCache = new WeakMap();
     this.sharedGeometryCache = new Map();
+    this.scannedAssets = new ScannedAssetLibrary();
     this.gpuPipelineWarmupStats = { status: "idle", phases: [] };
     this.sceneDiagnosticsDirty = true;
     this.disposed = false;
@@ -464,6 +467,7 @@ export class TerrainRenderer {
     this.contextRecovery = null;
     if (typeof globalThis !== "undefined") globalThis.__geoLabRenderContextState = this.renderContextState;
     this.terrainDetailGroup = new THREE.Group();
+    this.terrainDetailGroup.scannedAssets = this.scannedAssets;
     this.terrainDetailGroup.name = "精细地表构件";
     this.subsurfaceGroup = new THREE.Group();
     this.subsurfaceGroup.name = "地下立方体剖切";
@@ -847,12 +851,22 @@ export class TerrainRenderer {
   }
 
   inspectOrganism(kind) {
+    this.inspectionRequest=(this.inspectionRequest||0)+1;
     if(!this.organismInspector)this.organismInspector=new OrganismInspector(this.renderer);
     this.controls.enabled=false;this.organismInspector.show(kind);
   }
 
   leaveOrganismInspector() {
+    this.inspectionRequest=(this.inspectionRequest||0)+1;
     this.organismInspector?.hide();this.controls.enabled=true;
+  }
+
+  async inspectReferenceAsset() {
+    const request=this.inspectionRequest=(this.inspectionRequest||0)+1;
+    const asset=await this.scannedAssets.loadRock();
+    if(this.disposed || request!==this.inspectionRequest)return false;
+    if(!this.organismInspector)this.organismInspector=new OrganismInspector(this.renderer);
+    this.controls.enabled=false;this.organismInspector.showReference(asset);return true;
   }
 
   updateView(viewMode, dirtyBounds = null) {
@@ -1023,7 +1037,7 @@ export class TerrainRenderer {
     this.camera.far = Math.max(160, sizeKm * 10);
     this.camera.near = 0.00005;
     this.camera.updateProjectionMatrix();
-    this.controls.minDistance = Math.max(0.05, sizeKm * 0.0025);
+    this.controls.minDistance = 0.0005;
     this.controls.maxDistance = Math.max(68, sizeKm * 3.4);
     this.updateGrid(sizeKm);
     if (shouldResetCamera) {
@@ -1176,6 +1190,7 @@ export class TerrainRenderer {
       disposeObjectTree(this.vegetation);
     }
     disposeSharedGeometryCache(this.sharedGeometryCache);
+    this.scannedAssets?.dispose();
     this.controls.dispose();
     this.renderer.dispose();
   }
@@ -7158,6 +7173,12 @@ function addInstancedAsset(group, name, transforms, fallbackColor, options, prim
         || createFallbackAssetGeometry(primitiveType, options)
     );
     ensureGeometryColors(geometry);
+    if (semanticKind === "fractured-rock" && group.scannedAssets) {
+      const lod = new ScannedRockInstances(geometry,material,variantTransforms,fallbackColor,group.scannedAssets);
+      lod.name = `${name} reference LOD`;
+      for(const mesh of [lod.near,lod.far])mesh.userData.assetKind=semanticKind;
+      group.add(lod);meshes.push(lod.near,lod.far);return;
+    }
     if (semanticKind === "broadleaf-canopy" || semanticKind === "layered-conifer") {
       const distant = sharedGeometry(group, `${cacheKey}:distant`, () => createFoliageGeometry(semanticKind === "layered-conifer", "distant", variant));
       const foliageDetail = foliageDetailProfile(assetQuality);
@@ -7257,13 +7278,16 @@ function writeInstanceTransforms(mesh, transforms, fallbackColor = 0xffffff) {
 }
 
 function disposeObjectTree(root) {
+  const materialsToDispose=new Set();
   root.traverse((child) => {
+    const fallback=child.disposeReference?.();if(fallback)materialsToDispose.add(fallback);
     if (child.geometry && !child.geometry.userData?.sharedGeometryCacheOwned) child.geometry.dispose();
     if (child.material) {
       const materials = Array.isArray(child.material) ? child.material : [child.material];
-      materials.forEach((material) => material.dispose?.());
+      materials.forEach((material) => { if(!material.userData.scannedLibraryOwned)materialsToDispose.add(material); });
     }
   });
+  materialsToDispose.forEach(material=>material.dispose?.());
   root.clear();
 }
 

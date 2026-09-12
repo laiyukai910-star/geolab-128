@@ -858,6 +858,14 @@ function bindUi() {
   document.getElementById("queueWildlifeRelease")?.addEventListener("click", queueWildlifeReleaseBatch);
   document.getElementById("inspectOrganism")?.addEventListener("click",()=>renderer.inspectOrganism(document.getElementById("specimenKind").value));
   document.getElementById("leaveOrganismInspector")?.addEventListener("click",()=>renderer.leaveOrganismInspector());
+  document.getElementById("leaveReferenceInspector")?.addEventListener("click",()=>renderer.leaveOrganismInspector());
+  document.getElementById("inspectReferenceAsset")?.addEventListener("click",async event=>{
+    const button=event.currentTarget,status=document.getElementById("referenceAssetStatus");
+    button.disabled=true;status.hidden=true;
+    try {await renderer.inspectReferenceAsset();}
+    catch {status.textContent="本地扫描模型加载失败，请重试。";status.hidden=false;}
+    finally {button.disabled=false;}
+  });
   document.getElementById("executeWildlifeReleases")?.addEventListener("click", executeWildlifeReleaseBatches);
   document.getElementById("clearWildlifeReleases")?.addEventListener("click", clearWildlifeReleaseBatches);
   document.getElementById("exportEcologicalIntegrity")?.addEventListener("click", exportEcologicalIntegrity);

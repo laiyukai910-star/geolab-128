@@ -5,6 +5,7 @@ const EXACT = Object.freeze({
   "洞穴长度 m":"Cave length m","洞室半径 m":"Chamber radius m","洞室中心埋深 m":"Chamber center depth m",
   "喀斯特洞穴情景":"Karst cave scenario",
   "生物形态":"Organism anatomy","模型近观":"Inspect specimen","返回沙盘":"Return to terrain",
+  "实景扫描模型":"Scanned reference model","本地扫描模型加载失败，请重试。":"Local reference model could not load. Please retry.",
   "溪流鳟鱼型":"Stream trout morphotype","淡水鲈鱼型":"Freshwater perch morphotype","珊瑚礁鱼型":"Reef fish morphotype",
   "近岸鳐鱼型":"Coastal ray morphotype","礁栖章鱼型":"Reef octopus morphotype","钵水母型":"Jellyfish morphotype",
   "近岸蟹型":"Shore crab morphotype","淡水蚌型":"Freshwater mussel morphotype",

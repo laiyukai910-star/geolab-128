@@ -18,8 +18,17 @@ export class OrganismInspector {
     this.controls.enabled=false;this.active=false;
   }
   show(kind) {
+    this.setMesh(new THREE.Mesh(createOrganismGeometry(kind,"exhaustive"),createOrganismMaterial(kind)));
+    globalThis.__geoLabSpecimenStats={kind,triangles:this.mesh.geometry.index.count/3,...this.mesh.geometry.userData.anatomy};
+  }
+  showReference(asset) {
+    const material=asset.material.clone();material.clippingPlanes=null;
+    this.setMesh(new THREE.Mesh(asset.geometry.clone(),material));
+    globalThis.__geoLabSpecimenStats={kind:"rock-09-reference",triangles:this.mesh.geometry.index.count/3,source:asset.source,license:"CC0-1.0"};
+  }
+  setMesh(mesh) {
     this.mesh?.geometry.dispose();this.mesh?.material.dispose();if(this.mesh)this.scene.remove(this.mesh);
-    this.mesh=new THREE.Mesh(createOrganismGeometry(kind,"exhaustive"),createOrganismMaterial(kind));
+    this.mesh=mesh;
     this.mesh.castShadow=true;this.mesh.receiveShadow=true;
     this.scene.add(this.mesh);this.active=true;this.controls.enabled=true;
     const box=this.mesh.geometry.boundingBox,center=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());
@@ -28,12 +37,11 @@ export class OrganismInspector {
     const distance=Math.max(size.x/Math.min(1,aspect),size.y,size.z)*1.75;
     this.camera.position.copy(center).add(new THREE.Vector3(0.5,0.35,1).normalize().multiplyScalar(distance));
     this.controls.update();
-    globalThis.__geoLabSpecimenStats={kind,triangles:this.mesh.geometry.index.count/3,...this.mesh.geometry.userData.anatomy};
   }
   hide(){this.active=false;this.controls.enabled=false;}
   render(time){
     this.camera.aspect=this.renderer.domElement.clientWidth/Math.max(1,this.renderer.domElement.clientHeight);
-    this.camera.updateProjectionMatrix();this.controls.update();this.mesh.material.userData.organismTime.value=time;
+    this.camera.updateProjectionMatrix();this.controls.update();if(this.mesh.material.userData.organismTime)this.mesh.material.userData.organismTime.value=time;
     const shadows=this.renderer.shadowMap.enabled;this.renderer.shadowMap.enabled=true;
     this.renderer.render(this.scene,this.camera);this.renderer.shadowMap.enabled=shadows;
   }

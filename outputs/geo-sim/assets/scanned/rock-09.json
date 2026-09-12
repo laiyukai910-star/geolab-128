@@ -1,0 +1,21 @@
+{
+  "source": "https://polyhaven.com/a/rock_09",
+  "license": "CC0-1.0",
+  "sourceDimensionsM": [
+    0.07400986552238464,
+    0.1446245163679123,
+    0.03286941349506378
+  ],
+  "lods": [
+    {
+      "file": "rock-09-detail.glb",
+      "triangles": 12416,
+      "bytes": 5925872
+    },
+    {
+      "file": "rock-09-distant.glb",
+      "triangles": 2730,
+      "bytes": 98372
+    }
+  ]
+}

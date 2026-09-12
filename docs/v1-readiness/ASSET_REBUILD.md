@@ -61,8 +61,38 @@ not on the appearance of animated water. See the
 Geological surfaces add filtered lamination and mineral micrograin while retaining
 existing cave clipping and inspection lighting. They do not infer observed strata.
 
-## Desktop Verification
+## Reference Asset Pipeline
 
+The right-hand analysis drawer includes **Scanned reference model** and
+**Return to sandbox**. The reference viewer supports orbit and close inspection
+without rebuilding scientific fields. Large-map orbit distance no longer prevents
+meter-scale inspection.
+
+The first bundled reference is [Poly Haven Rock 09](https://polyhaven.com/a/rock_09),
+distributed under [CC0](https://polyhaven.com/license). Its source mesh and 2K
+base-color, tangent-space normal and packed surface maps are processed in local
+Blender and embedded in GLB. This is an external reference, not a GeoLab-authored
+scan. The pipeline retains its irregular mesh and UV mapping rather than
+approximating its shape with assembled primitives.
+
+- Detailed mesh: 12,416 triangles, 5,925,872 bytes including textures.
+- Distant mesh: 2,730 triangles, 98,372 bytes; shares the detailed material.
+- Runtime files: `outputs/geo-sim/assets/scanned/`; no external asset requests.
+- Preparation: run `powershell -File tools/prepare-rock-scan.ps1` with Blender installed.
+  The script downloads hash-checked source files only during preparation.
+- In terrain: nearby rock batches load a shared reference on demand, preserve its
+  proportions and use screen-size LOD. A failed load leaves procedural rocks visible.
+- Imported coordinates are not independently surveyed dimensions. Display placement
+  is illustrative and does not change geology, erosion or collision calculations.
+
+Only this rock reference is integrated so far. Facilities, vegetation and other
+organisms retain their existing implementations. More triangles or a normal map
+alone do not establish scientific fidelity.
+
+## Desktop Checks
+
+- Reference assets: embedded GLB/PBR contracts, coalesced loading, retries, disposal and section-plane inheritance.
+- Reference LOD fixture: 1600 x 900 and 2560 x 1440 canvas checks, deferred loading and near/distant switching.
 - All registered templates: finite position/color buffers and valid indices.
 - All 21 rebuilt templates: increasing geometry detail across quality tiers and stable bounds.
 - Tunnel/gallery openings: unobstructed central ray in all three quality tiers.
@@ -72,6 +102,7 @@ existing cave clipping and inspection lighting. They do not infer observed strat
 - Desktop EXE: bundled local modules and Three.js addon; no remote model or texture downloads.
 
 The inspection scene is `outputs/geo-sim/tests/fixtures/facility-rebuild.html`.
+The scanned LOD scene is `outputs/geo-sim/tests/fixtures/scanned-reference.html`.
 It uses normalized construction parts with representative display proportions,
 not a surveyed settlement. Mobile adaptation is paused.
 

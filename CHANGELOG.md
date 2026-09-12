@@ -6,12 +6,15 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Added
 
+- Bundled one CC0 Poly Haven rock reference with photographed PBR textures, a Blender preparation script, and a full-canvas inspection view. Nearby terrain rocks can load the shared asset on demand; overview startup does not fetch it.
+- Added detailed and distant reference meshes (12,416 and 2,730 triangles), embedded textures, source attribution, and asset lifecycle tests. This is a reference asset pipeline, not a replacement of every facility model.
 - Added 13 locally generated organism models with a full-canvas specimen viewer: three fish forms, ray, octopus, jellyfish, crab, mussel, bat, fern, fungus, branching coral, and kelp.
 - Added eight aquatic functional profiles with freshwater/marine separation, depth and salinity screening, water-site placement, and water-connected block migration.
 - Added an adjustable illustrative karst cavity with connected passages, interior rock surfaces, speleothems, and cave-life exemplars. It does not infer caves from geological observations or alter groundwater calculations.
 
 ### Fixed
 
+- Removed the map-size-dependent minimum orbit distance that prevented close inspection on large maps. Terrain collision correction remains enabled.
 - Supplied neutral vertex colors for unpainted procedural and fallback geometry, preventing black instanced objects when vertex-color materials are enabled.
 - Grounded surface details at their displaced terrain positions and bounded their display dimensions instead of scaling them indefinitely with regional grid cells.
 - Kept accidental underground camera correction at the same map location instead of retreating along the viewing ray to a distant boundary.
