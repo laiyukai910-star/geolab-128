@@ -14,6 +14,7 @@ import { ORGANISM_KINDS, createOrganismMaterial } from "./organismGeometry.js";
 import { OrganismInspector } from "./organismInspector.js";
 import { buildRiverGeometry } from "./riverGeometry.js";
 import { sampleTerrainHeight } from "./terrainVolume.js";
+import { createSiteFoundation } from "./siteFoundation.js";
 import {
   buildAdaptiveInfrastructurePlacementPlan,
   buildBlockDetailAtlas,
@@ -2230,6 +2231,12 @@ export class TerrainRenderer {
 
           transform.authoredEnvelope = true;
           if (type === "tunnel_portal" || type === "metro_station") continue;
+          const bucketStarts = Object.fromEntries(Object.entries(buckets).map(([key, rows]) => [key, rows.length]));
+          const site = createSiteFoundation(model, {
+            ...transform,
+            sx: footprint * (INDUSTRIAL_SILHOUETTE_TYPES.has(type) ? 1.45 : 1),
+            sz: depth * (INDUSTRIAL_SILHOUETTE_TYPES.has(type) ? 1.25 : 1)
+          }, Number(this.params.verticalScale));
           if (type === "highrise" || (localHeightM >= 95 && density > 0.35)) {
             buckets.highrise.push(transform);
             if (!transform.authoredEnvelope) buckets.caps.push({
@@ -2306,6 +2313,17 @@ export class TerrainRenderer {
           const diagnosticResult = pushBuildingDiagnosticLayers(buckets, transform, diagnosticState, footprint, depth, localAngle, base.y, cell, diagnosticBudgetRemaining);
           diagnosticBudgetRemaining -= diagnosticResult.added;
           skippedDiagnosticInstanceCount += diagnosticResult.skipped;
+          if (site) {
+            const lift = site.top - base.y;
+            for (const [key, rows] of Object.entries(buckets)) {
+              for (let j = bucketStarts[key]; j < rows.length; j++) rows[j].y += lift;
+            }
+            const foundation = new THREE.Mesh(site.geometry, new THREE.MeshStandardMaterial({ color: 0x85847b, roughness: 0.94 }));
+            foundation.name = "Terrain-fitted building foundation";
+            foundation.receiveShadow = true;
+            foundation.castShadow = true;
+            this.infrastructureGroup.add(foundation);
+          }
           buildingInstanceCount += 1;
           damageSum += diagnosticState.damage;
           recoveryPressureSum += diagnosticState.recoveryPressure;

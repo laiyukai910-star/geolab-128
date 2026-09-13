@@ -17,6 +17,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Fixed
 
+- Grounded individual building envelopes using 25 samples over their rotated footprint, with level foundation tops and terrain-following skirts. Building-specific attachments move with their envelope; terrain and hydrological arrays remain unchanged. This does not yet reconstruct road connections or shoreline transitions.
 - Removed a fixed 12-metre vegetation placement lift and sampled terrain elevation at the displaced planting position.
 - Hid infrastructure diagnostic envelopes, pressure beacons and ecological role markers in the natural landscape view while retaining them in analytical views.
 - Removed independent channel depth/velocity clipping that broke discharge consistency; channel shear stress now uses hydraulic radius rather than water depth. Reported slope regularization and supercritical conditions remain limitations of the uniform-flow approximation.
