@@ -1,42 +1,198 @@
+import {
+  rockMassStrength,
+  regolithThicknessM,
+  landformClass,
+  lithologyMechanicalProperties,
+  layerStructureSpacingM
+} from "./geoLithology.js";
+import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
+
 const unit = value => Math.min(1, Math.max(0, Number(value) || 0));
 const smooth = (low, high, value) => {
   const t = unit((value - low) / (high - low));
   return t * t * (3 - 2 * t);
 };
 
-// Visual proxies only: wetness index is not measured soil moisture or lithology.
-export function terrainSurfaceWeights(model, params, index) {
-  if (model.height[index] <= (Number(params?.seaLevel) || 0)) return [0, 0, 0, 0];
+/**
+ * Geomorphic description of one surface cell, derived from the lithology that underlies it.
+ *
+ * This is the part of the surface appearance that has a physical basis: rock mass strength and
+ * weathered-cover thickness follow the relationships in geoLithology.js, and the three surface
+ * fractions are then apportioned by the processes that actually move material. Where a cell has no
+ * subsurface column the previous slope/cover/wetness heuristic is used instead, so imported
+ * scenarios without a subsurface model keep their established appearance.
+ */
+export function surfaceGeomorphology(model, params, index, options = {}) {  const height = Number(model.height?.[index]) || 0;
+  const slope = Math.max(0, Number(model.slope?.[index]) || 0);
+  const wetnessIndex = Number(model.wetnessIndex?.[index]) || 0;
   const cover = unit(model.surface?.vegetation?.[index]);
   const sealed = unit(model.surface?.imperviousFraction?.[index]);
-  const deposition=unit(model.hydraulics?.depositionRisk?.[index]);
-  const erosion=unit(model.hydraulics?.erosionRisk?.[index]);
-  const rock = unit(smooth(18, 58, model.slope?.[index]) * (1 - cover * 0.45) * (1 - sealed)
-    * (1-deposition*0.55) * (1+erosion*0.2));
-  const vegetation = cover * (1 - rock) * (1 - sealed);
-  return [rock, vegetation, smooth(4, 14, model.wetnessIndex?.[index]), sealed];
+  const deposition = unit(model.hydraulics?.depositionRisk?.[index]);
+  const erosion = Number.isFinite(model.hydraulics?.erosionRisk?.[index]) ? unit(model.hydraulics.erosionRisk[index]) : 0.5;
+  const seeded = !!model.hydraulics?.channelMask?.[index] && (model.hydraulics?.channelDepthM?.[index] ?? 0) > 0;
+
+  // The table has to default here, not only at the public wrappers: a caller that forgets it would
+  // otherwise silently receive the no-lithology fallback and pack it as a meaningless spacing.
+  const table = options.lithologyTable || SUBSURFACE_LITHOLOGY;
+  const volume = model.subsurface;
+  const columnIndex = Number.isInteger(options.columnIndex) ? options.columnIndex
+    : subsurfaceColumnIndex(model, index);
+  const lithologyCode = columnIndex >= 0 ? (volume?.lithologyCode?.[columnIndex] ?? 0) : -1;
+  // The derivation needs both a resolved column and a usable table; otherwise fall back rather than
+  // invent a rock mass from nothing.
+  const usableTable = !!table?.[lithologyCode >= 0 ? lithologyCode : 0] || !!table?.[0];
+  const lithology = lithologyCode >= 0 && usableTable ? (table[lithologyCode] || table[0] || null) : null;
+  if (!lithology) {
+    // Fallback: no subsurface column, so keep the established slope/cover/wetness proxy.
+    const rock = unit(smooth(18, 58, slope) * (1 - cover * 0.45) * (1 - sealed) * (1 - deposition * 0.55) * (1 + erosion * 0.2));
+    const vegetation = cover * (1 - rock) * (1 - sealed);
+    return {
+      source: "surface-proxy",
+      lithologyCode: -1, lithologyName: null, landform: null,
+      rockMassStrength: null, regolithM: null, jointSpacingM: null, jointStyle: null,
+      rock, scree: unit((1 - sealed) * (1 - cover * 0.85) * (1 - unit(smooth(4, 14, wetnessIndex)) * 0.7) * (0.5 + erosion * 0.5)),
+      vegetation, regolith: unit(1 - rock - vegetation - sealed),
+      wet: smooth(4, 14, wetnessIndex), sealed, seeded
+    };
+  }
+
+  const depthEdges = volume?.depthEdgesM;
+  // The jointed unit behind the surface is the whole weathered-plus-bedrock package, not just the
+  // topmost slice, so its characteristic bed thickness is the thickness-weighted harmonic mean of
+  // the layers. A thinly interbedded sequence therefore stays closely jointed even when one thick
+  // bed sits at the top.
+  const bedThicknessM = effectiveBedThicknessM(volume, columnIndex, depthEdges);
+  const topLayerLithology = lithology;
+  const { spacingM, style, stiffness } = layerStructureSpacingM(lithologyCode, bedThicknessM, 0, table);
+  const strength = rockMassStrength(topLayerLithology, spacingM, smooth(4, 14, wetnessIndex));
+
+  const regolithM = regolithThicknessM({
+    porosity: lithologyMechanicalProperties(lithology).porosity,
+    meanTemperatureC: Number(model.temperature?.[index]) || 0,
+    precipitationMmYr: Number(model.precipitation?.[index]) || 0,
+    slopeDeg: slope,
+    wetnessIndex
+  });
+
+  // Bare rock is where cover cannot be held: steep ground, a strong mass, thin weathered cover,
+  // active erosion, or a channel bed that is swept by flow.
+  const steepness = smooth(20, 55, slope);
+  const coverRetention = 1 / (1 + regolithM / 0.25);
+  const strengthTerm = unit((strength - 40) / 55);
+  const rock = seeded ? 1 : unit((1 - sealed) * steepness * (1 - cover * 0.55) * (1 - deposition * 0.5)
+    * (0.45 + 0.55 * strengthTerm) * (0.35 + 0.65 * coverRetention) * (0.75 + 0.5 * erosion));
+  // Scree is material shed from above and trapped below; it needs a slope to deliver it and
+  // enough weathered debris to supply it.
+  const scree = seeded ? 0 : unit((1 - sealed) * (1 - cover * 0.85) * (1 - rock) * smooth(18, 42, slope)
+    * (0.3 + 0.7 * erosion) * (0.4 + 0.6 * unit(regolithM / 0.6)) * (0.55 + 0.45 * strengthTerm));
+  const vegetation = unit(cover * (1 - rock) * (1 - sealed) * (1 - scree * 0.6));
+  const regolith = unit(1 - rock - scree - vegetation - sealed);
+
+  return {
+    source: "lithology",
+    lithologyCode, lithologyName: lithology.name, landform: landformClass({ rockMassStrengthValue: strength, regolithM, slopeDeg: slope }),
+    rockMassStrength: strength, regolithM, jointSpacingM: spacingM, jointStyle: style, stiffness,
+    rock, scree, vegetation, regolith,
+    wet: smooth(4, 14, wetnessIndex), sealed, seeded
+  };
+}
+
+/**
+ * Characteristic bed thickness of the package under one surface cell: the thickness-weighted
+ * harmonic mean of its layer thicknesses, which is the thickness a single equivalent bed would
+ * need in order to fracture at the same spacing as the interbedded stack.
+ */
+function effectiveBedThicknessM(volume, columnIndex, depthEdges) {
+  if (!depthEdges || depthEdges.length < 2 || columnIndex < 0) return 1;
+  const layerCount = Math.min(volume.layerCount || (depthEdges.length - 1), depthEdges.length - 1);
+  let inverseSum = 0, counted = 0;
+  for (let layer = 0; layer < layerCount; layer += 1) {
+    const thickness = Math.max(0.02, (depthEdges[layer + 1] ?? 0) - (depthEdges[layer] ?? 0));
+    inverseSum += 1 / thickness;
+    counted += 1;
+  }
+  return counted > 0 && inverseSum > 0 ? counted / inverseSum : 1;
+}
+
+function subsurfaceColumnIndex(model, surfaceIndex) {  const volume = model?.subsurface;
+  if (!volume?.columnCellCount) return -1;
+  if (volume.columnCellCount === model.n * model.n) return surfaceIndex;
+  const x = surfaceIndex % model.n;
+  const y = Math.floor(surfaceIndex / model.n);
+  const gx = Math.min(volume.gridN - 1, Math.max(0, Math.round((x / Math.max(1, model.n - 1)) * (volume.gridN - 1))));
+  const gy = Math.min(volume.gridN - 1, Math.max(0, Math.round((y / Math.max(1, model.n - 1)) * (volume.gridN - 1))));
+  return gy * volume.gridN + gx;
+}
+
+/**
+ * Packed surface weights. Kept as [rock, vegetation, wet, sealed] because that is the layout the
+ * terrain vertex buffer and shader already use; scree and regolith fold into the soil response
+ * through the colour function instead of widening the buffer.
+ */
+export function terrainSurfaceWeights(model, params, index, lithologyTable = SUBSURFACE_LITHOLOGY, prepared = null) {
+  if (model.height[index] <= (Number(params?.seaLevel) || 0)) return [0, 0, 0, 0];
+  const geomorphology = prepared || surfaceGeomorphology(model, params, index, { lithologyTable });
+  return [geomorphology.rock, geomorphology.vegetation, geomorphology.wet, geomorphology.sealed];
 }
 
 // Display suitability, not a prediction of rockfall deposits or soil moisture.
-export function surfaceDetailSuitability(model,index) {
-  const sealed=unit(model.surface?.imperviousFraction?.[index]);
-  const vegetation=unit(model.surface?.vegetation?.[index]);
-  const wet=smooth(4,14,model.wetnessIndex?.[index]);
-  const deposition=unit(model.hydraulics?.depositionRisk?.[index]);
-  const erosion=model.hydraulics?.erosionRisk?unit(model.hydraulics.erosionRisk[index]):1;
-  if(model.hydraulics?.channelMask?.[index] && model.hydraulics.channelDepthM?.[index]>0)return {rock:0,scree:0};
-  return {rock:(1-sealed)*(1-vegetation*0.65)*(1-wet*0.5)*(1-deposition*0.6),
-    scree:(1-sealed)*(1-vegetation*0.85)*(1-wet*0.7)*(0.5+erosion*0.5)};
+export function surfaceDetailSuitability(model, index, lithologyTable = SUBSURFACE_LITHOLOGY, prepared = null) {
+  const sealed = unit(model.surface?.imperviousFraction?.[index]);
+  const vegetation = unit(model.surface?.vegetation?.[index]);
+  const wet = smooth(4, 14, model.wetnessIndex?.[index]);
+  const deposition = unit(model.hydraulics?.depositionRisk?.[index]);
+  const erosion = model.hydraulics?.erosionRisk?.[index] ? unit(model.hydraulics.erosionRisk[index]) : 1;
+  if (model.hydraulics?.channelMask?.[index] && model.hydraulics.channelDepthM?.[index] > 0) return { rock: 0, scree: 0 };
+  const geomorphology = prepared || surfaceGeomorphology(model, { seaLevel: 0 }, index, { lithologyTable });
+  if (geomorphology.source === "lithology") return { rock: geomorphology.rock, scree: geomorphology.scree };
+  return {
+    rock: (1 - sealed) * (1 - vegetation * 0.65) * (1 - wet * 0.5) * (1 - deposition * 0.6),
+    scree: (1 - sealed) * (1 - vegetation * 0.85) * (1 - wet * 0.7) * (0.5 + erosion * 0.5)
+  };
 }
 
-export function naturalTerrainColor(model, params, index, weights = null) {
+// The structure buffer carries the two spacings the surface shader needs to draw joints and beds
+// at the right scale. Both are logarithmic, because joint spacing spans two orders of magnitude
+// between a closely fractured mudstone and a sparsely jointed granite.
+const JOINT_SPACING_RANGE_M = [0.02, 20];
+const BED_THICKNESS_RANGE_M = [0.01, 50];
+const packLog = (value, [low, high]) => {
+  const clamped = Math.min(high, Math.max(low, Number(value) || low));
+  return Math.round(255 * (Math.log(clamped / low) / Math.log(high / low)));
+};
+export const unpackLog = (byte, [low, high]) => low * Math.pow(high / low, byte / 255);
+
+/** Pack geomorphic structure into four normalized bytes for the terrain vertex buffer. */
+export function packTerrainStructure(model, geomorphology) {
+  const bedThicknessM = model?.subsurface?.depthEdgesM
+    ? Math.max(0.01, (model.subsurface.depthEdgesM[1] ?? 1) - (model.subsurface.depthEdgesM[0] ?? 0))
+    : 1;
+  return [
+    packLog(geomorphology?.jointSpacingM ?? 1, JOINT_SPACING_RANGE_M),
+    packLog(bedThicknessM, BED_THICKNESS_RANGE_M),
+    Math.round(255 * unit(geomorphology?.stiffness ?? 0.5)),
+    Math.round(255 * unit((geomorphology?.rockMassStrength ?? 50) / 100))
+  ];
+}
+export const TERRAIN_STRUCTURE_RANGES = Object.freeze({ jointSpacingM: JOINT_SPACING_RANGE_M, bedThicknessM: BED_THICKNESS_RANGE_M });
+
+export function naturalTerrainColor(model, params, index, weights = null, lithologyTable = SUBSURFACE_LITHOLOGY, prepared = null) {
   if (model.height[index] <= (Number(params?.seaLevel) || 0)) return [142, 151, 132];
-  const [rock, vegetation, wet, sealed] = weights || terrainSurfaceWeights(model, params, index);
+  const geomorphology = prepared || surfaceGeomorphology(model, params, index, { lithologyTable });
+  const [rock, vegetation, wet, sealed] = weights || [geomorphology.rock, geomorphology.vegetation, geomorphology.wet, geomorphology.sealed];
   const soil = [139, 121, 93];
   const mineral = [147, 151, 146];
   const plant = [65, 108, 54];
-  return soil.map((value, channel) => {
-    const natural = value * (1 - rock - vegetation) + mineral[channel] * rock + plant[channel] * vegetation;
+  // Weathered cover and scree are drawn toward the lithology's own colour, so a granite upland and
+  // a clay plain stop sharing one regolith tone.
+  const lithologyColor = lithologyTable?.[geomorphology.lithologyCode]?.color || null;
+  const cover = unit(geomorphology.regolith ?? 0) + unit(geomorphology.scree ?? 0);
+  const regolithTone = lithologyColor
+    ? soil.map((value, channel) => value * 0.72 + lithologyColor[channel] * 0.28)
+    : soil;
+  return regolithTone.map((value, channel) => {
+    const natural = value * (1 - rock - vegetation) * (0.75 + 0.25 * unit(cover))
+      + mineral[channel] * rock + plant[channel] * vegetation;
     return (natural * (1 - sealed) + 136 * sealed) * (1 - wet * 0.18);
   });
 }

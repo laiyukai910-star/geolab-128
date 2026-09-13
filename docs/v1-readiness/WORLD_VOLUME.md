@@ -24,6 +24,25 @@ fill nor its color represents subsurface light, temperature, or a new rock type.
 
 ![Solid regional terrain, coast and sky](media/volume-solid.png)
 
+## Surface Rock And Cover
+
+Which parts of the surface read as bare rock, scree, soil or vegetation is derived from the
+lithology under each cell rather than from one slope curve. `src/geoLithology.js` computes a rock
+mass resistance in the manner of Selby's geomorphic classification, a joint spacing that scales
+with bed thickness, a columnar spacing for cooling units, and a weathered-cover thickness from the
+balance between weathering production and slope-driven removal. Its inputs are the model's own
+porosity, permeability and dry density; the published relations and the constants chosen by the
+author are both marked in that file.
+
+The terrain surface shader receives the resulting joint and bed spacings through the packed
+`terrainStructure` vertex attribute, so procedural joint cells and bedding banding follow the
+actual rock rather than one fixed wavelength. A sparsely jointed competent rock and a closely
+fractured weak one therefore no longer share a cell size, and weathered cover is tinted toward the
+lithology's own colour.
+
+A scenario without a subsurface model has no lithology to read, so the previous
+slope/cover/wetness proxy is used unchanged in that case.
+
 ## Geological Section
 
 The Layers drawer provides a Volume view selector. Geological section removes

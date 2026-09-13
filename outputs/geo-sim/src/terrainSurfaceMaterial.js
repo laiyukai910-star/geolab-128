@@ -3,8 +3,15 @@ import * as THREE from "three";
 const VARYINGS = /* glsl */`
 varying vec3 vGeoPositionM;
 varying vec4 vGeoSurface;
+varying vec4 vGeoStructure;
 uniform float geoSurfaceEnabled;
 uniform float geoSeaLevel;
+// Structure bytes are logarithmic. See TERRAIN_STRUCTURE_RANGES in terrainAppearance.js.
+const vec2 GEO_JOINT_SPACING_RANGE_M = vec2(0.02, 20.0);
+const vec2 GEO_BED_THICKNESS_RANGE_M = vec2(0.01, 50.0);
+float geoUnpackLog(float byte, vec2 range) {
+  return range.x * pow(range.y / range.x, byte);
+}
 `;
 
 const SURFACE_FUNCTIONS = /* glsl */`
@@ -63,6 +70,11 @@ float geoRoughness = 0.92;
 vec3 p = vGeoPositionM;
 float footprint = max(length(dFdx(p)), length(dFdy(p)));
 if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
+  // Joint and bed spacings come from the lithology and bed thickness under this cell, so a
+  // sparsely jointed granite and a closely fractured mudstone no longer share one cell size.
+  float jointSpacingM = geoUnpackLog(vGeoStructure.x, GEO_JOINT_SPACING_RANGE_M);
+  float bedThicknessM = geoUnpackLog(vGeoStructure.y, GEO_BED_THICKNESS_RANGE_M);
+  float competence = vGeoStructure.z;
   float macro = geoFilteredNoise(p, 160.0, footprint);
   float blocks = geoFilteredNoise(p + 37.0, 14.0, footprint);
   float chips = geoFilteredNoise(p + 71.0, 2.2, footprint);
@@ -73,7 +85,10 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   float vegetation = clamp(vGeoSurface.y + (macro - 0.5) * 0.18, 0.0, 1.0);
   float rock = clamp(vGeoSurface.x + (blocks - 0.5) * 0.24, 0.0, 1.0);
   float wet = vGeoSurface.z, sealed = vGeoSurface.w;
-  float layers = sin((p.y + geoFilteredNoise(p, 36.0, footprint) * 7.0) * 1.35)
+  // One banding cycle per bed, so a thin-bedded unit reads as laminae and a thick unit as massive
+  // beds. Surface relief also grows with joint spacing, which is what makes widely jointed rock
+  // stand in bigger blocks.
+  float layers = sin((p.y + geoFilteredNoise(p, 36.0, footprint) * 7.0) * 6.2831853 / max(0.05, bedThicknessM))
     * (1.0 - smoothstep(0.7, 4.5, footprint));
   float fracture = (1.0 - smoothstep(0.025, 0.12, abs(blocks - 0.5)))
     * (1.0 - smoothstep(1.0, 5.0, footprint));
@@ -81,7 +96,7 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   vec2 stone = vec2(0.5, 0.18);
   if (cellFade > 0.001 && rock > 0.04) {
     vec3 warp = vec3(chips, geoNoise(p / 2.2 + 13.0), geoNoise(p / 2.2 + 29.0));
-    stone = geoStoneCell((p + warp * 1.2) * vec3(1.0, 1.8, 1.0) / 1.7);
+    stone = geoStoneCell((p + warp * 1.2) * vec3(1.0, 1.8, 1.0) / max(0.02, jointSpacingM));
   }
   float weathering = smoothstep(0.3, 0.7, blocks + (chips - 0.5) * 0.45);
   float joint = (1.0 - smoothstep(0.025, 0.12, stone.y)) * cellFade * weathering;
@@ -100,8 +115,8 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   diffuseColor.rgb += looseSoil * (grit - 0.5) * vec3(0.035, 0.021, 0.008);
   diffuseColor.rgb = max(diffuseColor.rgb, vec3(0.0));
   geoHeight = mix(mix(0.035 * grain + 0.07 * chips + 0.008 * grit,0.007 * grain + 0.012 * chips,vegetation),
-    0.32 * blocks + 0.12 * chips + layers * 0.035 - fracture * 0.09
-    + bevel * 0.07 + grain * 0.06 + grit * 0.008, rock) * (1.0 - sealed * 0.85);
+    (0.32 * blocks + 0.12 * chips + layers * 0.035 - fracture * 0.09
+    + bevel * 0.07 + grain * 0.06 + grit * 0.008) * (0.55 + 0.45 * competence), rock) * (1.0 - sealed * 0.85);
   geoHeight += (particles * 0.00065 + pores * 0.00012) * (1.0 - sealed)
     + looseSoil * aggregate * 0.006;
   float mineralSpark = smoothstep(0.61, 0.78, particles) * rock;
@@ -128,21 +143,24 @@ export function createTerrainSurfaceMaterial() {
     geoVerticalScale: { value: 1 }
   };
   material.userData.terrainSurface = {
-    version: 2,
+    version: 3,
     representation: "illustrative procedural surface, not surveyed microtopography",
     coordinates: "unexaggerated local metres",
-    wavelengthsM: [160, 36, 14, 2.2, 1.7, 0.18, 0.045, 0.008, 0.002],
+    wavelengthsM: [160, 36, 14, 2.2, 0.18, 0.045, 0.008, 0.002],
+    jointSpacingSource: "lithology and bed thickness, see geoLithology.js",
+    structureRangesM: { jointSpacing: [0.02, 20], bedThickness: [0.01, 50] },
     uniforms
   };
-  material.customProgramCacheKey = () => "geolab-terrain-surface-v2";
+  material.customProgramCacheKey = () => "geolab-terrain-surface-v3";
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", `#include <common>\n${VARYINGS}\nattribute vec4 terrainSurface;\nuniform float geoVerticalScale;`)
+      .replace("#include <common>", `#include <common>\n${VARYINGS}\nattribute vec4 terrainSurface;\nattribute vec4 terrainStructure;\nuniform float geoVerticalScale;`)
       .replace("#include <begin_vertex>", `#include <begin_vertex>
         vec3 geoWorld = (modelMatrix * vec4(position, 1.0)).xyz;
         vGeoPositionM = vec3(geoWorld.x, geoWorld.y / geoVerticalScale, geoWorld.z) * 1000.0;
-        vGeoSurface = terrainSurface;`);
+        vGeoSurface = terrainSurface;
+        vGeoStructure = terrainStructure;`);
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", `#include <common>\n${VARYINGS}\n${SURFACE_FUNCTIONS}`)
       .replace("#include <color_fragment>", `#include <color_fragment>\n${SURFACE_COLOR}`)

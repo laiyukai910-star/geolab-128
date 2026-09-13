@@ -7,7 +7,7 @@ import { REBUILT_FACILITY_KINDS } from "./facilityGeometry.js";
 import { ScannedAssetLibrary } from "./scannedAssets.js";
 import { ScannedRockInstances } from "./scannedRockInstances.js";
 import { createRiverMaterial } from "./riverMaterial.js";
-import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal, surfaceDetailSuitability } from "./terrainAppearance.js";
+import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal, surfaceDetailSuitability, surfaceGeomorphology, packTerrainStructure } from "./terrainAppearance.js";
 import { createTerrainSurfaceMaterial, updateTerrainSurfaceMaterial } from "./terrainSurfaceMaterial.js";
 import { SceneVolume } from "./sceneVolume.js";
 import { ORGANISM_KINDS, createOrganismMaterial } from "./organismGeometry.js";
@@ -1597,8 +1597,7 @@ export class TerrainRenderer {
         const angle = infrastructureAngle(model, i, x, y, "terrain", seed);
         const size = cell * step;
         const noise = hash01(x, y, seed + 5011);
-        const suitability=surfaceDetailSuitability(model,i);
-        const px = base.x + (hash01(x, y, seed + 37) - 0.5) * size * 0.5;
+        const suitability=surfaceDetailSuitability(model,i);        const px = base.x + (hash01(x, y, seed + 37) - 0.5) * size * 0.5;
         const pz = base.z + (hash01(y, x, seed + 43) - 0.5) * size * 0.5;
         if (slope > 28 && roughness > 4 && noise < Math.min(0.38, slope / 92)*suitability.rock) {
           place(buckets.rocks, {
@@ -4162,6 +4161,7 @@ function buildTerrainTiles(renderer, model) {
     geometry.rotateX(-Math.PI / 2);
     geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array((tile.segX + 1) * (tile.segY + 1) * 3), 3));
     geometry.setAttribute("terrainSurface", new THREE.BufferAttribute(new Uint8Array((tile.segX + 1) * (tile.segY + 1) * 4), 4, true));
+    geometry.setAttribute("terrainStructure", new THREE.BufferAttribute(new Uint8Array((tile.segX + 1) * (tile.segY + 1) * 4), 4, true));
     const material = createTerrainSurfaceMaterial();
     const mesh = new THREE.Mesh(geometry, material);
     const centerX = (((tile.x0 + tile.x1) / 2) / Math.max(1, model.n - 1) - 0.5) * sizeKm;
@@ -4212,6 +4212,7 @@ function updateTerrainTileMesh(tile, model, params, viewMode, options = {}) {
   const colors = geometry.getAttribute("color");
   const normals = geometry.getAttribute("normal");
   const surfaces = geometry.getAttribute("terrainSurface");
+  const structures = geometry.getAttribute("terrainStructure");
   const n = model.n;
   const verticalScale = Number(params?.verticalScale) || 1;
   const natural = viewMode === "landscape";
@@ -4230,9 +4231,11 @@ function updateTerrainTileMesh(tile, model, params, viewMode, options = {}) {
       }
       if (updateColors) {
         if (natural) {
-          const weights = terrainSurfaceWeights(model, params, modelIndex);
+          const geomorphology = surfaceGeomorphology(model, params, modelIndex);
+          const weights = terrainSurfaceWeights(model, params, modelIndex, undefined, geomorphology);
           surfaces.setXYZW(vertex, ...weights);
-          const [r, g, b] = naturalTerrainColor(model, params, modelIndex, weights);
+          structures.setXYZW(vertex, ...packTerrainStructure(model, geomorphology));
+          const [r, g, b] = naturalTerrainColor(model, params, modelIndex, weights, undefined, geomorphology);
           linearColor.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
           colors.setXYZ(vertex, linearColor.r, linearColor.g, linearColor.b);
         } else {
@@ -4255,7 +4258,7 @@ function updateTerrainTileMesh(tile, model, params, viewMode, options = {}) {
     colors.clearUpdateRanges?.();
     colors.addUpdateRange?.(0, colors.count * 3);
     colors.needsUpdate = true;
-    if (natural) surfaces.needsUpdate = true;
+    if (natural) { surfaces.needsUpdate = true; structures.needsUpdate = true; }
   }
 }
 
