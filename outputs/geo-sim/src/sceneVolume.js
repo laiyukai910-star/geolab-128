@@ -3,53 +3,7 @@ import { createGeologyMaterial } from "./geologyMaterial.js";
 import { createCaveDisplay, disposeCaveDisplay } from "./caveGeometry.js";
 import { createHabitatAssemblies, sessileHabitatSites } from "./habitatAssemblies.js";
 import { buildTerrainVolume, volumeDisplayConfig, sampleTerrainHeight, underwaterFocus, constrainTerrainCamera } from "./terrainVolume.js";
-
-function createSky() {
-  const material = new THREE.ShaderMaterial({
-    depthWrite: false, depthTest: false,
-    uniforms: { time: { value: 0 }, skyProjectionInverse: { value: new THREE.Matrix4() }, skyRotation: { value: new THREE.Matrix3() } },
-    vertexShader: `varying vec2 skyNdc;
-      void main() { skyNdc = position.xy; gl_Position = vec4(position.xy, 0.999999, 1.0); }`,
-    fragmentShader: `varying vec2 skyNdc; uniform float time;
-      uniform mat4 skyProjectionInverse; uniform mat3 skyRotation;
-      float hash(vec2 p) { vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z); }
-      float noise(vec2 p) { vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
-        return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.0),f.x),f.y); }
-      float filteredNoise(vec2 p, float footprint) {
-        float fade=1.0-smoothstep(0.25,1.0,footprint);
-        return mix(0.5,noise(p),fade);
-      }
-      void main() {
-        vec3 viewRay=(skyProjectionInverse*vec4(skyNdc,1.0,1.0)).xyz;
-        vec3 ray=normalize(skyRotation*viewRay);
-        vec3 sky=mix(vec3(0.57,0.73,0.80),vec3(0.035,0.16,0.32),pow(max(ray.y,0.0),0.45));
-        vec3 sun=normalize(vec3(-0.5,0.72,0.42));
-        float alignment=max(dot(ray,sun),0.0);
-        sky+=vec3(1.0,0.84,0.54)*(pow(alignment,700.0)*1.5+pow(alignment,16.0)*0.12);
-        vec2 p=ray.xz/max(ray.y+0.2,0.15)*2.5+vec2(time*0.006,0.0);
-        float footprint=max(length(dFdx(p)),length(dFdy(p)));
-        float cloud=filteredNoise(p,footprint)*0.55+filteredNoise(p*2.1,footprint*2.1)*0.28+filteredNoise(p*4.3,footprint*4.3)*0.17;
-        float cover=smoothstep(0.55,0.74,cloud)*smoothstep(0.0,0.22,ray.y);
-        sky=mix(sky,vec3(0.87,0.90,0.89),cover*0.82);
-        sky=mix(vec3(0.27,0.34,0.38),sky,smoothstep(-0.22,0.02,ray.y));
-        gl_FragColor=vec4(sky,1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }`
-  });
-  // Reconstruct world rays without translating a distant shell or writing scene depth.
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute([-1,-1,0, 3,-1,0, -1,3,0], 3));
-  const sky = new THREE.Mesh(geometry, material);
-  sky.name = "atmosphere display";
-  sky.frustumCulled = false;
-  sky.renderOrder = -10000;
-  sky.onBeforeRender = (_renderer, _scene, camera) => {
-    material.uniforms.skyProjectionInverse.value.copy(camera.projectionMatrixInverse);
-    material.uniforms.skyRotation.value.setFromMatrix4(camera.matrixWorld);
-  };
-  return sky;
-}
+import { createSky } from "./skyEnvironment.js";
 
 function createWaterMaterial(config) {
   const uniforms = { waterLevel: { value: config.seaLevel * config.verticalScale / 1000 },

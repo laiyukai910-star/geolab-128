@@ -63,10 +63,18 @@ reports that no submerged terrain is available rather than inventing water.
 The sky uses a full-screen background reconstructed from the current camera's
 world-space rays. It does not depend on a distant sphere, camera translation,
 or near/far clipping distances. A sun glow, horizon tones, and slowly moving
-procedural clouds require no downloaded textures; subpixel cloud detail is
-filtered to reduce shimmer. Sky and sea display can be switched
-off independently. Water is hidden on analytical surface palettes so it does
-not conceal their colors.
+procedural clouds require no downloaded textures. Sky and sea display can be
+switched off independently. Water is hidden on analytical surface palettes so it
+does not conceal their colors.
+
+Cloud coordinates come from a dome anchored to view directions, folded into a
+bounded ring around the horizon by `r/(1+0.3r)`: linear to first order, monotone,
+never stretching, with a slope that runs from 1 down to 0.3 and a bounded far
+field. Each detail octave is faded out once one screen pixel spans more than its
+feature size, and that footprint is derived analytically from the view ray,
+split into the fold's angular and radial parts. The pattern is therefore
+anchored to the world rather than to the frame, so turning the camera does not
+make cloud detail crawl or jump between frames.
 
 These are display systems, not a calibrated atmosphere, wave spectrum, or 3D
 fluid solver. River surfaces use routed endpoints and hydraulic widths/depths;
@@ -89,6 +97,22 @@ Local checks performed on 2026-09-06:
 - Camera tests cover escape from opaque ground, correction settling, underwater
   clearance, and access to the cutaway half. Sky uniforms use the current camera
   projection and orientation without writing scene depth.
+- The sky field test evaluates the shader's own `skyField` steps, transcribed
+  literally, and checks that cloud coordinates stay finite and bounded from 22
+  degrees below the horizon to the zenith, that neighbouring rays move them by a
+  small uniform amount, that the ring map never stretches, and that the shader
+  takes its footprint from the view ray rather than from the cloud coordinates.
+  It also guards the out-parameter names, because a GLSL parameter shadows a
+  same-named caller local and the shader linked while reading an uninitialized
+  footprint.
+- A local Playwright probe rendered the sky through the real Three.js pipeline
+  and compared each frame against the average of ten frames across the same
+  0.1-degree arc. Cloud aliasing over a slow pan fell from 0.0303 to 0.0121 at
+  the horizon, from 0.0329 to 0.0141 just above it, and from 0.0414 to 0.0183
+  across the sun disc. Frame-to-frame shimmer fell from 0.163 to 0.083 at the
+  horizon and from 0.192 to 0.090 below it; the frame-to-frame change itself grew
+  slightly more linear with step size (a 16-fold step increase now produces a
+  15.8-fold change, against 15.4 before).
 - The browser fixture `outputs/geo-sim/tests/fixtures/volume-regression.html`
   exposes `review.frame(position, target, skyOnly)` for frozen-time pixel checks.
   Local Playwright checks covered a full yaw sweep, small rotation steps,
