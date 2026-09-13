@@ -47,3 +47,34 @@ for(const quality of ['high','ultra','exhaustive']){
   assert.ok(geometry.index.array.every(i=>i<geometry.attributes.position.count));geometry.dispose();
 }
 console.log('Perforated envelopes, recessed glazing rays, entrances and curved foliage tiers passed');
+// Calibrated subsurface depth-edge power law. SUBSURFACE_DEPTH_EDGE_EXPONENT is the only writer of
+// model.subsurface.depthEdgesM, so it fixes every layer thickness and, through them, the surface
+// joint spacing, the surface bedding frequency and the subsurface lamination period.
+const {SUBSURFACE_DEPTH_EDGE_EXPONENT,buildModel,createDefaultParams}=await import('../src/geoEngine.js');
+const subsurfaceParams={...createDefaultParams(),resolution:24,mapSizeKm:24,landscapeBlockGrid:8,wildlifeMaxAgents:10};
+const {layerCount,depthEdgesM}=buildModel(subsurfaceParams).subsurface;
+// Tripwire: the exponent is a deliberate calibration, so changing it must come with a re-measured envelope.
+assert.equal(SUBSURFACE_DEPTH_EDGE_EXPONENT,1.18,'the calibrated exponent moved; re-check the measured thickness sequence');
+assert.equal(depthEdgesM.length,layerCount+1,'depth edges must be one longer than the layer count');
+assert.equal(depthEdgesM[0],0,'the shallowest depth edge must sit at the surface');
+const depths=Array.from(depthEdgesM);
+for(let i=1;i<depths.length;i++)assert.ok(depths[i]>depths[i-1],`depth edge ${i} must be strictly deeper than edge ${i-1}`);
+for(let i=0;i<depths.length;i++){
+  const expected=subsurfaceParams.subsurfaceDepthM*(i/layerCount)**SUBSURFACE_DEPTH_EDGE_EXPONENT;
+  assert.ok(Math.abs(depths[i]-expected)<1e-4,`depth edge ${i} must follow the calibrated power law of depth`);
+}
+const thicknesses=depths.slice(1).map((depth,i)=>depth-depths[i]);
+assert.equal(thicknesses.length,layerCount,'every layer must own exactly one thickness');
+for(const [i,thickness] of thicknesses.entries())assert.ok(Number.isFinite(thickness)&&thickness>0,`layer ${i} thickness must be positive and finite`);
+// Measured behaviour, not the assumed one: the calibrated exponent is greater than 1, so the power law
+// compresses the shallow edges and beds are THINNEST at the top and thicken downward. They do not thin
+// downward. An exponent below 1 is what reverses the trend, which the next block asserts.
+for(let i=1;i<thicknesses.length;i++)assert.ok(thicknesses[i]>thicknesses[i-1],`layer ${i} must be thicker than layer ${i-1} while the exponent ${SUBSURFACE_DEPTH_EDGE_EXPONENT} exceeds 1`);
+const shallowModel=buildModel({...subsurfaceParams,subsurfaceDepthEdgeExponent:0.82});
+const shallowDepths=Array.from(shallowModel.subsurface.depthEdgesM);
+assert.equal(shallowDepths.length,layerCount+1);
+const shallowThicknesses=shallowDepths.slice(1).map((depth,i)=>depth-shallowDepths[i]);
+assert.notDeepEqual(shallowThicknesses,thicknesses,'a changed exponent must change the thickness sequence, or the constant is not load-bearing');
+for(let i=1;i<shallowThicknesses.length;i++)assert.ok(shallowThicknesses[i]<shallowThicknesses[i-1],'an exponent below 1 must thin beds downward');
+assert.notDeepEqual(Array.from(buildModel(subsurfaceParams).subsurface.depthEdgesM),shallowDepths,'the override must not leak into a default model');
+console.log(`Subsurface depth edges at exponent ${SUBSURFACE_DEPTH_EDGE_EXPONENT}: ${layerCount} layers over ${subsurfaceParams.subsurfaceDepthM} m, thicknesses [${thicknesses.map(t=>t.toFixed(4)).join(', ')}] m`);

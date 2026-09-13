@@ -37,6 +37,53 @@ export const MAX_TERRAIN_ELEVATION_M = 10000;
 export const MAX_MODEL_RESOLUTION = 4096;
 export const MAX_SUBSURFACE_GRID_RESOLUTION = 512;
 
+/**
+ * Power-law exponent that places the subsurface layer boundaries, and therefore every layer thickness:
+ *
+ *   depthEdgesM[layer] = subsurfaceDepthM * (layer / layerCount) ** SUBSURFACE_DEPTH_EDGE_EXPONENT
+ *
+ * It is the only writer of `depthEdgesM` in the repository, so it is load-bearing well beyond the
+ * voxel column. The shallowest layer thickness feeds the surface structure attributes, so this one
+ * number also sets the surface joint spacing and the surface bedding frequency (geoLithology.js
+ * `jointSpacingM` / `layerStructureSpacingM`, reached through terrainAppearance.js) and the subsurface
+ * lamination period (terrainVolume.js takes a thickness-weighted harmonic mean of these thicknesses as
+ * `beddingSpacingM`).
+ *
+ * CALIBRATED, NOT FITTED. 1.18 is a hand-chosen value. It is not the product of any fit, regression,
+ * inversion or calibration run against a dataset in this repository, and no dataset here constrains
+ * it. Treat it as a tuned structural/visual parameter, not as a measured rock property.
+ *
+ * What the literature does and does not support. There is a citable published result for the weak
+ * premise that sedimentary bed thickness is power-law distributed:
+ *   Malinverno, A. (1997), "On the power law size distribution of turbidite beds",
+ *   Basin Research 9(4), 263-274, doi:10.1046/j.1365-2117.1997.00044.x
+ *   https://doi.org/10.1046/j.1365-2117.1997.00044.x
+ * Its abstract states that "cumulative distributions of turbidite bed thicknesses (as observed in
+ * boreholes or outcrops) follow a power law in the sense that the number of beds whose measured
+ * thickness is greater than eta is proportional to eta^-beta". That supports only the general premise
+ * that power-law scaling of bed thickness is a recognised description of real successions. It does NOT
+ * support this exponent: beta there is the exponent of a thickness *frequency distribution*, not of a
+ * normalised-depth-to-boundary mapping, and the paper's own conclusion is that bed-thickness
+ * distributions alone do not determine bed geometry. No source was found that fixes the exponent of
+ * the depth mapping used here, so 1.18 stays calibrated by choice.
+ *
+ * Observable consequence (pinned by tests/modelEnvelope.test.mjs): because the exponent exceeds 1, the
+ * power law compresses the shallow edges, so beds are THINNEST at the top and thicken downward. The
+ * default 8 layers over 240 m give thicknesses 20.63, 26.12, 28.68, 30.49, 31.91, 33.08, 34.10,
+ * 34.99 m. Compaction-style thinning of beds with depth would require an exponent below 1.
+ *
+ * Per-model override: `params.subsurfaceDepthEdgeExponent`. When it is unset (the default) the value
+ * below is used and model output is unchanged.
+ */
+export const SUBSURFACE_DEPTH_EDGE_EXPONENT = 1.18;
+
+/**
+ * Plausibility guard for the `params.subsurfaceDepthEdgeExponent` override, so a negative or absurd
+ * exponent cannot produce non-finite or inverted depth edges. The calibrated default sits well inside
+ * this range; the guard never alters default output.
+ */
+export const SUBSURFACE_DEPTH_EDGE_EXPONENT_RANGE = Object.freeze([0.2, 4]);
+
 function modelCellSupportAreaKm2(model) {
   const stored = Number(model?.cellSupportAreaKm2);
   if (Number.isFinite(stored) && stored > 0) return stored;
@@ -17809,9 +17856,17 @@ function computeSubsurfaceVolume(model, params = {}) {
   const depthM = clamp(Number(params.subsurfaceDepthM ?? 240), 20, 1200);
   const complexity = clamp(Number(params.geologyComplexity ?? 0.55), 0, 1);
   const rechargeScale = clamp(Number(params.aquiferRechargeScale ?? 1), 0.15, 3);
+  const rawDepthEdgeExponent = params.subsurfaceDepthEdgeExponent;
+  const requestedDepthEdgeExponent = rawDepthEdgeExponent === undefined || rawDepthEdgeExponent === null || rawDepthEdgeExponent === ""
+    ? NaN
+    : Number(rawDepthEdgeExponent);
+  // An absent override falls back to the calibrated constant, so default model output is unchanged.
+  const depthEdgeExponent = Number.isFinite(requestedDepthEdgeExponent)
+    ? clamp(requestedDepthEdgeExponent, SUBSURFACE_DEPTH_EDGE_EXPONENT_RANGE[0], SUBSURFACE_DEPTH_EDGE_EXPONENT_RANGE[1])
+    : SUBSURFACE_DEPTH_EDGE_EXPONENT;
   const depthEdgesM = new Float32Array(layerCount + 1);
   for (let layer = 0; layer <= layerCount; layer += 1) {
-    depthEdgesM[layer] = depthM * (layer / layerCount) ** 1.18;
+    depthEdgesM[layer] = depthM * (layer / layerCount) ** depthEdgeExponent;
   }
 
   const voxelCount = columnCellCount * layerCount;
