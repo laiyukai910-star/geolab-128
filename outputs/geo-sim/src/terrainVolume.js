@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { caveContains } from "./caveField.js";
-import { lithologyDisplayColor, unclassifiedDisplayColor, wetRockDisplayColor } from "./geoLithology.js";
+import { lithologyDisplayColor, unclassifiedDisplayColor, wetRockDisplayColor, stratigraphicProfile, cavePassagePlan } from "./geoLithology.js";
 import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
@@ -31,6 +31,24 @@ export function volumeDisplayConfig(model, params = {}) {
     config.caveFocus=true;
     config.cave={center:[config.cutX-span*0.24,(h-roofDepth*config.depthScale)*config.verticalScale/1000,0],
       halfSize:[span,radius/0.24*config.verticalScale*config.depthScale,radius/0.24]};
+    // Anchor the passage skeleton to the real layer stack under the cave, so a cave in a thick host
+    // spans that host and one in a thin host cannot. Without a dissolved host the fixed outline is
+    // kept, because inventing bedding contacts would be worse than an honest generic cavity.
+    const caveCellX = Math.round(clamp((config.cutX - span * 0.24) / sizeKm + 0.5, 0, 1) * (model.n - 1));
+    const caveCellY = Math.round((model.n - 1) / 2);
+    const column = subsurfaceColumnIndex(model, caveCellY * model.n + caveCellX);
+    if (column >= 0) {
+      try {
+        const profile = stratigraphicProfile(model, column, { lithologyTable: SUBSURFACE_LITHOLOGY });
+        const plan = cavePassagePlan(profile);
+        if (plan) {
+          config.cave.passagePlan = plan;
+          config.cave.columnIndex = column;
+        }
+      } catch {
+        // A malformed subsurface must leave the generic cavity rather than break the volume view.
+      }
+    }
   }
   return config;
 }

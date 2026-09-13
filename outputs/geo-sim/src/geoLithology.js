@@ -394,3 +394,56 @@ export function columnKarstHost(model, column, options = {}) {
   const profile = stratigraphicProfile(model, column, options);
   return { isHost: profile.karst.isHost, score: profile.karst.score, ...profile.karst };
 }
+
+/**
+ * Passage skeleton for an illustrative cave, anchored to a real stratigraphic column.
+ *
+ * Cave passages are not free shapes: dissolution follows bedding planes and joints and stays inside
+ * the soluble unit that hosts it. This builds the network from the profile's own layer boundaries,
+ * so a cave in a thick host spans that host and a cave in a thin one cannot. Source [6]: Palmer,
+ * A.N., "Cave Geology", Cave Books, 2007, for bedding-plane and joint control on passage growth.
+ *
+ * Positions are returned in the normalised cube the cave display already uses: x and z in
+ * [-1,1] across the plan, y in [-1,1] from the top of the modelled column to its base. This is
+ * illustrative geometry. It does not infer a cave from geological observations and changes no
+ * groundwater calculation.
+ */
+export function cavePassagePlan(profile, options = {}) {
+  const layers = Array.isArray(profile?.layers) ? profile.layers : [];
+  const depthEdges = Array.isArray(profile?.depthEdgesM) ? profile.depthEdgesM : [];
+  const hosts = layers.filter(layer => layer.karstHost && layer.thicknessM > 0);
+  if (!hosts.length || depthEdges.length < 2) return null;
+
+  const totalDepthM = Math.max(0.001, finite(depthEdges[depthEdges.length - 1], 1));
+  const hostTop = Math.min(...hosts.map(layer => layer.topDepthM));
+  const hostBottom = Math.max(...hosts.map(layer => layer.bottomDepthM));
+  const hostThicknessM = Math.max(0.001, hostBottom - hostTop);
+  const jointSpacingM = Math.max(0.05, finite(options.jointSpacingM, hosts[0].jointSpacingM));
+  // Wider jointing means less frequent, larger conduits, so the network reaches further.
+  const halfSpan = 0.5 + 0.32 * clamp01(Math.log1p(jointSpacingM) / Math.log1p(8));
+  const toY = depthM => (depthM / totalDepthM) * 2 - 1;
+
+  const passages = [];
+  for (const [bed, layer] of hosts.entries()) {
+    // A passage follows the contact near the top of its own bed rather than a shared depth.
+    const contactDepthM = Math.min(layer.bottomDepthM - layer.thicknessM * 0.3, layer.topDepthM + layer.thicknessM * 0.65);
+    const y = toY(contactDepthM);
+    const drift = ((bed % 3) - 1) * 0.10;
+    passages.push({ from: [-halfSpan, y, drift - 0.16], to: [halfSpan, y, drift + 0.16], radius: 0.11 });
+    passages.push({ from: [-halfSpan * 0.6, y, drift + 0.30], to: [halfSpan * 0.55, y, drift - 0.30], radius: 0.09 });
+  }
+  // A vadose shaft down from the top contact, and a phreatic outlet along the base of the host.
+  const topY = toY(hostTop), bottomY = toY(hostBottom);
+  passages.push({ from: [-0.34, topY, 0.42], to: [-0.30, bottomY + (topY - bottomY) * 0.25, 0.20], radius: 0.085 });
+  passages.push({ from: [-0.62, bottomY, 0.10], to: [0.62, bottomY, -0.06], radius: 0.13 });
+
+  const radiusScale = 0.75 + 0.5 * clamp01(hostThicknessM / 40);
+  return {
+    method: "illustrative karst scenario anchored to bedding contacts",
+    hostLayerCount: hosts.length,
+    hostThicknessM,
+    totalDepthM,
+    jointSpacingM,
+    passages: passages.map(passage => ({ ...passage, radius: passage.radius * radiusScale }))
+  };
+}

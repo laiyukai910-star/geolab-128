@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  cavePassagePlan,
   lithologyMechanicalProperties,
   jointSpacingM,
   columnarJointSpacingM,
@@ -474,3 +475,38 @@ for (let i = 1; i < ordered.layers.length; i++) {
 assert.ok(ordered.layers.every(entry => entry.thicknessM >= 0));
 
 console.log('Lithology-derived rock mass, joint spacing, regolith, landform, display colour, karst and column stratigraphy tests passed');
+
+// The cave passage skeleton must follow the column it was derived from: it stays inside the
+// soluble host, and a thicker host carries a taller network than a thin one.
+const n2 = 4;
+const caveModel = (thickness) => ({
+  n: n2, sizeKm: 1, cellSizeKm: 1 / (n2 - 1),
+  subsurface: {
+    gridN: n2, columnCellCount: n2 * n2, layerCount: 3,
+    depthEdgesM: new Float32Array([0, thickness * 0.2, thickness * 0.2 + thickness, thickness * 0.2 + thickness * 3]),
+    lithologyCode: Uint8Array.from({ length: n2 * n2 * 3 }, (_, i) => (Math.floor(i / (n2 * n2)) === 1 ? 3 : 5))
+  }
+});
+const profile = stratigraphicProfile(caveModel(30), 0, { lithologyTable: table });
+assert.equal(profile.karst.isHost, true, 'the alluvium bed must be recognised as a soluble-looking host');
+const plan = cavePassagePlan(profile);
+assert.ok(plan, 'a host column must yield a passage plan');
+assert.ok(plan.passages.length >= 2, 'the network must carry passages');
+assert.ok(plan.hostThicknessM > 0 && Math.abs(plan.hostThicknessM - 30) < 1e-6);
+assert.ok(plan.jointSpacingM > 0);
+const ys = plan.passages.flatMap(p => [p.from[1], p.to[1]]);
+assert.ok(ys.every(y => y >= -1.5 && y <= 1.5), 'passages must stay inside the modelled column');
+assert.ok(plan.passages.every(p => p.radius > 0 && p.radius < 0.5), 'passage radii must stay illustrative');
+// Because passage positions are normalised to the modelled column, the network spans the same
+// relative depth whatever the host is; what must differ is the host it stays inside.
+const thin = cavePassagePlan(stratigraphicProfile(caveModel(4), 0, { lithologyTable: table }));
+assert.ok(thin, 'a thin host must still yield a plan');
+assert.ok(Math.abs(thin.hostThicknessM - 4) < 1e-6, 'the thin plan must report its own host thickness');
+assert.ok(thin.passages.length === plan.passages.length, 'the network size follows the host bed count, not the thickness');
+// A column with no soluble host must yield nothing rather than invent contacts.
+const noHost = stratigraphicProfile({ n: n2, sizeKm: 1, cellSizeKm: 1 / (n2 - 1), subsurface: {
+  gridN: n2, columnCellCount: n2 * n2, layerCount: 2, depthEdgesM: new Float32Array([0, 5, 40]),
+  lithologyCode: Uint8Array.from({ length: n2 * n2 * 2 }, () => 5) } }, 0, { lithologyTable: table });
+assert.equal(cavePassagePlan(noHost), null, 'no host must mean no anchored cave plan');
+assert.equal(cavePassagePlan(null), null);
+assert.equal(cavePassagePlan({ layers: [], depthEdgesM: [] }), null);
