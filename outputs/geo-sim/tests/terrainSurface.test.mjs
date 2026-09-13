@@ -66,6 +66,44 @@ assert.notDeepEqual(seamNormal(right), oldNormal);
 assert.equal(left.mesh.geometry.boundingBox.max.y, 4, "edit must refresh frustum bounds");
 assert.equal(left.mesh.geometry.getAttribute("terrainSurface").array.BYTES_PER_ELEMENT, 1);
 assert.equal(left.mesh.geometry.getAttribute("terrainStructure").array.BYTES_PER_ELEMENT, 1);
+// The structure attribute is uploaded normalized, so its bytes must be exactly what the packer
+// produced. BufferAttribute.setXYZW normalizes its arguments, and passing packed bytes through it
+// scales them again and wraps the byte array, which silently fed the shader (256 - byte) / 255 and
+// drew competent bedrock as loose material. Compare the shipped buffer against the packer instead
+// of trusting it to be written correctly.
+{
+  const { surfaceGeomorphology: derive, packTerrainStructure: pack, MATERIAL_CLASS_CODE } = await import("../src/terrainAppearance.js");
+  const shipped = left.mesh.geometry.getAttribute("terrainStructure");
+  assert.equal(shipped.normalized, true, "the structure attribute is expected to be uploaded normalized");
+  const model = renderer.model;
+  for (const [gx, gy] of [[0, 0], [32, 17], [64, 40], [128, 64]]) {
+    const vertex = (gy - left.y0) * (left.segX + 1) + (gx - left.x0);
+    const expected = pack(model, derive(model, renderer.params, gy * model.n + gx));
+    const actual = Array.from(shipped.array.slice(vertex * 4, vertex * 4 + 4));
+    assert.deepEqual(actual, expected,
+      `the shipped structure bytes must equal the packer's output at ${gx},${gy} (shipped ${actual} vs packed ${expected})`);
+    assert.ok(actual.every(byte => Number.isInteger(byte) && byte >= 0 && byte <= 255));
+  }
+  // The class byte must land on the side of the shader's threshold that its class means.
+  assert.ok(MATERIAL_CLASS_CODE.rock / 255 > 0.8 && MATERIAL_CLASS_CODE.unconsolidated / 255 < 0.8,
+    "the material classes must straddle the shader's step(0.8, ...) threshold");
+}
+
+// Document the hazard the write path exists to avoid. BufferAttribute.normalize() scales an argument
+// by the array's normalisation factor, so handing packed bytes to setXYZW on a normalized byte
+// attribute multiplies them a second time and the byte array then wraps. This is asserted rather
+// than assumed: if a future three release stops behaving this way, this test says so instead of the
+// buffer silently decoding negated again.
+{
+  const normalized = new THREE.BufferAttribute(new Uint8Array(4), 4, true);
+  normalized.setXYZW(0, 99, 131, 231, 255);
+  assert.notDeepEqual(Array.from(normalized.array), [99, 131, 231, 255],
+    "setXYZW on a normalized byte attribute must not be byte-preserving; the write path must not use it");
+  const direct = new THREE.BufferAttribute(new Uint8Array(4), 4, true);
+  direct.array.set([99, 131, 231, 255]);
+  assert.deepEqual(Array.from(direct.array), [99, 131, 231, 255],
+    "writing the packed bytes straight into the array must be exact");
+}
 assert.equal(left.mesh.material.userData.terrainSurface.uniforms.geoSurfaceEnabled.value, 1);
 assert.equal(left.mesh.material.userData.terrainSurface.version, 3);
 assert.ok(left.mesh.material.userData.terrainSurface.wavelengthsM.includes(0.002));
