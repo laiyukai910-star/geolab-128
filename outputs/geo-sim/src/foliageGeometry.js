@@ -32,7 +32,7 @@ export function createFoliageGeometry(conifer, quality, variant = 0) {
       const center = a.clone().lerp(b, t).addScaledVector(normal, Math.sin(t * Math.PI) * radius * 1.8);
       for (let i = 0; i < sides; i++) {
         const angle = i / sides * Math.PI * 2;
-        const r = radius * (1 - t * 0.72) * (1 + 0.08 * Math.cos(i * 3));
+        const r = radius * (1 - t * 0.72) * (1 + 0.08 * Math.cos(i * 3) + (distant?0:0.035*Math.sin(angle*5+t*4)));
         const bark = distant ? 1 : 0.88 + 0.12 * Math.cos(angle * 3 + t * 0.8);
         vertex(center.clone().addScaledVector(side, Math.cos(angle) * r).addScaledVector(normal, Math.sin(angle) * r), [0.42 * bark, 0.31 * bark, 0.2 * bark]);
       }
@@ -58,23 +58,26 @@ export function createFoliageGeometry(conifer, quality, variant = 0) {
     const color = [shade * 0.88, shade, shade * 0.71];
     if (!distant) {
       const segments = conifer ? 3 + tier : 5 + tier * 2;
+      const columns=conifer?3:5+tier*2;
       const first = positions.length / 3;
       for (let row = 0; row <= segments; row++) {
         const t = row / segments;
         const envelope = Math.max(0.001, Math.pow(Math.sin(Math.PI * t), conifer ? 0.65 : 0.8));
         const center = origin.clone().addScaledVector(axis, length * t)
           .addScaledVector(fold, width * (0.3 * Math.sin(Math.PI * t) - 0.15 * t * t));
-        for (const edge of [-1, 0, 1]) {
+        for (let column=0;column<columns;column++) {
+          const edge=column/(columns-1)*2-1;
           const serration = conifer ? 1 : 1 + 0.07 * Math.sin(row * Math.PI * 0.5);
+          const vein=conifer?0:Math.exp(-Math.abs(edge)*18)*0.045+0.022*Math.pow(Math.max(0,Math.cos(t*Math.PI*10-Math.abs(edge)*3)),8)*(1-Math.abs(edge));
           const point = center.clone().addScaledVector(lateral, edge * width * envelope * serration)
-            .addScaledVector(fold, -Math.abs(edge) * width * envelope * 0.24);
+            .addScaledVector(fold, (-edge*edge*0.24+vein) * width * envelope);
           const tone = edge === 0 ? 1.06 : 0.92 + 0.04 * Math.sin(row * 1.7);
           vertex(point, color.map(channel => Math.min(1, channel * tone)));
         }
       }
-      for (let row = 0; row < segments; row++) for (let side = 0; side < 2; side++) {
-        const a = first + row * 3 + side;
-        indices.push(a, a + 1, a + 3, a + 1, a + 4, a + 3);
+      for (let row = 0; row < segments; row++) for (let side = 0; side < columns-1; side++) {
+        const a = first + row * columns + side;
+        indices.push(a, a + 1, a + columns, a + 1, a + columns+1, a + columns);
       }
       leafCount++;
       return;

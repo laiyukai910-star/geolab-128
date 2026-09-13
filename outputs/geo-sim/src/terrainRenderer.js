@@ -919,6 +919,9 @@ export class TerrainRenderer {
   }
 
   applySceneVisibility() {
+    this.infrastructureGroup?.traverse(object=>{
+      if(object.userData.diagnosticOverlay)object.visible=this.viewMode!=="landscape";
+    });
     if (this.rivers) this.rivers.visible = this.params?.water3DEnabled !== false;
     this.subsurfaceGroup.visible = this.shouldShowSubsurface3D();
     this.terrainDetailGroup.visible = this.shouldShowTerrainDetails3D();
@@ -1701,7 +1704,7 @@ export class TerrainRenderer {
       const wetness = model.wetnessIndex?.[i] ?? 0;
       const wx = (x / (model.n - 1) - 0.5) * sizeKm + (hash01(x, y, seed + 19) - 0.5) * cell * 0.42;
       const wz = (y / (model.n - 1) - 0.5) * sizeKm + (hash01(y, x, seed + 23) - 0.5) * cell * 0.42;
-      const wy = (model.height[i] / 1000) * Number(this.params.verticalScale) + 0.012;
+      const wy = ((sampleTerrainHeight(model, wx, wz) ?? model.height[i]) / 1000) * Number(this.params.verticalScale);
       const angle = hash01(x + 7, y - 3, seed) * Math.PI;
       const height = visualCanopyHeight(canopy, cover, Number(this.params.verticalScale));
       const crown = vegetationCrownRadius(height, cover, cell);
@@ -7169,6 +7172,7 @@ function addInstancedAsset(group, name, transforms, fallbackColor, options, prim
     : 1;
   const partitions = partitionAssetTransforms(pipelineKind, transforms, variantCount);
   const material = createProceduralAssetMaterial(pipelineKind, fallbackColor, options, primitiveType);
+  const diagnosticOverlay=["建筑损伤包络","基础风险裙边","恢复压力信标","生态设施联动线","生态设施角色光环","生态设施角色节点"].includes(name);
   const meshes = [];
   partitions.forEach((variantTransforms, variant) => {
     if (!variantTransforms.length) return;
@@ -7212,6 +7216,7 @@ function addInstancedAsset(group, name, transforms, fallbackColor, options, prim
     group.add(mesh);
     meshes.push(mesh);
   });
+  if(diagnosticOverlay)for(const mesh of meshes)mesh.userData.diagnosticOverlay=true;
   return meshes;
 }
 

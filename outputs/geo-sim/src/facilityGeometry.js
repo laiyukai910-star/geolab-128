@@ -15,6 +15,7 @@ export function createFacilityGeometry(kind, quality = "ultra") {
   if (!REBUILT_FACILITY_KINDS.includes(kind)) return null;
   const tier = quality === "exhaustive" ? 2 : quality === "ultra" ? 1 : 0;
   const radial = [16, 28, 44][tier], parts = [];
+  let windowOpenings=0,entrances=0;
   const wall = 0xe7e4dc, trim = 0xf4f1e9, glass = 0x6d9cab, metal = 0x9eacb0;
   const put = (geometry, color, position = [0, 0, 0], rotation = [0, 0, 0]) => {
     geometry.rotateX(rotation[0]); geometry.rotateY(rotation[1]); geometry.rotateZ(rotation[2]);
@@ -38,23 +39,40 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p))), 12 + tier * 8, radius, 8 + tier * 4, false), color);
   const ring = (radius, tubeRadius, p, color = metal) => put(new THREE.TorusGeometry(radius, tubeRadius, 6 + tier * 2, radial), color, p, [Math.PI / 2, 0, 0]);
   const block = (p, size, rows, cols) => {
-    box(p, size);
     const [x, y, z] = p, [w, h, d] = size;
-    // Glazing sits inside raised reveals; no coplanar facade overlays.
+    const thickness=Math.min(0.014,w*0.08,d*0.08);
+    box([x,y-h/2+thickness/2,z],[w,thickness,d],wall,0.001);
+    box([x,y+h/2-thickness/2,z],[w,thickness,d],wall,0.001);
+    // Each facade is a continuous perforated wall, with glazing behind its outer face.
     for (let face = 0; face < 4; face++) {
       const alongX = face < 2, sign = face % 2 ? -1 : 1, width = alongX ? w : d;
       const windows = Math.max(1, Math.round(cols * width / w));
+      const shape=new THREE.Shape();
+      shape.moveTo(-width/2,-h/2);shape.lineTo(width/2,-h/2);shape.lineTo(width/2,h/2);shape.lineTo(-width/2,h/2);shape.closePath();
       for (let row = 0; row < rows; row++) for (let col = 0; col < windows; col++) {
         const u = (col + 0.5) / windows - 0.5;
-        const yy = y - h / 2 + (row + 0.6) * h / rows;
-        const ww = width / windows * 0.64, hh = h / rows * 0.55;
-        const position = alongX ? [x + u * w, yy, z + sign * (d / 2 + 0.001)] : [x + sign * (w / 2 + 0.001), yy, z + u * d];
+        let yy = y - h / 2 + (row + 0.6) * h / rows;
+        const ww = width / windows * 0.64;
+        let hh = h / rows * 0.55;
+        if(face===0 && row===0 && col===Math.floor(windows/2) && y-h/2<=-0.43){
+          const top=yy+hh/2,bottom=y-h/2+thickness;
+          yy=(top+bottom)/2;hh=top-bottom;entrances++;
+        }
+        const left=u*width-ww/2,right=u*width+ww/2,bottom=yy-y-hh/2,top=yy-y+hh/2;
+        const hole=new THREE.Path();hole.moveTo(left,bottom);hole.lineTo(left,top);hole.lineTo(right,top);hole.lineTo(right,bottom);hole.closePath();shape.holes.push(hole);windowOpenings++;
+        const position = alongX ? [x + u * w, yy, z + sign * (d / 2 - thickness*0.7)] : [x + sign * (w / 2 - thickness*0.7), yy, z + u * d];
         box(position, alongX ? [ww, hh, 0.006] : [0.006, hh, ww], glass, 0.001);
         const sill = [...position]; sill[1] -= hh / 2 + 0.003;
         box(sill, alongX ? [ww + 0.015, 0.01, 0.014] : [0.014, 0.01, ww + 0.015], trim, 0.001);
         const mullion = [...position];
         box(mullion, alongX ? [0.007, hh, 0.012] : [0.012, hh, 0.007], metal, 0.001);
+        const transom=[...position];transom[1]+=hh*0.15;
+        box(transom,alongX?[ww,0.006,0.009]:[0.009,0.006,ww],metal,0.001);
       }
+      const panel=new THREE.ExtrudeGeometry(shape,{depth:thickness,steps:1,bevelEnabled:false});
+      panel.translate(0,0,-thickness);
+      const rotation=alongX?(sign>0?0:Math.PI):(sign>0?Math.PI/2:-Math.PI/2);
+      put(panel,wall,alongX?[x,y,z+sign*d/2]:[x+sign*w/2,y,z],[0,rotation,0]);
     }
     box([x, y + h / 2 + 0.009, z], [w + 0.025, 0.018, d + 0.025], trim);
   };
@@ -227,6 +245,7 @@ export function createFacilityGeometry(kind, quality = "ultra") {
   geometry.computeBoundingBox();
   const size = geometry.boundingBox.getSize(new THREE.Vector3()), center = geometry.boundingBox.getCenter(new THREE.Vector3());
   geometry.translate(-center.x,-center.y,-center.z); geometry.scale(1/size.x,1/size.y,1/size.z);
-  geometry.userData.facilityRebuild = { version:1, kind, detailTier:tier, representation:"illustrative construction assembly; not a structural design" };
+  geometry.userData.facilityRebuild = { version:2, kind, detailTier:tier, windowOpenings, entrances,
+    normalization:{center:center.toArray(),size:size.toArray()},representation:"perforated building envelopes and construction assemblies; not a structural design" };
   return geometry;
 }

@@ -6,6 +6,8 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Added
 
+- Rebuilt facade envelopes for towers, courtyard residences, L-plan homes, industrial halls and civic buildings with actual window openings, recessed glazing, transoms and ground-floor entrances.
+- Refined broadleaf surfaces with curved cross-sections and geometric vein relief, and added longitudinal branch detail. These remain procedural visual models, not measured botanical specimens.
 - Added a strict TypeScript normal-depth solver for finite-width rectangular channels, with discharge residuals, dry-flow handling and explicit depth-limit diagnostics.
 - Bundled one CC0 Poly Haven rock reference with photographed PBR textures, a Blender preparation script, and a full-canvas inspection view. Nearby terrain rocks can load the shared asset on demand; overview startup does not fetch it.
 - Added detailed and distant reference meshes (12,416 and 2,730 triangles), embedded textures, source attribution, and asset lifecycle tests. This is a reference asset pipeline, not a replacement of every facility model.
@@ -15,6 +17,8 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ### Fixed
 
+- Removed a fixed 12-metre vegetation placement lift and sampled terrain elevation at the displaced planting position.
+- Hid infrastructure diagnostic envelopes, pressure beacons and ecological role markers in the natural landscape view while retaining them in analytical views.
 - Removed independent channel depth/velocity clipping that broke discharge consistency; channel shear stress now uses hydraulic radius rather than water depth. Reported slope regularization and supercritical conditions remain limitations of the uniform-flow approximation.
 - Replaced the sky's cloud field so it no longer shimmers while the camera turns. Cloud coordinates now come from a view-direction dome folded into a bounded ring by `r/(1+0.3r)`, a map that is linear to first order, monotone, never stretching, and bounded in the far field, instead of a projected ray. Each octave is now faded by an analytic footprint derived from the view ray and split into the fold's angular and radial parts, rather than by screen derivatives of the projected coordinate whose per-pixel rate swings by orders of magnitude across one frame. Measured against a supersampled reference, cloud aliasing over a slow pan fell by 2.3x to 2.5x at the horizon and 2.3x across the sun disc, and frame-to-frame shimmer fell by about 2x. The sky shader now lives in `src/skyEnvironment.js` with its own tests.
 - Grounded scanned rocks using their actual thickness and the local terrain normal, preventing the previous block-shaped placement offset from leaving thin scans suspended above slopes. Cached placement transforms are reused during camera motion.
