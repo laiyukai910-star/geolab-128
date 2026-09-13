@@ -4276,7 +4276,12 @@ function updateTerrainTileMesh(tile, model, params, viewMode, options = {}) {
           const geomorphology = surfaceGeomorphology(model, params, modelIndex);
           const weights = terrainSurfaceWeights(model, params, modelIndex, undefined, geomorphology);
           surfaces.setXYZW(vertex, ...weights);
-          structures.setXYZW(vertex, ...packTerrainStructure(model, geomorphology));
+          // terrainStructure is a normalized Uint8 attribute, and BufferAttribute.setXYZW normalizes
+          // whatever it is handed (Math.round(value*255) for a byte array). Passing packed bytes
+          // through it scales them a second time and the byte array then wraps, so the GPU ends up
+          // reading (256 - byte) / 255. Write the packed bytes straight into the array instead.
+          const packedStructure = packTerrainStructure(model, geomorphology);
+          for (let channel = 0; channel < 4; channel += 1) structures.array[vertex * 4 + channel] = packedStructure[channel];
           const [r, g, b] = naturalTerrainColor(model, params, modelIndex, weights, undefined, geomorphology);
           linearColor.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
           colors.setXYZ(vertex, linearColor.r, linearColor.g, linearColor.b);
