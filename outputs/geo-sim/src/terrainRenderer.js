@@ -23,6 +23,8 @@ import {
   colorForValue,
   INFRASTRUCTURE_CODE_TYPES,
   MAP_SIZE_KM,
+  SUBSURFACE_MATERIAL_CLASSES,
+  SUBSURFACE_RISK_CLASSES,
   terrainPresetMaterialPlan,
   VEGETATION_TYPES
 } from "./geoEngine.js";
@@ -43,6 +45,24 @@ import {
   proceduralMaterialProfile,
   foliageDetailProfile
 } from "./assetPipeline.js";
+
+// The subsurface display does not re-decide the model's geological classification from its own
+// numeric thresholds: `subsurfaceVoxelDisplayClass` below is the single place this file reads the
+// categorical codes geoEngine.js publishes, and every aquifer / saturation / fracture gate in the
+// rendered subsurface goes through it. The class ids are resolved from the published legends by
+// their stable `code` names, so a legend renumbering cannot silently change what the display
+// treats as an aquifer, a saturated deposit or fractured rock.
+const subsurfaceMaterialClassIdByCode = (code, fallback) =>
+  SUBSURFACE_MATERIAL_CLASSES.find((entry) => entry.code === code)?.id ?? fallback;
+const subsurfaceRiskClassIdByCode = (code, fallback) =>
+  SUBSURFACE_RISK_CLASSES.find((entry) => entry.code === code)?.id ?? fallback;
+const SUBSURFACE_UNKNOWN_MATERIAL_CLASS = subsurfaceMaterialClassIdByCode("UNKNOWN", 0);
+const SUBSURFACE_AQUIFER_BODY_CLASS = subsurfaceMaterialClassIdByCode("AQUIFER_BODY", 3);
+const SUBSURFACE_SATURATED_UNCONSOLIDATED_CLASS = subsurfaceMaterialClassIdByCode("SATURATED_UNCONSOLIDATED", 7);
+const SUBSURFACE_FRACTURED_BEDROCK_CLASS = subsurfaceMaterialClassIdByCode("FRACTURED_BEDROCK", 5);
+const SUBSURFACE_AQUIFER_SENSITIVE_RISK = subsurfaceRiskClassIdByCode("AQUIFER_SENSITIVE", 1);
+const SUBSURFACE_FRACTURE_PRONE_RISK = subsurfaceRiskClassIdByCode("FRACTURE_PRONE", 2);
+const SUBSURFACE_LIQUEFACTION_PRONE_RISK = subsurfaceRiskClassIdByCode("LIQUEFACTION_PRONE", 3);
 
 function cameraHome(sizeKm, aspect = 1.5) {
   const fit = Math.max(1, 1.2 / aspect);
@@ -1430,9 +1450,13 @@ export class TerrainRenderer {
         const thicknessKm = Math.max(0.006, ((bottom - top) / 1000) * undergroundScale);
         const voxelIndex = layer * volume.columnCellCount + columnIndex;
         const color = subsurfaceVoxelColor(volume, voxelIndex, columnIndex);
+        // The model's categorical codes are the single classification here: whether this voxel is
+        // an aquifer, saturated or fractured comes from `subsurfaceVoxelDisplayClass` (material and
+        // risk class codes), not from thresholds invented in the renderer. The continuous fields
+        // below are display magnitudes only — vein thickness, marker size and colour blend.
+        const displayClass = subsurfaceVoxelDisplayClass(volume, voxelIndex, columnIndex);
         const saturation = clamp01(volume.groundwaterSaturation?.[voxelIndex] ?? 0);
         const aquifer = clamp01(volume.columnAquiferPotential?.[columnIndex] ?? 0);
-        const lithology = volume.lithologyCode?.[voxelIndex] ?? 0;
         const pressureSignal = subsurfacePorePressureSignal(
           volume.porePressureKpa?.[voxelIndex] ?? 0,
           volume.verticalStressKpa?.[voxelIndex] ?? 0
@@ -1451,7 +1475,7 @@ export class TerrainRenderer {
           ry: 0,
           color
         });
-        if ((lithology === 3 || aquifer > 0.42) && saturation > 0.34) {
+        if (displayClass.aquifer && displayClass.saturated) {
           aquiferVeins.push({
             x: wx,
             y: layerY + thicknessKm * 0.18,
@@ -1463,6 +1487,10 @@ export class TerrainRenderer {
             color: subsurfaceAquiferDiagnosticColor(saturation, aquifer)
           });
         }
+        // Pore pressure stays continuous: the model stores pore pressure and vertical stress per
+        // voxel but has no categorical code for the pressure ratio, and its DEEP_PRESSURE risk
+        // class is assigned from depth/stress, which answers a different question. This gate and
+        // the plume size below are therefore pure display magnitudes.
         if (pressureSignal > 0.42) {
           const radius = Math.max(0.025, cell * (0.16 + pressureSignal * 0.16));
           porePressurePlumes.push({
@@ -1476,7 +1504,9 @@ export class TerrainRenderer {
             color: subsurfacePressureDiagnosticColor(pressureSignal)
           });
         }
-        if (engineeringRisk > 0.46) {
+        // Whether the model reports engineering concern at all is its risk class (LOW = no
+        // concern); the continuous engineeringRisk score only decides how large the marker is.
+        if (displayClass.engineeringConcern && engineeringRisk > 0.46) {
           const offset = thinAxis === "z" ? Math.max(0.035, cell * 0.24) : -Math.max(0.035, cell * 0.24);
           engineeringRiskMarkers.push({
             x: wx + (thinAxis === "z" ? offset : 0),
@@ -4320,17 +4350,83 @@ function subsurfaceColumnIndexForRenderer(model, surfaceIndex) {
   return gy * volume.gridN + gx;
 }
 
+/**
+ * Display classification of one subsurface voxel.
+ *
+ * geoEngine.js already publishes this classification as categorical codes — `materialClassCode`
+ * and `riskClassCode` per voxel, plus `columnMaterialClassCode` / `columnRiskClassCode` for the
+ * column's dominant classes — so the renderer must not answer the same geological questions with
+ * thresholds of its own. This function is that single reading, and every aquifer / saturation /
+ * fracture gate in the displayed subsurface (the aquifer veins, the voxel colour, the engineering
+ * risk markers) uses its flags. The continuous per-voxel fields (`groundwaterSaturation`,
+ * `fractureRisk`, `engineeringRisk`, `columnAquiferPotential`) stay continuous: they only scale
+ * display magnitudes such as marker thickness and colour blend amounts.
+ *
+ * A voxel the model leaves unclassified (`materialClassCode` UNKNOWN/void, code 0) is never
+ * reported as an aquifer, saturated or fractured: the display must not claim a material class the
+ * model does not have, not even when the surrounding column reads as an aquifer.
+ */
+export function subsurfaceVoxelDisplayClass(volume, voxelIndex, columnIndex = -1) {
+  const materialClassCode = volume?.materialClassCode?.[voxelIndex] ?? SUBSURFACE_UNKNOWN_MATERIAL_CLASS;
+  const riskClassCode = volume?.riskClassCode?.[voxelIndex] ?? 0;
+  const columnMaterialClassCode = columnIndex >= 0
+    ? volume?.columnMaterialClassCode?.[columnIndex] ?? SUBSURFACE_UNKNOWN_MATERIAL_CLASS
+    : SUBSURFACE_UNKNOWN_MATERIAL_CLASS;
+  const columnRiskClassCode = columnIndex >= 0 ? volume?.columnRiskClassCode?.[columnIndex] ?? 0 : 0;
+  const classified = materialClassCode !== SUBSURFACE_UNKNOWN_MATERIAL_CLASS;
+  const aquiferRiskZone = riskClassCode === SUBSURFACE_AQUIFER_SENSITIVE_RISK;
+  return {
+    classified,
+    materialClassCode,
+    riskClassCode,
+    columnMaterialClassCode,
+    columnRiskClassCode,
+    // "Is this an aquifer?" — aquifer-body or saturated-unconsolidated material, the model's
+    // aquifer protection zone, or a voxel in a column whose dominant material/risk class is one
+    // of those (the column is the resolution the model reports its dominant class at).
+    aquifer: classified && (
+      materialClassCode === SUBSURFACE_AQUIFER_BODY_CLASS ||
+      materialClassCode === SUBSURFACE_SATURATED_UNCONSOLIDATED_CLASS ||
+      aquiferRiskZone ||
+      columnMaterialClassCode === SUBSURFACE_AQUIFER_BODY_CLASS ||
+      columnRiskClassCode === SUBSURFACE_AQUIFER_SENSITIVE_RISK
+    ),
+    // "Is this saturated?" — the saturated unconsolidated deposit, the saturated loose layer the
+    // model classes as liquefaction-prone, and the aquifer protection zone the model only assigns
+    // to water-bearing aquifer material or high aquifer potential.
+    saturated: classified && (
+      materialClassCode === SUBSURFACE_SATURATED_UNCONSOLIDATED_CLASS ||
+      aquiferRiskZone ||
+      riskClassCode === SUBSURFACE_LIQUEFACTION_PRONE_RISK
+    ),
+    // "Is this fractured?" — fractured-bedrock material or a fracture-prone rock mass.
+    fractured: classified && (
+      materialClassCode === SUBSURFACE_FRACTURED_BEDROCK_CLASS ||
+      riskClassCode === SUBSURFACE_FRACTURE_PRONE_RISK
+    ),
+    // "Does the model report engineering concern here?" — risk class LOW (id 0) is the model's own
+    // categorical answer; the continuous engineeringRisk score stays the magnitude for marker size
+    // and colour. This one reads the risk code only, because a risk class is a real model verdict
+    // even where the material itself stayed unclassified.
+    engineeringConcern: riskClassCode !== 0
+  };
+}
+
 function subsurfaceVoxelColor(volume, voxelIndex, columnIndex) {
-  const lithology = volume.lithologyCode?.[voxelIndex] ?? 0;
+  // The classification gates below are the model's categorical codes (`aquifer` / `saturated` /
+  // `fractured`); the continuous fields only decide how strong each display tint is.
+  const displayClass = subsurfaceVoxelDisplayClass(volume, voxelIndex, columnIndex);
   const saturation = volume.groundwaterSaturation?.[voxelIndex] ?? 0;
   const fracture = volume.fractureRisk?.[voxelIndex] ?? volume.columnFractureRisk?.[columnIndex] ?? 0;
   const aquifer = volume.columnAquiferPotential?.[columnIndex] ?? 0;
   const support = volume.voxelObservedSupport?.[voxelIndex] ?? 0;
   const engineeringRisk = volume.engineeringRisk?.[voxelIndex] ?? 0;
-  const base = new THREE.Color(...lithologyDisplayColor(SUBSURFACE_LITHOLOGY[lithology] || SUBSURFACE_LITHOLOGY[0]));
-  if (saturation > 0.45 || aquifer > 0.45) base.lerp(new THREE.Color(0x4d9fbd), Math.min(0.52, saturation * 0.34 + aquifer * 0.24));
-  if (fracture > 0.55) base.lerp(new THREE.Color(0xd49a64), Math.min(0.42, (fracture - 0.45) * 0.7));
-  if (engineeringRisk > 0.58) base.lerp(new THREE.Color(0xdf6f56), Math.min(0.5, (engineeringRisk - 0.5) * 0.95));
+  const base = new THREE.Color(...lithologyDisplayColor(SUBSURFACE_LITHOLOGY[volume.lithologyCode?.[voxelIndex] ?? 0] || SUBSURFACE_LITHOLOGY[0]));
+  if (displayClass.aquifer || displayClass.saturated) base.lerp(new THREE.Color(0x4d9fbd), Math.min(0.52, saturation * 0.34 + aquifer * 0.24));
+  if (displayClass.fractured) base.lerp(new THREE.Color(0xd49a64), Math.min(0.42, Math.max(0, fracture - 0.45) * 0.7));
+  if (displayClass.engineeringConcern && engineeringRisk > 0.58) base.lerp(new THREE.Color(0xdf6f56), Math.min(0.5, (engineeringRisk - 0.5) * 0.95));
+  // Observed support is a data-confidence score with no categorical code: it stays a continuous
+  // display emphasis on top of the classified colour.
   if (support > 0.55) base.lerp(new THREE.Color(0x8de3d6), Math.min(0.24, (support - 0.5) * 0.42));
   if (support < 0.12) base.lerp(new THREE.Color(0x48443f), 0.22);
   return base.getHex();
