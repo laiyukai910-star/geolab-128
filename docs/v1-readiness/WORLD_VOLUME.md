@@ -34,14 +34,35 @@ balance between weathering production and slope-driven removal. Its inputs are t
 porosity, permeability and dry density; the published relations and the constants chosen by the
 author are both marked in that file.
 
-The terrain surface shader receives the resulting joint and bed spacings through the packed
-`terrainStructure` vertex attribute, so procedural joint cells and bedding banding follow the
-actual rock rather than one fixed wavelength. A sparsely jointed competent rock and a closely
-fractured weak one therefore no longer share a cell size, and weathered cover is tinted toward the
-lithology's own colour.
+Timing matters as much as strength. Joint spacing is only meaningful for a fractured rock mass, so
+soil, weathered cover and alluvium are given an aggregate scale instead and the shader draws them
+granularly; a loose material never renders as a larger block than the rock it sits on. Placed rock
+and scree detail likewise take their block size from the joint spacing and the slope they need to
+move from the rock mass strength, so weak material sheds on gentler ground than strong rock.
+
+The terrain surface shader receives the resulting spacings through the packed `terrainStructure`
+vertex attribute, so procedural joint cells and bedding banding follow the actual rock rather than
+one fixed wavelength.
 
 A scenario without a subsurface model has no lithology to read, so the previous
-slope/cover/wetness proxy is used unchanged in that case.
+slope/cover/wetness proxy is used unchanged in that case, and its structure is marked unclassified
+so the shader does not invent bedding or blocky joints for it.
+
+### Subsurface And Caves
+
+Subsurface lamination is drawn at the modelled column's own bed thickness, using the same
+thickness-weighted harmonic mean the surface uses, so the section and the surface agree about how
+thick the beds are. The lithology palette lives in one place, `src/lithologyTable.js`, and both the
+volume view and the section derive from it; it holds the display tones the application was tuned
+against, which are lighter than raw material colours because the subsurface material adds a
+display-only inspection fill.
+
+The karst cave's passage skeleton is anchored to real bedding contacts: one conduit per soluble
+host bed at that bed's own contact depth, a vadose shaft from the top contact and a phreatic outlet
+along the base of the host, with conduit reach scaling with the host's joint spacing. A column with
+no soluble-looking host yields no plan and the volume view keeps its generic cavity rather than
+inventing contacts. It remains illustrative geometry: it infers no cave from observations and
+changes no groundwater calculation.
 
 ## Geological Section
 
