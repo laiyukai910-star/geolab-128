@@ -1599,22 +1599,32 @@ export class TerrainRenderer {
         const angle = infrastructureAngle(model, i, x, y, "terrain", seed);
         const size = cell * step;
         const noise = hash01(x, y, seed + 5011);
-        const suitability=surfaceDetailSuitability(model,i);        const px = base.x + (hash01(x, y, seed + 37) - 0.5) * size * 0.5;
+        const suitability=surfaceDetailSuitability(model,i);
+        // Block size and scree supply follow the rock, not a fixed slope threshold: a widely jointed
+        // competent mass sheds larger blocks and needs a steeper slope before it sheds at all than a
+        // closely jointed weak one. See geoLithology.js for the derivation.
+        const geomorphology = surfaceGeomorphology(model, this.params, i);
+        const blockScale = geomorphology.jointSpacingM
+          ? clamp(Math.log(geomorphology.jointSpacingM / 0.6) / Math.log(6) * 1.4 + 0.6, 0.6, 2.0) : 1;
+        const massTerm = geomorphology.rockMassStrength ? clamp(geomorphology.rockMassStrength / 100, 0.05, 1) : 0.5;
+        const rockSlopeThreshold = 16 + 18 * massTerm;
+        const screeSlopeThreshold = 10 + 16 * massTerm;
+        const px = base.x + (hash01(x, y, seed + 37) - 0.5) * size * 0.5;
         const pz = base.z + (hash01(y, x, seed + 43) - 0.5) * size * 0.5;
-        if (slope > 28 && roughness > 4 && noise < Math.min(0.38, slope / 92)*suitability.rock) {
+        if (slope > rockSlopeThreshold && roughness > 4 && noise < Math.min(0.38, slope / 92)*suitability.rock) {
           place(buckets.rocks, {
             x: px, z: pz, ry: angle,
-            sx: clamp(size * (0.035 + noise * 0.02), 0.002, 0.018),
-            sy: clamp(size * (0.02 + noise * 0.015), 0.0015, 0.012),
-            sz: clamp(size * (0.025 + noise * 0.025), 0.002, 0.018),
+            sx: clamp(size * (0.035 + noise * 0.02) * blockScale, 0.002, 0.026),
+            sy: clamp(size * (0.02 + noise * 0.015) * blockScale, 0.0015, 0.018),
+            sz: clamp(size * (0.025 + noise * 0.025) * blockScale, 0.002, 0.026),
             color: terrainRockColor(elevation, maxElevation, noise)
           });
         }
-        if (slope > 18 && roughness > 8 && hash01(x, y, seed + 801) < 0.18*suitability.scree) {
+        if (slope > screeSlopeThreshold && roughness > 8 && hash01(x, y, seed + 801) < 0.18*suitability.scree) {
           place(buckets.scree, {
             x: px, z: pz, ry: angle,
-            sx: clamp(size * 0.1, 0.006, 0.04), sy: clamp(size * 0.012, 0.001, 0.005),
-            sz: clamp(size * 0.07, 0.004, 0.025), color: 0x99958b
+            sx: clamp(size * 0.1 * blockScale, 0.006, 0.055), sy: clamp(size * 0.012, 0.001, 0.005),
+            sz: clamp(size * 0.07 * blockScale, 0.004, 0.04), color: 0x99958b
           });
         }
         if (elevation > maxElevation * 0.72 && temperature < 2.5 && hash01(x, y, seed + 1999) < 0.55) {
