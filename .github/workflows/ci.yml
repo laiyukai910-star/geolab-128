@@ -63,6 +63,7 @@ jobs:
           node outputs/geo-sim/tests/proceduralGeometry.test.mjs
           node outputs/geo-sim/tests/terrainSurface.test.mjs
           node outputs/geo-sim/tests/geoLithology.test.mjs
+          node outputs/geo-sim/tests/geologyStructure.test.mjs
           node outputs/geo-sim/tests/scannedAssets.test.mjs
           node outputs/geo-sim/tests/riverReconstruction.test.mjs
           node outputs/geo-sim/tests/modelEnvelope.test.mjs
@@ -116,6 +117,7 @@ jobs:
           test -f outputs/geo-sim/tests/assetPipeline.test.mjs
           test -f outputs/geo-sim/tests/skyEnvironment.test.mjs
           test -f outputs/geo-sim/tests/geoLithology.test.mjs
+          test -f outputs/geo-sim/tests/geologyStructure.test.mjs
           test -f outputs/geo-sim-desktop/package.json
           test -f engine/Cargo.toml
           test -f engine/Cargo.lock

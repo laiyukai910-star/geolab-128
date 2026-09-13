@@ -32,16 +32,18 @@ export function surfaceGeomorphology(model, params, index, options = {}) {  cons
   const seeded = !!model.hydraulics?.channelMask?.[index] && (model.hydraulics?.channelDepthM?.[index] ?? 0) > 0;
 
   // The table has to default here, not only at the public wrappers: a caller that forgets it would
-  // otherwise silently receive the no-lithology fallback and pack it as a meaningless spacing.
-  const table = options.lithologyTable || SUBSURFACE_LITHOLOGY;
+  // otherwise silently receive the no-lithology fallback and pack it as a meaningless spacing. An
+  // explicitly empty or missing table means no lithology information at all, so fall back too.
+  const table = options.lithologyTable === null ? null : (options.lithologyTable || SUBSURFACE_LITHOLOGY);
+  const hasTable = !!table && Object.keys(table).length > 0;
   const volume = model.subsurface;
   const columnIndex = Number.isInteger(options.columnIndex) ? options.columnIndex
     : subsurfaceColumnIndex(model, index);
   const lithologyCode = columnIndex >= 0 ? (volume?.lithologyCode?.[columnIndex] ?? 0) : -1;
-  // The derivation needs both a resolved column and a usable table; otherwise fall back rather than
-  // invent a rock mass from nothing.
-  const usableTable = !!table?.[lithologyCode >= 0 ? lithologyCode : 0] || !!table?.[0];
-  const lithology = lithologyCode >= 0 && usableTable ? (table[lithologyCode] || table[0] || null) : null;
+  // Unresolved codes fall back to the table's unresolved entry rather than reporting an id the rest
+  // of the pipeline cannot colour.
+  const resolvedCode = hasTable && lithologyCode >= 0 ? (table[lithologyCode] ? lithologyCode : 0) : -1;
+  const lithology = resolvedCode >= 0 ? table[resolvedCode] : null;
   if (!lithology) {
     // Fallback: no subsurface column, so keep the established slope/cover/wetness proxy.
     const rock = unit(smooth(18, 58, slope) * (1 - cover * 0.45) * (1 - sealed) * (1 - deposition * 0.55) * (1 + erosion * 0.2));
@@ -49,7 +51,10 @@ export function surfaceGeomorphology(model, params, index, options = {}) {  cons
     return {
       source: "surface-proxy",
       lithologyCode: -1, lithologyName: null, landform: null,
-      rockMassStrength: null, regolithM: null, jointSpacingM: null, jointStyle: null,
+      rockMassStrength: null, regolithM: null,
+      // Without a lithology there is no defensible joint spacing. Unclassified marks that, and the
+      // shader then draws the generic granular response rather than inventing a blocky rock mass.
+      jointSpacingM: 0.5, jointStyle: "unclassified", materialClass: "unconsolidated",
       rock, scree: unit((1 - sealed) * (1 - cover * 0.85) * (1 - unit(smooth(4, 14, wetnessIndex)) * 0.7) * (0.5 + erosion * 0.5)),
       vegetation, regolith: unit(1 - rock - vegetation - sealed),
       wet: smooth(4, 14, wetnessIndex), sealed, seeded
@@ -63,7 +68,7 @@ export function surfaceGeomorphology(model, params, index, options = {}) {  cons
   // bed sits at the top.
   const bedThicknessM = effectiveBedThicknessM(volume, columnIndex, depthEdges);
   const topLayerLithology = lithology;
-  const { spacingM, style, stiffness } = layerStructureSpacingM(lithologyCode, bedThicknessM, 0, table);
+  const { spacingM, style, stiffness, materialClass } = layerStructureSpacingM(resolvedCode, bedThicknessM, 0, table);
   const strength = rockMassStrength(topLayerLithology, spacingM, smooth(4, 14, wetnessIndex));
 
   const regolithM = regolithThicknessM({
@@ -75,23 +80,32 @@ export function surfaceGeomorphology(model, params, index, options = {}) {  cons
   });
 
   // Bare rock is where cover cannot be held: steep ground, a strong mass, thin weathered cover,
-  // active erosion, or a channel bed that is swept by flow.
-  const steepness = smooth(20, 55, slope);
-  const coverRetention = 1 / (1 + regolithM / 0.25);
+  // active erosion, or a channel bed that is swept by flow. Steepness and cover retention are the
+  // two controlling factors; a deep weathered profile keeps even steep ground vegetated, which is
+  // what the strength and erosion terms modulate rather than override.
+  const steepness = smooth(26, 62, slope);
+  // Retention saturates: once cover is thick enough it holds regardless of further thickening.
+  const coverRetention = 1 - Math.exp(-regolithM / 0.30);
   const strengthTerm = unit((strength - 40) / 55);
-  const rock = seeded ? 1 : unit((1 - sealed) * steepness * (1 - cover * 0.55) * (1 - deposition * 0.5)
-    * (0.45 + 0.55 * strengthTerm) * (0.35 + 0.65 * coverRetention) * (0.75 + 0.5 * erosion));
-  // Scree is material shed from above and trapped below; it needs a slope to deliver it and
-  // enough weathered debris to supply it.
-  const scree = seeded ? 0 : unit((1 - sealed) * (1 - cover * 0.85) * (1 - rock) * smooth(18, 42, slope)
-    * (0.3 + 0.7 * erosion) * (0.4 + 0.6 * unit(regolithM / 0.6)) * (0.55 + 0.45 * strengthTerm));
-  const vegetation = unit(cover * (1 - rock) * (1 - sealed) * (1 - scree * 0.6));
+  // A channel cell is wet ground, not automatically a rock face: a sand-bed river is not bedrock.
+  // Suppressing placed rock and scree detail on channels is a separate concern, handled by
+  // surfaceDetailSuitability.
+  const rock = unit((1 - sealed) * steepness * (1 - cover * 0.5) * (1 - deposition * 0.4)
+    * (0.35 + 0.65 * strengthTerm) * (1 - 0.85 * coverRetention) * (0.8 + 0.35 * erosion));
+  // Scree is material shed from above and trapped below. It is a deposit, so it competes with
+  // vegetation for the same gentle-to-moderate ground rather than with bare rock, and it needs both
+  // a slope to deliver debris and enough weathered material to supply it.
+  const scree = unit((1 - sealed) * (1 - cover * 0.7)
+    * smooth(28, 52, slope) * (0.55 + 0.45 * erosion) * coverRetention * (0.4 + 0.6 * strengthTerm));
+  const vegetation = unit(cover * (1 - rock) * (1 - sealed) * (1 - scree * 0.55));
   const regolith = unit(1 - rock - scree - vegetation - sealed);
 
   return {
     source: "lithology",
-    lithologyCode, lithologyName: lithology.name, landform: landformClass({ rockMassStrengthValue: strength, regolithM, slopeDeg: slope }),
-    rockMassStrength: strength, regolithM, jointSpacingM: spacingM, jointStyle: style, stiffness,
+    lithologyCode: resolvedCode, lithologyName: lithology.name,
+    lithologyId: lithologyCode, unresolvedLithology: resolvedCode !== lithologyCode,
+    landform: landformClass({ rockMassStrengthValue: strength, regolithM, slopeDeg: slope }),
+    rockMassStrength: strength, regolithM, jointSpacingM: spacingM, jointStyle: style, materialClass, stiffness,
     rock, scree, vegetation, regolith,
     wet: smooth(4, 14, wetnessIndex), sealed, seeded
   };
@@ -171,10 +185,14 @@ export function packTerrainStructure(model, geomorphology) {
     packLog(geomorphology?.jointSpacingM ?? 1, JOINT_SPACING_RANGE_M),
     packLog(bedThicknessM, BED_THICKNESS_RANGE_M),
     Math.round(255 * unit(geomorphology?.stiffness ?? 0.5)),
-    Math.round(255 * unit((geomorphology?.rockMassStrength ?? 50) / 100))
+    MATERIAL_CLASS_CODE[geomorphology?.materialClass] ?? MATERIAL_CLASS_CODE.unclassified
   ];
 }
 export const TERRAIN_STRUCTURE_RANGES = Object.freeze({ jointSpacingM: JOINT_SPACING_RANGE_M, bedThicknessM: BED_THICKNESS_RANGE_M });
+// The fourth byte tells the shader which of the two spacing scales the first byte holds: a joint
+// spacing in a rock mass, or an aggregate scale in a loose material with no joints. Values are
+// uploaded normalized, so they are compared as fractions of 255 in terrainSurfaceMaterial.js.
+export const MATERIAL_CLASS_CODE = Object.freeze({ unclassified: 64, unconsolidated: 191, rock: 255 });
 
 export function naturalTerrainColor(model, params, index, weights = null, lithologyTable = SUBSURFACE_LITHOLOGY, prepared = null) {
   if (model.height[index] <= (Number(params?.seaLevel) || 0)) return [142, 151, 132];
@@ -185,7 +203,7 @@ export function naturalTerrainColor(model, params, index, weights = null, lithol
   const plant = [65, 108, 54];
   // Weathered cover and scree are drawn toward the lithology's own colour, so a granite upland and
   // a clay plain stop sharing one regolith tone.
-  const lithologyColor = lithologyTable?.[geomorphology.lithologyCode]?.color || null;
+  const lithologyColor = lithologyTable?.[geomorphology.lithologyCode]?.color || lithologyTable?.[0]?.color || null;
   const cover = unit(geomorphology.regolith ?? 0) + unit(geomorphology.scree ?? 0);
   const regolithTone = lithologyColor
     ? soil.map((value, channel) => value * 0.72 + lithologyColor[channel] * 0.28)

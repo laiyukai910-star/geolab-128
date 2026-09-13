@@ -8,6 +8,8 @@ import { ScannedAssetLibrary } from "./scannedAssets.js";
 import { ScannedRockInstances } from "./scannedRockInstances.js";
 import { createRiverMaterial } from "./riverMaterial.js";
 import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal, surfaceDetailSuitability, surfaceGeomorphology, packTerrainStructure } from "./terrainAppearance.js";
+import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
+import { lithologyDisplayColor } from "./geoLithology.js";
 import { createTerrainSurfaceMaterial, updateTerrainSurfaceMaterial } from "./terrainSurfaceMaterial.js";
 import { SceneVolume } from "./sceneVolume.js";
 import { ORGANISM_KINDS, createOrganismMaterial } from "./organismGeometry.js";
@@ -4315,15 +4317,7 @@ function subsurfaceVoxelColor(volume, voxelIndex, columnIndex) {
   const aquifer = volume.columnAquiferPotential?.[columnIndex] ?? 0;
   const support = volume.voxelObservedSupport?.[voxelIndex] ?? 0;
   const engineeringRisk = volume.engineeringRisk?.[voxelIndex] ?? 0;
-  const palette = {
-    1: 0x9a7048,
-    2: 0x897b5c,
-    3: 0xb79b61,
-    4: 0x777b79,
-    5: 0x5f666b,
-    6: 0x725f59
-  };
-  const base = new THREE.Color(palette[lithology] || 0x6f6760);
+  const base = new THREE.Color(...lithologyDisplayColor(SUBSURFACE_LITHOLOGY[lithology] || SUBSURFACE_LITHOLOGY[0]));
   if (saturation > 0.45 || aquifer > 0.45) base.lerp(new THREE.Color(0x4d9fbd), Math.min(0.52, saturation * 0.34 + aquifer * 0.24));
   if (fracture > 0.55) base.lerp(new THREE.Color(0xd49a64), Math.min(0.42, (fracture - 0.45) * 0.7));
   if (engineeringRisk > 0.58) base.lerp(new THREE.Color(0xdf6f56), Math.min(0.5, (engineeringRisk - 0.5) * 0.95));

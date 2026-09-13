@@ -71,10 +71,15 @@ vec3 p = vGeoPositionM;
 float footprint = max(length(dFdx(p)), length(dFdy(p)));
 if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   // Joint and bed spacings come from the lithology and bed thickness under this cell, so a
-  // sparsely jointed granite and a closely fractured mudstone no longer share one cell size.
+  // sparsely jointed granite and a closely fractured mudstone no longer share one cell size. The
+  // fourth byte says which scale the first byte holds: a joint spacing in a rock mass, or an
+  // aggregate scale in a loose material that has no joints at all.
   float jointSpacingM = geoUnpackLog(vGeoStructure.x, GEO_JOINT_SPACING_RANGE_M);
   float bedThicknessM = geoUnpackLog(vGeoStructure.y, GEO_BED_THICKNESS_RANGE_M);
   float competence = vGeoStructure.z;
+  // 1.0 means a jointed rock mass; a loose material and an unresolved column both fall below it and
+  // are drawn granular, so an unclassified cell never invents bedding or blocky joints.
+  float rockMass = step(0.8, vGeoStructure.w);
   float macro = geoFilteredNoise(p, 160.0, footprint);
   float blocks = geoFilteredNoise(p + 37.0, 14.0, footprint);
   float chips = geoFilteredNoise(p + 71.0, 2.2, footprint);
@@ -87,16 +92,18 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   float wet = vGeoSurface.z, sealed = vGeoSurface.w;
   // One banding cycle per bed, so a thin-bedded unit reads as laminae and a thick unit as massive
   // beds. Surface relief also grows with joint spacing, which is what makes widely jointed rock
-  // stand in bigger blocks.
+  // stand in bigger blocks. Loose material is not a fractured mass, so it carries neither bedding
+  // nor blocky joints: only its aggregate scale survives.
   float layers = sin((p.y + geoFilteredNoise(p, 36.0, footprint) * 7.0) * 6.2831853 / max(0.05, bedThicknessM))
-    * (1.0 - smoothstep(0.7, 4.5, footprint));
+    * (1.0 - smoothstep(0.7, 4.5, footprint)) * rockMass;
   float fracture = (1.0 - smoothstep(0.025, 0.12, abs(blocks - 0.5)))
-    * (1.0 - smoothstep(1.0, 5.0, footprint));
+    * (1.0 - smoothstep(1.0, 5.0, footprint)) * rockMass;
   float cellFade = 1.0 - smoothstep(0.06, 0.4, footprint);
   vec2 stone = vec2(0.5, 0.18);
   if (cellFade > 0.001 && rock > 0.04) {
     vec3 warp = vec3(chips, geoNoise(p / 2.2 + 13.0), geoNoise(p / 2.2 + 29.0));
-    stone = geoStoneCell((p + warp * 1.2) * vec3(1.0, 1.8, 1.0) / max(0.02, jointSpacingM));
+    // Aggregate spacing is narrower than joint spacing, so loose ground breaks into finer pieces.
+    stone = geoStoneCell((p + warp * 1.2) * vec3(1.0, mix(1.0, 1.8, rockMass), 1.0) / max(0.02, jointSpacingM));
   }
   float weathering = smoothstep(0.3, 0.7, blocks + (chips - 0.5) * 0.45);
   float joint = (1.0 - smoothstep(0.025, 0.12, stone.y)) * cellFade * weathering;
@@ -116,8 +123,7 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   diffuseColor.rgb = max(diffuseColor.rgb, vec3(0.0));
   geoHeight = mix(mix(0.035 * grain + 0.07 * chips + 0.008 * grit,0.007 * grain + 0.012 * chips,vegetation),
     (0.32 * blocks + 0.12 * chips + layers * 0.035 - fracture * 0.09
-    + bevel * 0.07 + grain * 0.06 + grit * 0.008) * (0.55 + 0.45 * competence), rock) * (1.0 - sealed * 0.85);
-  geoHeight += (particles * 0.00065 + pores * 0.00012) * (1.0 - sealed)
+    + bevel * 0.07 + grain * 0.06 + grit * 0.008) * (0.55 + 0.45 * competence), rock) * (1.0 - sealed * 0.85);  geoHeight += (particles * 0.00065 + pores * 0.00012) * (1.0 - sealed)
     + looseSoil * aggregate * 0.006;
   float mineralSpark = smoothstep(0.61, 0.78, particles) * rock;
   float dampPores = wet * (1.0 - smoothstep(0.35, 0.65, grain)) * (1.0 - sealed);

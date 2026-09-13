@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { caveContains } from "./caveField.js";
+import { lithologyDisplayColor, unclassifiedDisplayColor, wetRockDisplayColor } from "./geoLithology.js";
+import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 
@@ -43,17 +45,21 @@ export function subsurfaceColumnIndex(model, surfaceIndex) {
   return gy * volume.gridN + gx;
 }
 
-const LITHOLOGY = [0x626569, 0x9a7048, 0x897b5c, 0xb79b61, 0x777b79, 0x5f666b, 0x725f59];
-const UNCLASSIFIED_COLOR = 0x72787e;
-const LITHOLOGY_COLORS = LITHOLOGY.map(hex => new THREE.Color(hex));
-const WET_ROCK = new THREE.Color(0x59615e);
+// Subsurface tones come from the lithology table through the sRGB-to-linear derivation in
+// geoLithology.js, so a material's colour is stated once, where the material is. A voxel whose code
+// the table does not carry draws as code 0, the model's own unresolved material, as it already did.
+const LITHOLOGY_COLORS = Object.keys(SUBSURFACE_LITHOLOGY)
+  .map(code => new THREE.Color(...lithologyDisplayColor(SUBSURFACE_LITHOLOGY[code])));
+const UNCLASSIFIED_COLOR = unclassifiedDisplayColor();
+const WET_ROCK = new THREE.Color(...wetRockDisplayColor());
+const unclassifiedTone = () => new THREE.Color(...UNCLASSIFIED_COLOR);
 function splineWeights(t) {
   return [(1-t)**3/6, (3*t**3-6*t*t+4)/6, (-3*t**3+3*t*t+3*t+1)/6, t**3/6];
 }
 
 export function sampleStratumColor(model, surfaceX, surfaceY, layer) {
   const volume = model.subsurface;
-  if (!volume?.columnCellCount || layer < 0) return new THREE.Color(UNCLASSIFIED_COLOR);
+  if (!volume?.columnCellCount || layer < 0) return unclassifiedTone();
   const grid = volume.columnCellCount === model.n * model.n ? model.n : volume.gridN;
   const x = surfaceX / (model.n - 1) * (grid - 1), y = surfaceY / (model.n - 1) * (grid - 1);
   const ix = Math.floor(x), iy = Math.floor(y), wx = splineWeights(x-ix), wy = splineWeights(y-iy);
@@ -116,7 +122,7 @@ export function buildTerrainVolume(model, config) {
     return color;
   });
   const solid = geometryBuilder(), water = geometryBuilder();
-  const unknown = new THREE.Color(UNCLASSIFIED_COLOR);
+  const unknown = unclassifiedTone();
   const seaY = seaLevel * verticalScale / 1000;
   const waterTop = new THREE.Color(0x5fa6b3), waterBottom = new THREE.Color(0x145064);
   for (let r = 0; r < rim.length; r++) {
