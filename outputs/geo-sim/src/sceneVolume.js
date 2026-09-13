@@ -80,7 +80,7 @@ export class SceneVolume {
     const volume = buildTerrainVolume(model, this.config);
     this.baseY = volume.baseY;
     this.plane.constant = this.config.cutX;
-    const solid = new THREE.Mesh(volume.solid, createGeologyMaterial(this.config.cave));
+    const solid = new THREE.Mesh(volume.solid, createGeologyMaterial(this.config.cave, 0.8, this.config.beddingSpacingM));
     solid.name = "modeled columns and unclassified closure";
     this.group.add(solid);
     const sides = new THREE.Mesh(volume.waterSides, new THREE.MeshStandardMaterial({ vertexColors: true,

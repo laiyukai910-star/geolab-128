@@ -1,10 +1,15 @@
 import * as THREE from "three";
 import { caveFieldGLSL } from "./caveField.js";
 
-export function createGeologyMaterial(cave=null,inspectionFill=0.8) {
+export function createGeologyMaterial(cave=null,inspectionFill=0.8,beddingSpacingM=1.571) {
   const material = new THREE.MeshStandardMaterial({vertexColors:true, roughness:0.9, metalness:0});
   material.userData.inspectionFill = inspectionFill;
-  material.customProgramCacheKey = () => `geolab-continuous-strata-v2:${inspectionFill}:${JSON.stringify(cave)}`;
+  // Lamination is drawn at the package's own bedding scale rather than at a fixed period, so a
+  // thinly interbedded sequence reads as laminae and a thick unit as massive beds. Derived from
+  // the modelled layer thicknesses in terrainVolume.js; see geoLithology.js for the column profile.
+  const seamFrequency = 2 * Math.PI / Math.max(0.05, Number(beddingSpacingM) || 1.571);
+  material.userData.beddingSpacingM = Number(beddingSpacingM) || 1.571;
+  material.customProgramCacheKey = () => `geolab-continuous-strata-v3:${inspectionFill}:${seamFrequency.toFixed(4)}:${JSON.stringify(cave)}`;
   material.onBeforeCompile = shader => {
     shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>
       attribute float stratumDepth; varying vec3 rockCoord; varying vec3 rockPosition;`)
@@ -33,7 +38,7 @@ export function createGeologyMaterial(cave=null,inspectionFill=0.8) {
         beddingCoord.y+=(weather-0.5)*1.4;
         float bedding=rockDetail(beddingCoord,1.0,footprint*0.85);
         float micrograin=rockDetail(rockCoord,0.009,footprint);
-        float seamPhase=rockCoord.y*4.0+rockDetail(rockCoord,3.5,footprint)*0.7;
+        float seamPhase=rockCoord.y*${seamFrequency.toFixed(8)}+rockDetail(rockCoord,3.5,footprint)*0.7;
         float lamina=(0.5+0.5*sin(seamPhase))*(1.0-smoothstep(0.08,0.5,footprint));
         float rockHeight=mineral*0.005+grain*0.001+micrograin*0.0003+lamina*0.003;
         diffuseColor.rgb *= 0.72+weather*0.32+bedding*0.12+(grain-0.5)*0.14;

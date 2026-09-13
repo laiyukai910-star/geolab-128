@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 registerHooks({ resolve(s, c, next) { return next(s === "three" ? new URL("../vendor/three/three.module.js", import.meta.url).href : s, c); } });
 const { buildTerrainVolume, volumeDisplayConfig, sampleTerrainHeight, containsTerrainPoint, constrainTerrainCamera } = await import("../src/terrainVolume.js");
+const { createGeologyMaterial } = await import("../src/geologyMaterial.js");
 const model = {
   n: 5, sizeKm: 0.4, cellSizeKm: 0.1,
   height: Float32Array.from({ length: 25 }, (_, i) => 10 + (i % 5) * 10),
@@ -118,6 +119,22 @@ for (const [x, z] of [[-0.05, 0.07], [0.12, -0.11]]) {
   assert.equal(camera.position.z, z);
   assert.ok(camera.position.distanceTo(origin) < 0.001, 'shallow penetration requires only a small local correction');
 }
+// The subsurface lamination period must follow the modelled bed thicknesses instead of the fixed
+// period it used before, and the shader must be the one carrying it.
+const beddingExpected = 2 / (1 / 5 + 1 / 15);
+assert.ok(Math.abs(config.beddingSpacingM - beddingExpected) < 1e-9,
+  `bedding spacing must be the column harmonic mean, got ${config.beddingSpacingM}`);
+const geologyMaterial = createGeologyMaterial(null, 0.8, config.beddingSpacingM);
+const geologyShader = { vertexShader: "void main(){}", fragmentShader: "#include <common>\n#include <color_fragment>\n#include <roughnessmap_fragment>\n#include <normal_fragment_maps>\n#include <emissivemap_fragment>" };
+geologyMaterial.onBeforeCompile(geologyShader);
+assert.ok(geologyShader.fragmentShader.includes((2 * Math.PI / config.beddingSpacingM).toFixed(8)),
+  "the strata shader must carry the modelled bedding period");
+assert.ok(!geologyShader.fragmentShader.includes("rockCoord.y*4.0"),
+  "the fixed bedding period must not return");
+assert.equal(volumeDisplayConfig({ n: 3, sizeKm: 2, height: new Float32Array(9).fill(10) }, {}).beddingSpacingM, 1.571,
+  "a model with no subsurface must keep the previous bedding period");
+geologyMaterial.dispose();
+
 const cutConfig = volumeDisplayConfig(model, {...params, worldView:'section'});
 assert.equal(containsTerrainPoint(model, cutConfig, base, new THREE.Vector3(0.1, 0, 0)), false, 'cut-away air must remain navigable');
 assert.equal(containsTerrainPoint(model, config, base, new THREE.Vector3(-0.15, 0.025, 0)), false, 'water above the seabed is not rock');

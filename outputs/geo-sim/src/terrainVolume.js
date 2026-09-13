@@ -4,6 +4,8 @@ import { lithologyDisplayColor, unclassifiedDisplayColor, wetRockDisplayColor, s
 import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+// The bedding period the subsurface lamination used before it was derived from the model.
+const DEFAULT_BEDDING_SPACING_M = 1.571;
 
 export function volumeDisplayConfig(model, params = {}) {
   const sizeKm = Number(model.sizeKm) || 128;
@@ -17,7 +19,10 @@ export function volumeDisplayConfig(model, params = {}) {
     verticalScale: Number(params.verticalScale) || 1,
     depthScale: clamp(Number(params.subsurfaceDisplayScale) || 20, 1, 100),
     seaLevel: Number(params.seaLevel) || 0,
-    depthM: Number(model.subsurface?.depthEdgesM?.[model.subsurface.layerCount]) || Number(params.subsurfaceDepthM) || 240
+    depthM: Number(model.subsurface?.depthEdgesM?.[model.subsurface.layerCount]) || Number(params.subsurfaceDepthM) || 240,
+    // Replaced by the modelled column's own bed thickness once the volume is built; this is the
+    // spacing the subsurface lamination used before it was derived.
+    beddingSpacingM: DEFAULT_BEDDING_SPACING_M
   };
   if(caveFocus){
     const span=Math.min(clamp(Number(params.caveLengthM)||480,80,800)/2000,sizeKm*0.08,(config.cutX+sizeKm/2)/1.35);
@@ -131,6 +136,17 @@ export function buildTerrainVolume(model, config) {
   for (let y = 0; y < n; y++) for (let x = 0; x <= cutIndex; x++) minHeight = Math.min(minHeight, model.height[y * n + x]);
   const baseY = (minHeight - depthM * depthScale) * verticalScale / 1000;
   const edges = model.subsurface?.depthEdgesM || [0, depthM];
+  // Characteristic bed thickness of the modelled column, so the subsurface lamination is drawn at
+  // the package's own bedding scale instead of one fixed period. Thickness-weighted harmonic mean,
+  // matching how the surface shader derives its bedding frequency.
+  const modeledThicknesses = [];
+  for (let layer = 0; layer < Math.max(0, edges.length - 1); layer += 1) {
+    const thickness = Number(edges[layer + 1]) - Number(edges[layer]);
+    if (Number.isFinite(thickness) && thickness > 0.02) modeledThicknesses.push(thickness);
+  }
+  config.beddingSpacingM = modeledThicknesses.length
+    ? modeledThicknesses.length / modeledThicknesses.reduce((sum, thickness) => sum + 1 / thickness, 0)
+    : DEFAULT_BEDDING_SPACING_M;
   const layerTones=Array.from({length:edges.length-1},(_,layer)=>{
     const color=new THREE.Color(0,0,0);
     for(let y=0;y<8;y++)for(let x=0;x<8;x++){
