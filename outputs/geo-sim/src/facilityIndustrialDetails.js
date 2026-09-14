@@ -18,13 +18,14 @@ export function industrialDetailParts(kind, helpers) {
   const { tier, radial, colors } = helpers;
   const parentPut = helpers.put, sink = helpers.parts, members = [];
   const includesSink = Array.isArray(sink);
-  // facilityGeometry.js's put() bakes a part in place (rotate, translate, then a color and a
-  // constructionResponse attribute), records it in its own private array and returns nothing. There
-  // is therefore no member list to read back from it and no guarantee that the array is exposed. So
-  // every member is fed to the parent put as an already non-indexed geometry: put then bakes exactly
-  // the object handed to it, which this module keeps, and the members returned are the very objects
-  // the parent library registered. The geometry classes and their parameters match the parent's own
-  // box, cylinder, tube and ring, so the emitted parts are what facilityGeometry.js would emit.
+  // facilityGeometry.js's put() bakes a part in place - rotate, translate, then a color and a
+  // constructionResponse attribute - appends it to the sink it was given and hands it back. This
+  // module therefore feeds every member to the parent put as an already non-indexed geometry, so put
+  // bakes exactly the object handed to it, and returns the same objects the parent registered: a
+  // member cannot be produced without also reaching the assembly. The sink is exposed as
+  // helpers.parts, but the returned array does not depend on it, because a put that records only in
+  // its own private array would otherwise leave this module with nothing to return. The geometry
+  // classes and their parameters match the parent's own box, cylinder, tube and ring.
   const mark = (geometry) => {
     if (!members.includes(geometry)) members.push(geometry);
     if (includesSink && !sink.includes(geometry)) sink.push(geometry);
@@ -37,8 +38,6 @@ export function industrialDetailParts(kind, helpers) {
   };
   const put = (geometry, color, position = [0, 0, 0], rotation = [0, 0, 0]) => {
     const source = bake(geometry);
-    // Swallow put's return on purpose: it is unspecified across call sites, and the baked geometry
-    // is already in hand. Should some variant return it, register that object instead.
     const result = parentPut(source, color, position, rotation);
     return mark(result instanceof THREE.BufferGeometry ? result : source);
   };
