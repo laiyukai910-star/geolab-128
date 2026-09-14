@@ -79,7 +79,7 @@ export function aggregateSpacingM(permeabilityMmHr, porosity) {
 export function lithologyMaterialClass(lithology) {
   const code = lithology?.code || "VOID";
   if (code === "SOIL" || code === "REGOLITH" || code === "ALLUVIUM") return "unconsolidated";
-  if (code === "BEDROCK" || code === "FRACTURED") return "rock";
+  if (code === "BEDROCK" || code === "FRACTURED" || code === "CARBONATE") return "rock";
   return "unclassified";
 }
 
@@ -269,28 +269,45 @@ const DENSITY_BASELINE_KG_M3 = 2650;
 const DENSITY_HOST_FRACTION = 0.9;
 const PERMEABILITY_HOST_MM_HR = 14;
 const PERMEABILITY_WEIGHT = 0.08;
-const KARST_HOST_THRESHOLD = 0.7;
+export const KARST_HOST_THRESHOLD = 0.7;
 
 /**
- * How plausible one lithology entry is as a karst host, in [0,1]. A function of the table's own
- * porosity, dry density and permeability only: porosity and low bulk density weigh equally, and
- * poor mobility is a mild penalty rather than a disqualification.
+ * Whether one lithology entry is a soluble carbonate host, and how good a karst host it is.
+ *
+ * Solubility is a mineralogy fact, not a pore-space one. An earlier version of this scored only
+ * porosity and bulk density, which ranked clay above limestone and made the call meaningless: it
+ * was measuring how porous and light a material is, and answered a different question. The class is
+ * therefore decided first, from the table's own code, and only carbonates can be hosts. The score
+ * then says how favourable such a host is, which does depend on its pore structure, so it is still
+ * built from the table's porosity, dry density and permeability.
+ *
+ * Only carbonate codes score above zero; everything else is exactly zero with `isCarbonate` false.
+ * The carbonate class itself carries the provenance of the global lithology model it comes from,
+ * see lithologyTable.js.
  */
 export function karstHostScore(lithology) {
   const properties = lithologyMechanicalProperties(lithology);
+  if (!isCarbonateLithology(lithology)) return 0;
   const porosityTerm = clamp01((properties.porosity - MIN_HOST_POROSITY) / (0.22 - MIN_HOST_POROSITY));
   const densityTerm = clamp01((DENSITY_BASELINE_KG_M3 - properties.densityKgM3)
     / (DENSITY_BASELINE_KG_M3 * (1 - DENSITY_HOST_FRACTION)));
   const mobilityTerm = clamp01(Math.log1p(properties.permeabilityMmHr) / Math.log1p(PERMEABILITY_HOST_MM_HR));
-  return clamp01(0.5 * porosityTerm + 0.5 * densityTerm - PERMEABILITY_WEIGHT * (1 - mobilityTerm));
+  return clamp01(0.8 + 0.2 * (0.5 * porosityTerm + 0.5 * densityTerm) - PERMEABILITY_WEIGHT * (1 - mobilityTerm));
 }
 
-/** Whether one lithology entry is a plausible karst host, with the terms behind the call. */
+/** The table's soluble class. This is the mineralogy test, not a property threshold. */
+export function isCarbonateLithology(lithology) {
+  return (lithology?.code || "VOID") === "CARBONATE";
+}
+
+/** Whether one lithology entry is a soluble karst host, with the terms behind the call. */
 export function karstHostAssessment(lithology) {
   const properties = lithologyMechanicalProperties(lithology);
   const score = karstHostScore(lithology);
+  const carbonate = isCarbonateLithology(lithology);
   return {
-    isHost: score >= KARST_HOST_THRESHOLD,
+    isHost: carbonate && score >= KARST_HOST_THRESHOLD,
+    isCarbonate: carbonate,
     score,
     threshold: KARST_HOST_THRESHOLD,
     code: lithology?.code || "VOID",

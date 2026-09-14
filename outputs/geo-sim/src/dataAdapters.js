@@ -161,7 +161,15 @@ const SUBSURFACE_LITHOLOGY_LOOKUP = {
   bedrock: 5,
   sandstone: 5,
   granite: 5,
-  limestone: 5,
+  // Carbonates get their own class because they dissolve. Importing limestone as generic bedrock is
+  // what stopped karst detection from ever firing; see lithologyTable.js for the class, its
+  // petrophysics and its GLiM provenance.
+  limestone: 7,
+  carbonate: 7,
+  dolomite: 7,
+  dolostone: 7,
+  chalk: 7,
+  marble: 7,
   aquitard: 6,
   clay: 6,
   shale: 6,
@@ -1658,7 +1666,7 @@ function nullableFinite(value) {
 function lithologyCodeFromValue(value) {
   if (value == null || value === "") return 0;
   const numeric = Number(value);
-  if (Number.isFinite(numeric)) return clamp(Math.round(numeric), 0, 6);
+  if (Number.isFinite(numeric)) return clamp(Math.round(numeric), 0, 7);
   const key = String(value).trim().toLowerCase().replace(/[\s-]+/g, "_");
   return SUBSURFACE_LITHOLOGY_LOOKUP[key] || 0;
 }

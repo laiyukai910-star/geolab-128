@@ -14,6 +14,7 @@ import {
   wetRockDisplayColor,
   karstHostScore,
   karstHostAssessment,
+  KARST_HOST_THRESHOLD,
   stratigraphicProfile,
   columnKarstHost
 } from '../src/geoLithology.js';
@@ -257,11 +258,21 @@ assert.deepEqual(wetRockDisplayColor(), wetRockDisplayColor(table), 'the wet ton
 // The table is the single display source of truth, and it was given the palette the rendered
 // application was tuned against, so the derivation must now reproduce those tones exactly rather
 // than the near-miss it produced while the palette was duplicated in the renderer.
-for (const code of codes) {
+// Only the codes the old palette covered can be compared against it. Every entry the table gains
+// afterwards, such as the carbonate class, has no legacy tone to match and is checked separately.
+const LEGACY_CODES = LEGACY_SUBSURFACE_HEX.map((_, code) => code).filter(code => table[code]);
+assert.ok(LEGACY_CODES.length >= 7, "the original seven codes must still be present");
+for (const code of LEGACY_CODES) {
   assert.deepEqual(expectedLinear(
     [(LEGACY_SUBSURFACE_HEX[code] >> 16) & 255, (LEGACY_SUBSURFACE_HEX[code] >> 8) & 255, LEGACY_SUBSURFACE_HEX[code] & 255]),
     lithologyDisplayColor(table[code]),
     `${table[code].code}: the table must carry the display tone the subsurface renderer draws`);
+}
+for (const code of codes.filter(code => code >= LEGACY_SUBSURFACE_HEX.length)) {
+  const tone = lithologyDisplayColor(table[code]);
+  assert.ok(tone.every(channel => Number.isFinite(channel) && channel >= 0 && channel <= 1),
+    `${table[code].code}: a class added after the old palette must still derive a usable tone`);
+  assert.ok(tone.some(channel => channel > 0), `${table[code].code}: its derived tone must not be black`);
 }
 
 // The palette really used by the subsurface renderer: terrainVolume.js must carry no colour list of
@@ -293,7 +304,7 @@ for (const code of codes) {
 // terrainVolume.js now: three.js linearises from the derived floats, and the bytes live only in the
 // table. The renderer's second copy of this palette is checked in geologyStructure.test.mjs.
 assert.ok(terrainVolumeSource.includes('lithologyDisplayColor'), 'terrainVolume.js must derive its tones from geoLithology.js');
-for (const code of codes) {
+for (const code of LEGACY_CODES) {
   assert.equal(new THREE.Color(...lithologyDisplayColor(table[code])).getHex(), LEGACY_SUBSURFACE_HEX[code],
     `${table[code].code}: the derived tone must round-trip back to the palette the renderer draws`);
 }
@@ -319,14 +330,36 @@ for (const code of codes) {
     `${table[code].code}: a host score must be bounded`);
   assert.equal(assessment.threshold, karstHostAssessment(CARBONATE_REFERENCE).threshold, 'one threshold, not two');
 }
-// The direction the derivation claims: more pore space and less density both raise the score, and a
-// tight fabric cannot be carried by low density alone.
-assert.ok(karstHostScore({ porosity: 0.20, densityKgM3: 2400, permeabilityMmHr: 5 })
-  > karstHostScore({ porosity: 0.10, densityKgM3: 2400, permeabilityMmHr: 5 }), 'pore space must raise the score');
-assert.ok(karstHostScore({ porosity: 0.15, densityKgM3: 2300, permeabilityMmHr: 5 })
-  > karstHostScore({ porosity: 0.15, densityKgM3: 2560, permeabilityMmHr: 5 }), 'lower bulk density must raise the score');
-assert.ok(Math.abs(karstHostScore({ porosity: 0.5, densityKgM3: 2700, permeabilityMmHr: 10 }) - 0.4908) < 0.01,
-  'a rock denser than quartz scores on porosity only — no density term, and the mobility penalty is small');
+// Solubility is a mineralogy fact, so only the table's carbonate class can be a host at all. Every
+// other class scores exactly zero however porous or light it is, which is what stops clay or a
+// loose sand from being reported as a karst host.
+for (const code of [0, 1, 2, 3, 4, 5, 6]) {
+  assert.equal(karstHostScore(table[code]), 0, `${table[code].code} is not a carbonate and must not score as a host`);
+  assert.equal(karstHostAssessment(table[code]).isHost, false, `${table[code].code} must not be a host`);
+  assert.equal(karstHostAssessment(table[code]).isCarbonate, false);
+}
+assert.equal(karstHostAssessment(table[7]).isHost, true, 'the carbonate class must be a host');
+assert.equal(karstHostAssessment(table[7]).isCarbonate, true);
+// Even a porous, light, non-carbonate material stays out, which the old pore-space-only score got
+// wrong: it ranked clay above limestone.
+assert.equal(karstHostScore({ code: 'AQUITARD', porosity: 0.22, densityKgM3: 2050, permeabilityMmHr: 0.03 }), 0,
+  'a clay aquitard must never be a karst host');
+
+// Among carbonates the direction is as claimed: more pore space and less density both raise the score.
+const carbonate = extra => ({ code: 'CARBONATE', porosity: 0.12, densityKgM3: 2500, permeabilityMmHr: 5, ...extra });
+assert.ok(karstHostScore(carbonate({ porosity: 0.20 })) > karstHostScore(carbonate({ porosity: 0.10 })),
+  'pore space must raise the score within the carbonate class');
+assert.ok(karstHostScore(carbonate({ densityKgM3: 2300 })) > karstHostScore(carbonate({ densityKgM3: 2560 })),
+  'lower bulk density must raise the score within the carbonate class');
+// Within the carbonate class a very porous variety saturates the porosity term and loses only the
+// small mobility penalty, while the density term is empty because such a rock is denser than quartz.
+// A denser-than-quartz carbonate gets no density credit, so it scores below the same rock with a
+// lower bulk density, but a porous one still clears the host threshold comfortably.
+assert.ok(karstHostScore(carbonate({ porosity: 0.5, densityKgM3: 2700, permeabilityMmHr: 10 })) > KARST_HOST_THRESHOLD + 0.15,
+  'a very porous carbonate must score well clear of the host threshold without density credit');
+assert.ok(karstHostScore(carbonate({ porosity: 0.5, densityKgM3: 2400 }))
+  > karstHostScore(carbonate({ porosity: 0.5, densityKgM3: 2700 })),
+  'within the class, a denser carbonate still scores lower than a lighter one');
 
 // ================================================================ column stratigraphy
 
@@ -394,7 +427,7 @@ assert.equal(karstProfile.layers[1].karstHost, true, 'the carbonate bed itself i
 assert.equal(karstProfile.layers[0].lithologyCode, 3);
 assert.equal(karstProfile.layers[2].lithologyClass, 'BEDROCK');
 assert.equal(karstProfile.karst.isHost, true);
-assert.equal(karstProfile.karst.primaryHostLayer, 0, 'the primary host must be a layer that actually passed');
+assert.equal(karstProfile.karst.primaryHostLayer, 1, 'the primary host must be the carbonate bed, which is layer 1 in this fixture');
 assert.ok(karstProfile.karst.score > 0 && karstProfile.karst.score <= 1);
 assert.equal(columnKarstHost(stratigraphyModel, 0, { lithologyTable: karstTable }).isHost, karstProfile.karst.isHost);
 assert.equal(columnKarstHost(stratigraphyModel, 0, { lithologyTable: karstTable }).score, karstProfile.karst.score);
@@ -484,11 +517,11 @@ const caveModel = (thickness) => ({
   subsurface: {
     gridN: n2, columnCellCount: n2 * n2, layerCount: 3,
     depthEdgesM: new Float32Array([0, thickness * 0.2, thickness * 0.2 + thickness, thickness * 0.2 + thickness * 3]),
-    lithologyCode: Uint8Array.from({ length: n2 * n2 * 3 }, (_, i) => (Math.floor(i / (n2 * n2)) === 1 ? 3 : 5))
+    lithologyCode: Uint8Array.from({ length: n2 * n2 * 3 }, (_, i) => (Math.floor(i / (n2 * n2)) === 1 ? 7 : 5))
   }
 });
 const profile = stratigraphicProfile(caveModel(30), 0, { lithologyTable: table });
-assert.equal(profile.karst.isHost, true, 'the alluvium bed must be recognised as a soluble-looking host');
+assert.equal(profile.karst.isHost, true, 'the carbonate bed must be recognised as a soluble host');
 const plan = cavePassagePlan(profile);
 assert.ok(plan, 'a host column must yield a passage plan');
 assert.ok(plan.passages.length >= 2, 'the network must carry passages');
