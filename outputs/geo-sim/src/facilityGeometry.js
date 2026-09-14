@@ -237,29 +237,70 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     }
     cylinder([0,-0.44,0],0.49,0.055,wall);
     box([0,-0.40,0],[0.34,0.012,0.48],0x80a674);
+    // Vomitory openings: the seating lathe is closed all the way round, so without these the stands
+    // have no way in. Each is a portal cut into the raking tier with a lintel over it.
+    const vomitories = 4 + tier * 2;
+    for(let i=0;i<vomitories;i++){
+      const angle=i/vomitories*Math.PI*2, midT=0.45;
+      const radius=0.29+midT*0.19, y=-0.4+midT*0.70;
+      const cx=Math.cos(angle)*radius, cz=Math.sin(angle)*radius;
+      box([cx,y+0.075,cz],[0.13,0.03,0.11],0x6f7a7c);
+      box([cx,y+0.19,cz],[0.15,0.02,0.13],trim);
+      // A short flight down through the opening.
+      for(let step=0;step<3;step++) box([cx,y-0.02-step*0.035,cz+step*0.012],[0.11,0.02,0.07],0xb6b2a4);
+    }
+    // Floodlight masts at the rim, each with a head of lamps, which is what lights a night match.
+    const masts = 4 + tier * 2;
+    for(let i=0;i<masts;i++){
+      const angle=i/masts*Math.PI*2+Math.PI/masts;
+      const cx=Math.cos(angle)*0.47, cz=Math.sin(angle)*0.47;
+      tube([[cx,0.30,cz],[cx,0.48,cz]],0.011,metal);
+      box([cx,0.50,cz],[0.11,0.05,0.05],0xd8dcd6);
+      for(let lamp=0;lamp<3;lamp++) box([cx+(lamp-1)*0.033,0.505,cz+0.028],[0.026,0.024,0.012],0xf0e4bb);
+    }
+    // A perimeter barrier between the pitch and the lowest tier.
+    for(let i=0;i<10;i++){
+      const angle=i/10*Math.PI*2;
+      box([Math.cos(angle)*0.276,-0.388,Math.sin(angle)*0.276],[0.02,0.03,0.02],0x8f9798);
+    }
+    ring(0.276,0.007,[0,-0.376,0],0x9aa0a0);
   } else if (kind === "observatory-dome") {
     // A slit, a shutter that slides over it, the shutter rails, and the telescope the building
     // exists for, all on a drum that rotates.
-    cylinder([0,-0.28,0],0.46,0.35,wall);ring(0.46,0.02,[0,-0.08,0],metal);
-    put(new THREE.SphereGeometry(0.46,radial*2,radial,0.16,Math.PI*2-0.32,0,Math.PI/2),trim,[0,-0.08,0]);
-    // The slit edges as two arcs, and the shutter parked over the lower half of the opening.
-    for(const angle of [0.16,Math.PI*2-0.16]){
+    //
+    // The slit is carved by SphereGeometry's own angular range, so its centreline is the direction
+    // the shell's opening faces: with phiStart 0.16 and phiLength 2PI-0.32 the opening spans
+    // azimuth [-0.16, +0.16] about the seam, which on a sphere is the +x axis. Everything that has
+    // to line up with the slit - the edge arcs, the parked shutter, the telescope - is placed on
+    // that axis deliberately rather than by eye.
+    const slitHalfAngle = 0.16, shellRadius = 0.46, shellCentreY = -0.08;
+    cylinder([0,-0.28,0],0.46,0.35,wall);ring(0.46,0.02,[0,shellCentreY,0],metal);
+    put(new THREE.SphereGeometry(shellRadius,radial*2,radial,slitHalfAngle,Math.PI*2-slitHalfAngle*2,0,Math.PI/2),trim,[0,shellCentreY,0]);
+    // The two slit edges, each an arc up the meridian at the slit boundary azimuth.
+    for(const theta of [slitHalfAngle, -slitHalfAngle]){
       const arc=Array.from({length:13},(_,j)=>{
         const phi=j/12*Math.PI/2;
-        return [Math.sin(phi)*Math.sin(angle)*0.462,Math.cos(phi)*0.462,-0.08+Math.sin(phi)*Math.cos(angle)*0.462];
+        return [Math.sin(phi)*Math.cos(theta)*shellRadius,
+          shellCentreY+Math.cos(phi)*shellRadius,
+          Math.sin(phi)*Math.sin(theta)*shellRadius];
       });
       tube(arc,0.012,metal);
     }
+    // The shutter parked over the lower part of the opening, sliding along the slit, so it spans the
+    // slit's azimuthal width and steps up the meridian.
     for(let i=0;i<5+tier*2;i++){
-      const t=i/(4+tier*2),phi=(0.12+t*0.42)*Math.PI/2;
-      box([Math.sin(phi)*0.40,-0.08+Math.cos(phi)*0.40,0.24-phi*0.06],[0.30,0.016,0.05],0xcfd4d0);
+      const count=4+tier*2,phi=(0.12+i/count*0.42)*Math.PI/2;
+      box([Math.cos(0)*Math.sin(phi)*0.40,shellCentreY+Math.cos(phi)*0.40,0],[0.30,0.016,0.30],0xcfd4d0);
     }
-    // The telescope: a tube on a fork mount inside the dome.
-    for(const z of [-0.10,0.10]) tube([[0,-0.10,z],[0,0.10,z]],0.014,metal);
-    tube([[0,0.02,-0.06],[0,0.30,0.16]],0.055,0x8bafb9);
-    tube([[0,0.30,0.16],[0,0.40,0.26]],0.030,metal);
-    cylinder([0,-0.14,0],0.10,0.10,metal);
-    tube([[0,0.01,0],[0.24,0.33,0]],0.06,0x8bafb9);
+    // The telescope: a pier, a fork mount, and a tube aimed along the slit centreline at 45 degrees
+    // elevation, long enough to reach the shell.
+    cylinder([0,-0.36,0],0.10,0.14,wall);
+    for(const z of [-0.09,0.09]) tube([[0,-0.22,z],[0,-0.02,z]],0.014,metal);
+    cylinder([0,-0.02,0],0.055,0.05,metal);
+    const tubeTip=[Math.cos(Math.PI/4)*0.34,-0.02+Math.sin(Math.PI/4)*0.34,0];
+    tube([[0,-0.02,0],tubeTip],0.052,0x8bafb9);
+    cylinder([0,-0.02,0],0.062,0.05,metal);
+    tube([[tubeTip[0],tubeTip[1],tubeTip[2]],[tubeTip[0]*1.06,tubeTip[1]*1.06-0.02,tubeTip[2]]],0.030,metal);
   } else if (kind === "crane-boom") {
     const bays=7+tier*3;
     for(const y of [-0.12,0.12])for(const z of [-0.12,0.12])tube([[-0.5,y,z],[0.5,y,z]],0.012,0xd4b967);
