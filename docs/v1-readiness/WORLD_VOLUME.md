@@ -40,6 +40,13 @@ granularly; a loose material never renders as a larger block than the rock it si
 and scree detail likewise take their block size from the joint spacing and the slope they need to
 move from the rock mass strength, so weak material sheds on gentler ground than strong rock.
 
+Weathered cover is two layers, not one. Soil is the mobile layer that bioturbation and colluvial
+mixing keep churning and stays thin even on stable humid ground; saprolite beneath it is weathered
+rock that has lost its fabric, is what the landscape stores water in, and is what dissolution and
+roots reach down through. Cover retention saturates on the soil layer, because saprolite does not by
+itself hold a vegetation mat, while the landform classification uses the whole profile — so a gentle
+slope carrying metres of saprolite reads regolith-mantled rather than soil-mantled.
+
 The terrain surface shader receives the resulting spacings through the packed `terrainStructure`
 vertex attribute, so procedural joint cells and bedding banding follow the actual rock rather than
 one fixed wavelength.
@@ -47,6 +54,26 @@ one fixed wavelength.
 A scenario without a subsurface model has no lithology to read, so the previous
 slope/cover/wetness proxy is used unchanged in that case, and its structure is marked unclassified
 so the shader does not invent bedding or blocky joints for it.
+
+### Lithology Classes And Public Models
+
+The class set is meant to be able to represent real rock, and it is checked against the public
+reference global lithology model rather than against intuition. The Global Lithological Map
+(GLiM v1.1, Hartmann and Moosdorf 2012, doi:10.1029/2012GC004370) reports the emerged surface as
+64 percent sediments — roughly a third of that carbonate — 13 percent metamorphics, 7 percent
+plutonics and 6 percent volcanics. Its carbonate class is the one this table was missing, and its
+absence had a concrete consequence: a limestone interval imported as generic competent bedrock, so
+the karst assessment could never report a carbonate host at all. Carbonate is now its own class,
+limestone, dolomite, dolostone, chalk and marble import to it, and solubility is decided by that
+class rather than by a porosity threshold — an earlier score weighed only porosity and bulk density,
+which ranked a clay aquitard above limestone.
+
+The remaining ground-truth target is the published global thickness of soil, regolith and
+sedimentary deposits (Pelletier et al., 1 km grid, ORNL DAAC dataset 1304, doi 10.3334/ORNLDAAC/1304).
+This repository does not consume that grid, and its numeric range was not verifiable from this
+environment, so it is named as the comparison a future calibration should be made against rather
+than cited as a fitted constraint. The soil and saprolite production scales are marked CALIBRATED
+for exactly that reason.
 
 ### Subsurface And Caves
 
