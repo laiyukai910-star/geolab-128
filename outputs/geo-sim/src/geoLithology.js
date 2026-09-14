@@ -455,12 +455,22 @@ export function cavePassagePlan(profile, options = {}) {
   passages.push({ from: [-0.62, bottomY, 0.10], to: [0.62, bottomY, -0.06], radius: 0.13 });
 
   const radiusScale = 0.75 + 0.5 * clamp01(hostThicknessM / 40);
+  // The wall of a karst cavity is the host rock itself. Carrying its display tone and the thickness
+  // its beds are drawn at lets the cave render as that rock rather than one fixed ochre.
+  const primaryHost = [...hosts].sort((a, b) => b.karstHostScore - a.karstHostScore
+    || b.thicknessM - a.thicknessM || a.layer - b.layer)[0];
   return {
     method: "illustrative karst scenario anchored to bedding contacts",
     hostLayerCount: hosts.length,
     hostThicknessM,
     totalDepthM,
     jointSpacingM,
+    hostLithologyCode: primaryHost.lithologyCode,
+    hostLithologyName: primaryHost.lithologyName,
+    hostColor: options.lithologyTable?.[primaryHost.lithologyCode]?.color
+      || (options.lithologyTable || SUBSURFACE_LITHOLOGY)?.[primaryHost.lithologyCode]?.color
+      || null,
+    hostBedThicknessM: Math.max(0.05, primaryHost.thicknessM),
     passages: passages.map(passage => ({ ...passage, radius: passage.radius * radiusScale }))
   };
 }

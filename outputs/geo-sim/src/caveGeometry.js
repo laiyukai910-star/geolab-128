@@ -1,17 +1,30 @@
 import * as THREE from "three";
 import { MarchingCubes } from "../vendor/three/addons/objects/MarchingCubes.js";
-import { caveDistance } from "./caveField.js";
+import { caveDistance, cavePlanPassages } from "./caveField.js";
 import { createOrganismGeometry, createOrganismMaterial } from "./organismGeometry.js";
 import { createGeologyMaterial } from "./geologyMaterial.js";
+import { lithologyDisplayColor } from "./geoLithology.js";
+import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
 
-function caveVerticalBounds(x,z){
+// The cavity wall is the host rock. Its tone comes from the lithology the passage plan was derived
+// from, so a cave in one carbonate reads as that rock rather than as one fixed ochre everywhere.
+// The fallback below is the tone this used before the host was carried.
+const CAVE_WALL_FALLBACK_HEX = 0x8e8675;
+
+function caveWallTone(plan) {
+  const color = plan?.passagePlan?.hostColor;
+  if (!Array.isArray(color) || color.length < 3) return new THREE.Color(CAVE_WALL_FALLBACK_HEX);
+  return new THREE.Color(...lithologyDisplayColor({ color, code: "CARBONATE" }));
+}
+
+function caveVerticalBounds(x,z,passages){
   let roof=null,floor=null;
   for(let y=0.6;y>=-0.6;y-=0.006){
-    if(caveDistance(x,y,z)<0){if(roof===null)roof=y;floor=y;}
+    if(caveDistance(x,y,z,passages)<0){if(roof===null)roof=y;floor=y;}
   }
   if(roof===null)return null;
   const refine=(inside,outside)=>{
-    for(let i=0;i<12;i++){const mid=(inside+outside)/2;if(caveDistance(x,mid,z)<0)inside=mid;else outside=mid;}
+    for(let i=0;i<12;i++){const mid=(inside+outside)/2;if(caveDistance(x,mid,z,passages)<0)inside=mid;else outside=mid;}
     return (inside+outside)/2;
   };
   return {roof:refine(roof,roof+0.006),floor:refine(floor,floor-0.006)};
@@ -34,10 +47,13 @@ function speleothemGeometry(ceiling){
 
 export function createCaveDisplay(plan,clippingPlanes) {
   const group=new THREE.Group();group.name="Illustrative karst cavity";
-  const material=createGeologyMaterial(null,0.18);material.side=THREE.BackSide;material.clippingPlanes=clippingPlanes;
+  // One passage list drives the distance field, the marching-cubes geometry and the clipped void.
+  const passages=cavePlanPassages(plan);
+  const wallTone=caveWallTone(plan);
+  const material=createGeologyMaterial(null,0.18,plan?.passagePlan?.hostBedThicknessM);material.side=THREE.BackSide;material.clippingPlanes=clippingPlanes;
   const resolution=96,domain=1.25;
   const cubes=new MarchingCubes(resolution,material,false,false,100000);cubes.isolation=0;
-  for(let z=0;z<resolution;z++)for(let y=0;y<resolution;y++)for(let x=0;x<resolution;x++)cubes.setCell(x,y,z,-caveDistance((x/(resolution/2)-1)*domain,(y/(resolution/2)-1)*domain,(z/(resolution/2)-1)*domain));
+  for(let z=0;z<resolution;z++)for(let y=0;y<resolution;y++)for(let x=0;x<resolution;x++)cubes.setCell(x,y,z,-caveDistance((x/(resolution/2)-1)*domain,(y/(resolution/2)-1)*domain,(z/(resolution/2)-1)*domain,passages));
   cubes.update();
   const geometry=new THREE.BufferGeometry();
   geometry.setAttribute("position",new THREE.BufferAttribute(cubes.positionArray.slice(0,cubes.count*3),3));
@@ -47,7 +63,7 @@ export function createCaveDisplay(plan,clippingPlanes) {
   const positions=geometry.getAttribute("position"),colors=new Float32Array(positions.count*3),depths=new Float32Array(positions.count);
   for(let i=0;i<positions.count;i++){
     const x=(positions.getX(i)-plan.center[0])*1000,y=(positions.getY(i)-plan.center[1])*1000,z=(positions.getZ(i)-plan.center[2])*1000;
-    const color=new THREE.Color(0x8e8675).multiplyScalar(0.88+Math.sin(y*0.08+z*0.003)*0.07);color.toArray(colors,i*3);
+    const color=wallTone.clone().multiplyScalar(0.88+Math.sin(y*0.08+z*0.003)*0.07);color.toArray(colors,i*3);
     depths[i]=-positions.getY(i)*1000;
   }
   geometry.setAttribute("color",new THREE.BufferAttribute(colors,3));material.vertexColors=true;
