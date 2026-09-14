@@ -210,12 +210,29 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     }
     for(const z of [-0.35,0.35])box([0,-0.05,z],[0.88,0.065,0.035],metal);
   } else if (kind === "turbine-blade") {
-    const rings=12+tier*8,sides=16+tier*8,positions=[],indices=[];
+    // An airfoil, not a body of revolution. A real blade section is a thin cambered wing: a rounded
+    // leading edge, a sharp trailing edge, and a thickness that is a small fraction of the chord and
+    // keeps falling toward the tip. A circular section with a constant thickness ratio - which is
+    // what this was - turns the blade into a teardrop.
+    const rings=12+tier*8,sides=20+tier*10,positions=[],indices=[];
+    // The planform of a real blade: the chord grows quickly out of the cylindrical root, peaks around
+    // a fifth of the span, then tapers to the tip.
+    const chordAt=t=>{
+      if(t<0.12)return 0.075+0.09*(t/0.12);
+      const u=(t-0.12)/0.88;
+      return 0.165*(1-0.62*u)+(1-u)*(1-u)*0.055;
+    };
+    // Thickness-to-chord falls from a thick root to a thin tip, as a structural blade does.
+    const thicknessAt=t=>0.17-0.11*t;
+    const twistAt=t=>(1-t)*0.42;
     for(let row=0;row<=rings;row++){
-      const t=row/rings,chord=0.025+0.28*Math.sin((t*0.85+0.12)*Math.PI)*(1-t*0.7),twist=(1-t)*0.48;
+      const t=row/rings,chord=chordAt(t),thick=chord*thicknessAt(t),twist=twistAt(t);
+      const sweep=(t-0.5)*0.04;
       for(let side=0;side<sides;side++){
-        const a=side/sides*Math.PI*2,x=Math.cos(a)*chord,z=Math.sin(a)*chord*0.16;
-        positions.push(x*Math.cos(twist)-z*Math.sin(twist)+t*t*0.12,t-0.5,x*Math.sin(twist)+z*Math.cos(twist));
+        const a=side/sides*Math.PI*2,cosA=Math.cos(a);
+        const x=cosA*chord*0.5;
+        const z=Math.sin(a)*thick*0.5*(1-0.22*cosA);
+        positions.push(x*Math.cos(twist)-z*Math.sin(twist)+sweep,t-0.5,x*Math.sin(twist)+z*Math.cos(twist));
       }
     }
     for(let row=0;row<rings;row++)for(let side=0;side<sides;side++){
