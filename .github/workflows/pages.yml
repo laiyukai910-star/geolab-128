@@ -1,0 +1,81 @@
+name: Publish browser build
+
+# Publishes the browser workspace, with the Rust WebAssembly core built from source, to GitHub Pages
+# so the application can be opened and used without installing anything. The application itself is
+# unchanged: it makes no network requests at runtime, so the hosted copy behaves exactly like the
+# local one and is simply served from a different place.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build static site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Rust
+        shell: bash
+        run: |
+          rustup toolchain install 1.96.0 --profile minimal --no-self-update
+          rustup target add wasm32-unknown-unknown --toolchain 1.96.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: outputs/geo-sim-desktop/package-lock.json
+
+      - name: Install desktop dependencies
+        run: npm ci --ignore-scripts --prefix outputs/geo-sim-desktop
+
+      - name: Build typed browser bridge and Rust WebAssembly core
+        run: |
+          npm run typecheck --prefix outputs/geo-sim-desktop
+          npm run browser:build --prefix outputs/geo-sim-desktop
+          npm run wasm:build --prefix outputs/geo-sim-desktop
+
+      - name: Verify the bundle is self-contained
+        shell: bash
+        run: |
+          test -f outputs/geo-sim/index.html
+          test -f outputs/geo-sim/vendor/geolab/geolab_core.wasm
+          test -f outputs/geo-sim/vendor/three/three.module.js
+          # The published copy must not reach a network host, and must not embed a loopback port.
+          ! grep -rIl --exclude-dir=tests -E 'https?://(localhost|127\.0\.0\.1)' outputs/geo-sim/src
+          echo "wasm $(stat -c%s outputs/geo-sim/vendor/geolab/geolab_core.wasm) bytes"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: outputs/geo-sim
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
