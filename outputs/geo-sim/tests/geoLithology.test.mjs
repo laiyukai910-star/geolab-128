@@ -7,6 +7,8 @@ import {
   layerStructureSpacingM,
   rockMassStrength,
   regolithThicknessM,
+  soilThicknessM,
+  saproliteThicknessM,
   landformClass,
   lithologyDisplayColor,
   lithologyDisplayColorBytes,
@@ -84,6 +86,40 @@ for (const loose of [1, 2, 3]) {
 }
 assert.ok(layerStructureSpacingM(3, 8, 0, table).spacingM < layerStructureSpacingM(6, 8, 0, table).spacingM,
   'a thick bed of loose material must still break finer than a thick bed of rock');
+
+
+// Soil, saprolite and the whole weathered profile are three different quantities and were once one
+// number, which made a humid tropical profile a third of a metre deep instead of tens of metres.
+{
+  const humid = { porosity: 0.42, meanTemperatureC: 26, precipitationMmYr: 3000, slopeDeg: 0, wetnessIndex: 10 };
+  const steep = { ...humid, slopeDeg: 40 };
+  assert.ok(soilThicknessM(humid) < 1.6, `mobile soil must stay thin even on stable humid ground, got ${soilThicknessM(humid)}`);
+  assert.ok(saproliteThicknessM(humid) > 5, `a humid tropical saprolite must be metres thick, got ${saproliteThicknessM(humid)}`);
+  assert.ok(regolithThicknessM(humid) > saproliteThicknessM(humid),
+    "the whole profile must contain the saprolite it is made of");
+  assert.ok(Math.abs(regolithThicknessM(humid) - soilThicknessM(humid) - saproliteThicknessM(humid)) < 1e-9,
+    "the profile must be exactly the two layers added");
+  // Erosion strips the profile: both layers thin on steep ground.
+  assert.ok(saproliteThicknessM(steep) < saproliteThicknessM(humid) / 5,
+    "a steep slope must not carry a humid-climate saprolite");
+  assert.ok(soilThicknessM(steep) < soilThicknessM(humid));
+  // A hot desert keeps soil but little saprolite; a cold wet climate keeps more, because freeze-thaw
+  // is a weathering agent as well as a transport one.
+  const desert = { porosity: 0.20, meanTemperatureC: 28, precipitationMmYr: 90, slopeDeg: 0, wetnessIndex: 1 };
+  const coldWet = { porosity: 0.28, meanTemperatureC: 0, precipitationMmYr: 1200, slopeDeg: 0, wetnessIndex: 7 };
+  assert.ok(saproliteThicknessM(desert) < saproliteThicknessM(coldWet),
+    "a hot desert must weather less deeply than a cold wet climate");
+  for (const profile of [humid, steep, desert, coldWet]) {
+    for (const value of [soilThicknessM(profile), saproliteThicknessM(profile), regolithThicknessM(profile)]) {
+      assert.ok(Number.isFinite(value) && value >= 0, "thicknesses must be finite and non-negative");
+    }
+  }
+  // A missing or entirely non-finite profile falls back to a temperate default rather than to zero,
+  // so it must not throw and must not claim a bare-rock landscape.
+  assert.ok(Number.isFinite(regolithThicknessM(undefined)) && regolithThicknessM(undefined) > 0);
+  assert.equal(regolithThicknessM({ porosity: NaN, meanTemperatureC: NaN, precipitationMmYr: NaN, slopeDeg: NaN, wetnessIndex: NaN }), regolithThicknessM(undefined),
+    "a non-finite profile must behave exactly like a missing one");
+}
 
 // [3] Rock mass resistance rises with competence and spacing, and falls with weathering and water.
 const bedrock = table[5], soil = table[1];

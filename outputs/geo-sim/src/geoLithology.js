@@ -139,13 +139,55 @@ export function rockMassStrength(lithology, spacingM, wetness) {
  * rises steeply with slope gradient.
  * CALIBRATED: the 1.2 m production scale and the 0.06-per-degree removal exponent.
  */
-export function regolithThicknessM({ porosity, meanTemperatureC, precipitationMmYr, slopeDeg, wetnessIndex }) {
-  const water = clamp01(Math.log1p(Math.max(0, finite(precipitationMmYr, 0)) / 200) / Math.log1p(12));
-  const freezeThaw = clamp01((12 - finite(meanTemperatureC, 10)) / 22);
-  const susceptibility = clamp01(0.25 + 0.75 * clamp01(porosity / 0.42));
-  const production = 1.2 * (0.25 + 0.75 * water) * (0.35 + 0.65 * freezeThaw) * susceptibility;
-  const removal = Math.exp(0.06 * Math.max(0, finite(slopeDeg, 0))) * (1 + 0.35 * clamp01(wetnessIndex / 14));
-  return Math.max(0, production / removal);
+/**
+ * Thickness of the whole weathered profile above fresh rock: the mobile soil layer plus the
+ * saprolite beneath it. This is what a regolith or sediment thickness dataset reports, and it is
+ * the quantity the landform classification and the cave and surface derivations are asking about.
+ * Use `soilThicknessM` where the question is specifically how much soil vegetation can hold.
+ */
+export function regolithThicknessM(profile) {
+  return soilThicknessM(profile) + saproliteThicknessM(profile);
+}
+
+/** Slope- and drainage-driven removal, shared by the soil and saprolite production terms. */
+function removalRate(profile) {
+  const slope = Math.max(0, finite(profile?.slopeDeg, 0));
+  return Math.exp(0.06 * slope) * (1 + 0.35 * clamp01(finite(profile?.wetnessIndex, 0) / 14));
+}
+
+/**
+ * Thickness of the mobile soil layer alone. Soil is the part that bioturbation, illuviation and
+ * colluvial mixing keep churning; below it the profile is saprolite, which is still weathered rock
+ * and is what holds the landscape's water and lets roots, and in carbonate dissolution, reach down.
+ *
+ * The two are genuinely different quantities and were being conflated. The soil layer is thin even
+ * on stable humid ground, while a weathering profile in the humid tropics reaches tens of metres,
+ * which is why the single previous number was wrong by orders of magnitude for the deep profile and
+ * about right for the soil. Source [5]: Nesbitt, H.W., Young, G.M. (1982), "Early Proterozoic
+ * climates and plate motions inferred from major element chemistry of lutites", Nature 299: 715-717,
+ * doi:10.1038/299715a0, for the chemically weathered profile whose A-CN-K trend this follows.
+ */
+export function soilThicknessM(profile) {
+  const water = clamp01(Math.log1p(Math.max(0, finite(profile?.precipitationMmYr, 0)) / 200) / Math.log1p(12));
+  const freezeThaw = clamp01((12 - finite(profile?.meanTemperatureC, 10)) / 22);
+  const susceptibility = clamp01(0.25 + 0.75 * clamp01(finite(profile?.porosity, 0.1) / 0.42));
+  const production = SOIL_PRODUCTION_SCALE_M * (0.25 + 0.75 * water) * (0.35 + 0.65 * freezeThaw) * susceptibility;
+  const removal = removalRate(profile);
+  return Math.min(SOIL_DEPTH_CAP_M, Math.max(0, production / removal));
+}
+
+/**
+ * Thickness of the saprolite beneath the soil: weathered rock that has lost its fabric but has not
+ * been mobilised. It grows where weathering outpaces removal, so it is deep on stable humid ground
+ * and thin or absent on steep eroding ground. Sources [5] above for the profile, and
+ * `regolithThicknessM` for the removal term.
+ */
+export function saproliteThicknessM(profile) {
+  const water = clamp01(Math.log1p(Math.max(0, finite(profile?.precipitationMmYr, 0)) / 200) / Math.log1p(12));
+  const freezeThaw = clamp01((12 - finite(profile?.meanTemperatureC, 10)) / 22);
+  const susceptibility = clamp01(0.25 + 0.75 * clamp01(finite(profile?.porosity, 0.1) / 0.42));
+  const production = SAPROLITE_PRODUCTION_SCALE_M * (0.25 + 0.75 * water) * (0.35 + 0.65 * freezeThaw) * susceptibility;
+  return Math.max(0, production / removalRate(profile));
 }
 
 /** Hillslope form implied by rock mass strength and cover. [3] */
@@ -270,6 +312,13 @@ const DENSITY_HOST_FRACTION = 0.9;
 const PERMEABILITY_HOST_MM_HR = 14;
 const PERMEABILITY_WEIGHT = 0.08;
 export const KARST_HOST_THRESHOLD = 0.7;
+// CALIBRATED: the mobile soil layer is thin even on stable humid ground, so its production term is
+// capped well below a metre of pure production.
+const SOIL_PRODUCTION_SCALE_M = 1.2;
+const SOIL_DEPTH_CAP_M = 1.5;
+// CALIBRATED: the weathered profile beneath the soil reaches tens of metres in the humid tropics and
+// is thin or absent where erosion keeps pace with weathering. [5]
+const SAPROLITE_PRODUCTION_SCALE_M = 55;
 
 /**
  * Whether one lithology entry is a soluble carbonate host, and how good a karst host it is.

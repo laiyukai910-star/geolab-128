@@ -1,6 +1,7 @@
 import {
   rockMassStrength,
   regolithThicknessM,
+  soilThicknessM,
   landformClass,
   lithologyMechanicalProperties,
   layerStructureSpacingM
@@ -71,21 +72,24 @@ export function surfaceGeomorphology(model, params, index, options = {}) {  cons
   const { spacingM, style, stiffness, materialClass } = layerStructureSpacingM(resolvedCode, bedThicknessM, 0, table);
   const strength = rockMassStrength(topLayerLithology, spacingM, smooth(4, 14, wetnessIndex));
 
-  const regolithM = regolithThicknessM({
+  const weatheringProfile = {
     porosity: lithologyMechanicalProperties(lithology).porosity,
     meanTemperatureC: Number(model.temperature?.[index]) || 0,
     precipitationMmYr: Number(model.precipitation?.[index]) || 0,
     slopeDeg: slope,
     wetnessIndex
-  });
+  };
+  const regolithM = regolithThicknessM(weatheringProfile);
+  const soilM = soilThicknessM(weatheringProfile);
 
   // Bare rock is where cover cannot be held: steep ground, a strong mass, thin weathered cover,
-  // active erosion, or a channel bed that is swept by flow. Steepness and cover retention are the
-  // two controlling factors; a deep weathered profile keeps even steep ground vegetated, which is
-  // what the strength and erosion terms modulate rather than override.
+  // active erosion, or a channel bed that is swept by flow. Steepness and how much soil the ground
+  // can hold are the two controlling factors; a deep saprolite profile keeps even steep ground
+  // vegetated, which is what the strength and erosion terms modulate rather than override.
   const steepness = smooth(26, 62, slope);
-  // Retention saturates: once cover is thick enough it holds regardless of further thickening.
-  const coverRetention = 1 - Math.exp(-regolithM / 0.30);
+  // Retention saturates on the mobile soil layer, not on the whole weathered profile: saprolite is
+  // weathered rock and does not by itself hold a vegetation mat.
+  const coverRetention = 1 - Math.exp(-soilM / 0.30);
   const strengthTerm = unit((strength - 40) / 55);
   // A channel cell is wet ground, not automatically a rock face: a sand-bed river is not bedrock.
   // Suppressing placed rock and scree detail on channels is a separate concern, handled by
@@ -105,7 +109,7 @@ export function surfaceGeomorphology(model, params, index, options = {}) {  cons
     lithologyCode: resolvedCode, lithologyName: lithology.name,
     lithologyId: lithologyCode, unresolvedLithology: resolvedCode !== lithologyCode,
     landform: landformClass({ rockMassStrengthValue: strength, regolithM, slopeDeg: slope }),
-    rockMassStrength: strength, regolithM, jointSpacingM: spacingM, jointStyle: style, materialClass, stiffness,
+    rockMassStrength: strength, regolithM, soilM, saproliteM: Math.max(0, regolithM - soilM), jointSpacingM: spacingM, jointStyle: style, materialClass, stiffness,
     rock, scree, vegetation, regolith,
     wet: smooth(4, 14, wetnessIndex), sealed, seeded
   };
