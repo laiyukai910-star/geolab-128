@@ -102,8 +102,13 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   vec2 stone = vec2(0.5, 0.18);
   if (cellFade > 0.001 && rock > 0.04) {
     vec3 warp = vec3(chips, geoNoise(p / 2.2 + 13.0), geoNoise(p / 2.2 + 29.0));
-    // Aggregate spacing is narrower than joint spacing, so loose ground breaks into finer pieces.
-    stone = geoStoneCell((p + warp * 1.2) * vec3(1.0, mix(1.0, 1.8, rockMass), 1.0) / max(0.02, jointSpacingM));
+    // How squat a block is follows the rock. A bed is cut more closely across its thickness than
+    // along the bedding, so the vertical squash is bed thickness against joint spacing rather than
+    // one constant: thinly bedded rock breaks into flat slabs, a thick massive unit into blocks.
+    // Loose material has no joints to be squat about, so it stays isotropic.
+    float beddingRatio = bedThicknessM / max(0.05, jointSpacingM);
+    float verticalSquash = mix(1.0, clamp(0.55 / max(0.08, beddingRatio), 1.0, 2.6), rockMass);
+    stone = geoStoneCell((p + warp * 1.2) * vec3(1.0, verticalSquash, 1.0) / max(0.02, jointSpacingM));
   }
   float weathering = smoothstep(0.3, 0.7, blocks + (chips - 0.5) * 0.45);
   float joint = (1.0 - smoothstep(0.025, 0.12, stone.y)) * cellFade * weathering;

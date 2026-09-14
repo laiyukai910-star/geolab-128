@@ -73,6 +73,13 @@ export function subsurfaceColumnIndex(model, surfaceIndex) {
 // the table does not carry draws as code 0, the model's own unresolved material, as it already did.
 const LITHOLOGY_COLORS = Object.keys(SUBSURFACE_LITHOLOGY)
   .map(code => new THREE.Color(...lithologyDisplayColor(SUBSURFACE_LITHOLOGY[code])));
+// How much a saturated voxel darkens toward the wet tone depends on how much pore space it has:
+// a saturated gravel changes appearance far more than a saturated granite, whose water sits in
+// cracks the eye never sees. Porosity is the table's own property, so the display follows the rock.
+const WET_DARKENING_AT_FULL_POROSITY = 0.30;
+const WET_DARKENING_REFERENCE_POROSITY = 0.42;
+const wetDarkening = porosity => WET_DARKENING_AT_FULL_POROSITY
+  * Math.min(1, Math.max(0.25, (Number(porosity) || 0) / WET_DARKENING_REFERENCE_POROSITY));
 const UNCLASSIFIED_COLOR = unclassifiedDisplayColor();
 const WET_ROCK = new THREE.Color(...wetRockDisplayColor());
 const unclassifiedTone = () => new THREE.Color(...UNCLASSIFIED_COLOR);
@@ -87,16 +94,23 @@ export function sampleStratumColor(model, surfaceX, surfaceY, layer) {
   const x = surfaceX / (model.n - 1) * (grid - 1), y = surfaceY / (model.n - 1) * (grid - 1);
   const ix = Math.floor(x), iy = Math.floor(y), wx = splineWeights(x-ix), wy = splineWeights(y-iy);
   const color = new THREE.Color(0,0,0);
-  let saturation = 0;
+  let saturation = 0, wetDepth = 0;
   // Reconstruct display colors, never interpolate categorical IDs or rewrite scientific columns.
   for (let j=0;j<4;j++) for (let i=0;i<4;i++) {
     const voxel = layer * volume.columnCellCount + clamp(iy+j-1,0,grid-1)*grid + clamp(ix+i-1,0,grid-1);
     const weight = wx[i]*wy[j];
     const tone = LITHOLOGY_COLORS[volume.lithologyCode?.[voxel]] || LITHOLOGY_COLORS[0];
     color.r += tone.r*weight; color.g += tone.g*weight; color.b += tone.b*weight;
-    saturation += clamp(Number(volume.groundwaterSaturation?.[voxel]) || 0,0,1)*weight;
+    const voxelSaturation = clamp(Number(volume.groundwaterSaturation?.[voxel]) || 0,0,1);
+    saturation += voxelSaturation*weight;
+    // Weight the darkening by the pore space that can actually hold the water. The volume's own
+    // porosity is authoritative where it is present; otherwise the table's value for that code is.
+    const porosity = Number.isFinite(volume.porosity?.[voxel])
+      ? volume.porosity[voxel]
+      : SUBSURFACE_LITHOLOGY[volume.lithologyCode?.[voxel]]?.porosity;
+    wetDepth += voxelSaturation*wetDarkening(porosity)*weight;
   }
-  return color.lerp(WET_ROCK, saturation*0.12);
+  return color.lerp(WET_ROCK, Math.min(0.45, wetDepth));
 }
 
 function geometryBuilder() {

@@ -1402,6 +1402,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "stratified-red-sandstone",
     blend: 0.48,
     bandFrequency: 12,
+    bandSpacingM: 14,
     stops: [
       [92, 67, 54],
       [151, 91, 58],
@@ -1415,6 +1416,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "limestone-karst-forest",
     blend: 0.5,
     bandFrequency: 5,
+    bandSpacingM: 6,
     stops: [
       [55, 86, 70],
       [88, 121, 78],
@@ -1428,6 +1430,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "granite-snow-ice",
     blend: 0.52,
     bandFrequency: 4,
+    bandSpacingM: 30,
     stops: [
       [61, 91, 86],
       [111, 129, 113],
@@ -1441,6 +1444,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "basalt-lava-coast",
     blend: 0.5,
     bandFrequency: 7,
+    bandSpacingM: 18,
     stops: [
       [45, 49, 50],
       [69, 66, 58],
@@ -1454,6 +1458,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "silt-wetland-water",
     blend: 0.46,
     bandFrequency: 3,
+    bandSpacingM: 40,
     stops: [
       [71, 107, 94],
       [96, 137, 92],
@@ -1467,6 +1472,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "aeolian-sand",
     blend: 0.54,
     bandFrequency: 16,
+    bandSpacingM: 24,
     stops: [
       [127, 93, 59],
       [177, 128, 73],
@@ -1480,6 +1486,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "dark-gneiss-moss-snow",
     blend: 0.5,
     bandFrequency: 5,
+    bandSpacingM: 16,
     stops: [
       [43, 62, 66],
       [69, 93, 76],
@@ -1493,6 +1500,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "banded-danxia-sandstone",
     blend: 0.58,
     bandFrequency: 18,
+    bandSpacingM: 9,
     stops: [
       [111, 63, 62],
       [181, 83, 57],
@@ -1506,6 +1514,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "loess-silt-gully",
     blend: 0.5,
     bandFrequency: 9,
+    bandSpacingM: 20,
     stops: [
       [126, 94, 58],
       [176, 135, 75],
@@ -1519,6 +1528,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "mudstone-badlands-rill",
     blend: 0.52,
     bandFrequency: 14,
+    bandSpacingM: 4,
     stops: [
       [83, 70, 63],
       [126, 96, 73],
@@ -1532,6 +1542,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "gravel-outwash-braid",
     blend: 0.44,
     bandFrequency: 6,
+    bandSpacingM: 13,
     stops: [
       [71, 89, 84],
       [105, 124, 109],
@@ -1545,6 +1556,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "wave-cut-cliff-platform",
     blend: 0.5,
     bandFrequency: 8,
+    bandSpacingM: 11,
     stops: [
       [48, 66, 72],
       [82, 92, 89],
@@ -1558,6 +1570,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "rhyolite-caldera-hydrothermal",
     blend: 0.54,
     bandFrequency: 10,
+    bandSpacingM: 12,
     stops: [
       [56, 60, 61],
       [92, 83, 72],
@@ -1571,6 +1584,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "granite-andes-terrace-cloudforest",
     blend: 0.6,
     bandFrequency: 13,
+    bandSpacingM: 8,
     stops: [
       [38, 76, 64],
       [58, 112, 70],
@@ -1584,6 +1598,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "white-travertine-thermal-pools",
     blend: 0.56,
     bandFrequency: 20,
+    bandSpacingM: 2,
     stops: [
       [74, 120, 116],
       [132, 176, 168],
@@ -1597,6 +1612,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "basalt-column-moss-waterfall",
     blend: 0.56,
     bandFrequency: 11,
+    bandSpacingM: 15,
     stops: [
       [31, 38, 40],
       [54, 62, 58],
@@ -1610,6 +1626,7 @@ export const TERRAIN_PRESET_MATERIALS = Object.freeze({
     materialClass: "limestone-hoodoo-amphitheater",
     blend: 0.54,
     bandFrequency: 17,
+    bandSpacingM: 7,
     stops: [
       [93, 76, 68],
       [154, 100, 78],
@@ -20863,7 +20880,13 @@ function applyTerrainPresetColor(baseColor, model, params, i, t) {
   const seed = (Number(params.seed) || 1) * 0.00017;
   const windRadians = ((Number(params.windDirection) || 0) * Math.PI) / 180;
   const windProjected = x * Math.cos(windRadians) + y * Math.sin(windRadians);
-  const band = 0.5 + 0.5 * Math.sin((t * material.bandFrequency + windProjected * 3.2 + seed) * Math.PI * 2);
+  // A preset that declares a bed spacing draws one band per bed at that real thickness, so its
+  // "stratification" is a thickness rather than a count over an arbitrary elevation range. Presets
+  // without one keep the previous normalised phase.
+  const bandPhase = Number.isFinite(material.bandSpacingM) && material.bandSpacingM > 0
+    ? (h - seaLevel) / material.bandSpacingM
+    : t * material.bandFrequency;
+  const band = 0.5 + 0.5 * Math.sin((bandPhase + windProjected * 3.2 + seed) * Math.PI * 2);
   let preset = ramp(t, 0, 1, material.stops);
 
   if (plan.geomorphologyPreset === "canyon_plateau") {

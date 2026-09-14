@@ -72,9 +72,9 @@ export function semanticAssetKind(label) {
   return SEMANTIC_ASSET_KIND.get(label) || null;
 }
 
-export function createSemanticAssetGeometry(label, quality = "ultra", variant = 0) {
+export function createSemanticAssetGeometry(label, quality = "ultra", variant = 0, structure = null) {
   const kind = semanticAssetKind(label);
-  return kind ? createProceduralGeometry(kind, quality, variant) : null;
+  return kind ? createProceduralGeometry(kind, quality, variant, structure) : null;
 }
 
 export function wildlifeProceduralKind(species, part) {
@@ -103,7 +103,7 @@ export function wildlifeProceduralKind(species, part) {
   return "wildlife-torso";
 }
 
-export function createProceduralGeometry(kind, quality = "ultra", variant = 0) {
+export function createProceduralGeometry(kind, quality = "ultra", variant = 0, structure = null) {
   quality = normalizeRenderDetailQuality(quality);
   variant = Math.max(0, Math.floor(Number(variant) || 0));
   if(kind.startsWith("wildlife-organism-"))return tagProceduralGeometry(createOrganismGeometry(kind.slice(18),quality,variant),kind,quality,variant);
@@ -118,8 +118,8 @@ export function createProceduralGeometry(kind, quality = "ultra", variant = 0) {
     case "cross-plan-civic": geometry = createCivicGeometry(quality); break;
     case "hipped-roof": geometry = createHippedRoofGeometry(quality); break;
     case "tapered-landmark": geometry = createLandmarkGeometry(quality); break;
-    case "fractured-rock": geometry = createFracturedRockGeometry(quality); break;
-    case "talus-cluster": geometry = createTalusGeometry(quality); break;
+    case "fractured-rock": geometry = createFracturedRockGeometry(quality, structure); break;
+    case "talus-cluster": geometry = createTalusGeometry(quality, structure); break;
     case "snow-drift": geometry = createSnowDriftGeometry(quality); break;
     case "wetland-ribbon": geometry = createRippledSurfaceGeometry(quality, 0.055); break;
     case "fluted-trunk": geometry = createFlutedTrunkGeometry(quality); break;
@@ -272,48 +272,74 @@ function createLandmarkGeometry(quality) {
   return createFacilityGeometry("tapered-landmark", quality);
 }
 
-function createFracturedRockGeometry(quality) {
+function createFracturedRockGeometry(quality, structure = null) {
   const count = qualityCount(quality, 5, 8, 13);
   const parts = [];
   for (let i = 0; i < count; i += 1) {
-    const geometry = jointedStoneGeometry(quality, 0.14 + i * 0.37);
+    const geometry = jointedStoneGeometry(quality, 0.14 + i * 0.37, structure);
     const a = i * 2.399;
     parts.push(part(geometry, [Math.cos(a) * (0.16 + i * 0.025), -0.12 + (i % 3) * 0.08, Math.sin(a) * (0.18 + i * 0.02)], [0.48 - i * 0.035, 0.56 - i * 0.04, 0.44 - i * 0.025], [i * 0.31, a, i * 0.19]));
   }
   return fitMineralBounds(mergeAssembly(parts));
 }
 
-function createTalusGeometry(quality) {
+function createTalusGeometry(quality, structure = null) {
   const count = qualityCount(quality, 7, 12, 20);
   const parts = [];
   for (let i = 0; i < count; i += 1) {
     const a = i * 2.17;
     const r = 0.1 + (i % 4) * 0.1;
     const scale = 0.08 + 0.14 * (0.5 + 0.5 * Math.sin(i * 5.7));
-    parts.push(part(jointedStoneGeometry(quality, i + 0.7), [Math.cos(a) * r, -0.34 + (i % 3) * 0.07, Math.sin(a) * r], [scale, scale * 0.7, scale * 1.3], [a * 0.3, a, i * 0.4]));
+    parts.push(part(jointedStoneGeometry(quality, i + 0.7, structure), [Math.cos(a) * r, -0.34 + (i % 3) * 0.07, Math.sin(a) * r], [scale, scale * 0.7, scale * 1.3], [a * 0.3, a, i * 0.4]));
   }
   return fitMineralBounds(mergeAssembly(parts));
 }
 
-function jointedStoneGeometry(quality, phase) {
+/**
+ * One jointed clast. Its shape follows the rock structure the clast came from rather than a fixed
+ * cut: a rock mass is cut by joint sets, and a layered one is cut more closely across the bedding
+ * than along it, so blocks flatten in proportion to bed thickness against joint spacing. A thick
+ * massive unit yields blocky clasts, a thinly bedded one yields flat slabs, and the weathering
+ * bands are drawn at the real bed thickness so a thick-bedded clast reads as massive.
+ * Without structure it falls back to an isotropic three-set cut, which is the neutral case.
+ */
+function jointedStoneGeometry(quality, phase, structure = null) {
   const segments = qualityCount(quality, 20, 32, 48);
   const geometry = new THREE.SphereGeometry(0.5, segments, segments / 2);
   const position = geometry.getAttribute("position");
   const colors = new Float32Array(position.count * 3);
   const point = new THREE.Vector3();
-  const planes = Array.from({length: 5}, (_, i) => new THREE.Vector3(
+  const bedThicknessM = Number.isFinite(structure?.bedThicknessM) && structure.bedThicknessM > 0.01
+    ? structure.bedThicknessM : null;
+  const jointSpacingM = Number.isFinite(structure?.jointSpacingM) && structure.jointSpacingM > 0.01
+    ? structure.jointSpacingM : null;
+  // A thick bed relative to joint spacing means squat, flattened blocks; the clamp keeps a clast
+  // recognisable as a clast rather than a flake.
+  const flattening = bedThicknessM && jointSpacingM
+    ? Math.min(3.5, Math.max(1, jointSpacingM / bedThicknessM)) : 1;
+  // Three joint sets is the usual count for a well-jointed mass: two oblique vertical sets plus the
+  // bedding-parallel one that the flattening stands in for.
+  const planes = Array.from({length: 3}, (_, i) => new THREE.Vector3(
     Math.sin(i * 2.4 + phase), Math.cos(i * 1.7 + phase) * 0.65, Math.cos(i * 2.4 + phase)
   ).normalize());
+  // The widest-spaced set cuts deepest; later sets cut progressively closer, which is what provides
+  // the facet variety the single fixed ratio used to.
+  const cuts = planes.map((_, j) => 0.5 - j * 0.055);
+  // Weathering bands at the modelled bed thickness, in the clast's own normalised units.
+  const strataFrequency = bedThicknessM ? Math.min(64, 38 * (0.35 / Math.max(0.05, bedThicknessM))) : 38;
   for (let i = 0; i < position.count; i++) {
     point.fromBufferAttribute(position, i).normalize();
     let radius = 0.5;
     for (let j = 0; j < planes.length; j++) {
       const facing = point.dot(planes[j]);
-      if (facing > 0) radius = Math.min(radius, (0.35 + j * 0.018) / facing);
+      if (facing > 0) radius = Math.min(radius, cuts[j] / facing);
+    }
+    if (flattening > 1) {
+      radius = Math.min(radius, 0.5 / Math.max(0.2, Math.abs(point.y) * flattening));
     }
     const weathering = Math.sin(point.x * 19 + phase) * Math.sin(point.y * 15 - point.z * 11);
     radius += weathering * 0.009;
-    const strata = Math.sin((point.y + point.x * 0.16) * 38 + phase);
+    const strata = Math.sin((point.y + point.x * 0.16) * strataFrequency + phase);
     const quartz = Math.pow(Math.max(0, Math.cos(point.x * 12 + point.z * 9 + phase)), 18);
     const tone = Math.min(1, 0.77 + strata * 0.14 + weathering * 0.04 + quartz * 0.14);
     colors.set([tone, tone * 0.98, tone * 0.94], i * 3);
