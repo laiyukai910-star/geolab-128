@@ -64,6 +64,10 @@ jobs:
           node outputs/geo-sim/tests/terrainSurface.test.mjs
           node outputs/geo-sim/tests/geoLithology.test.mjs
           node outputs/geo-sim/tests/geologyStructure.test.mjs
+          node outputs/geo-sim/tests/facilityGeometry.test.mjs
+          node outputs/geo-sim/tests/facilityEnvelopeDetails.test.mjs
+          node outputs/geo-sim/tests/facilityIndustrialDetails.test.mjs
+          node outputs/geo-sim/tests/facilityCivilDetails.test.mjs
           node outputs/geo-sim/tests/scannedAssets.test.mjs
           node outputs/geo-sim/tests/riverReconstruction.test.mjs
           node outputs/geo-sim/tests/modelEnvelope.test.mjs
@@ -97,6 +101,9 @@ jobs:
           test -f outputs/geo-sim/src/assetPipeline.js
           test -f outputs/geo-sim/src/skyEnvironment.js
           test -f outputs/geo-sim/src/geoLithology.js
+          test -f outputs/geo-sim/src/facilityEnvelopeDetails.js
+          test -f outputs/geo-sim/src/facilityIndustrialDetails.js
+          test -f outputs/geo-sim/src/facilityCivilDetails.js
           test -f outputs/geo-sim/src/lithologyTable.js
           test -f outputs/geo-sim/src-ts/assetPipeline.ts
           test -f outputs/geo-sim/src-ts/aquaticHabitats.ts
@@ -118,6 +125,7 @@ jobs:
           test -f outputs/geo-sim/tests/skyEnvironment.test.mjs
           test -f outputs/geo-sim/tests/geoLithology.test.mjs
           test -f outputs/geo-sim/tests/geologyStructure.test.mjs
+          test -f outputs/geo-sim/tests/facilityGeometry.test.mjs
           test -f outputs/geo-sim-desktop/package.json
           test -f engine/Cargo.toml
           test -f engine/Cargo.lock

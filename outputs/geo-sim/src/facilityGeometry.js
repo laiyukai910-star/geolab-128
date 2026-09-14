@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import { mergeGeometries, mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { buildingDetailParts } from "./facilityEnvelopeDetails.js";
+import { industrialDetailParts } from "./facilityIndustrialDetails.js";
+import { civilDetailParts } from "./facilityCivilDetails.js";
 
 export const REBUILT_FACILITY_KINDS = Object.freeze([
   "setback-tower", "courtyard-midrise", "l-plan-lowrise", "sawtooth-industrial",
@@ -17,7 +20,7 @@ export function createFacilityGeometry(kind, quality = "ultra") {
   const radial = [16, 28, 44][tier], parts = [];
   let windowOpenings=0,entrances=0;
   const wall = 0xe7e4dc, trim = 0xf4f1e9, glass = 0x6d9cab, metal = 0x9eacb0;
-  const put = (geometry, color, position = [0, 0, 0], rotation = [0, 0, 0]) => {
+  const put = (geometry, color, position = [0, 0, 0], rotation = [0, 0, 0], sink = parts) => {
     geometry.rotateX(rotation[0]); geometry.rotateY(rotation[1]); geometry.rotateZ(rotation[2]);
     geometry.translate(...position);
     const rgb = new THREE.Color(color), values = new Float32Array(geometry.attributes.position.count * 3);
@@ -29,8 +32,12 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     geometry.setAttribute("color", new THREE.BufferAttribute(values, 3));
     geometry.setAttribute("constructionResponse", new THREE.BufferAttribute(response, 2));
     const source = geometry.index ? geometry.toNonIndexed() : geometry;
-    source.deleteAttribute("uv"); parts.push(source);
+    source.deleteAttribute("uv"); sink.push(source);
     if (source !== geometry) geometry.dispose();
+    // Returns the member it just added. The detail modules build their members through these helpers
+    // and hand the results back for the caller to append, so a helper that only pushed would leave
+    // them with nothing to return and silently contribute no members.
+    return source;
   };
   const box = (p, size, color = wall, bevel = 0.006) => put(
     new RoundedBoxGeometry(...size, tier + 1, Math.min(bevel, ...size.map(s => s * 0.16))), color, p);
@@ -237,33 +244,9 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     }
     cylinder([0,-0.44,0],0.49,0.055,wall);
     box([0,-0.40,0],[0.34,0.012,0.48],0x80a674);
-    // Vomitory openings: the seating lathe is closed all the way round, so without these the stands
-    // have no way in. Each is a portal cut into the raking tier with a lintel over it.
-    const vomitories = 4 + tier * 2;
-    for(let i=0;i<vomitories;i++){
-      const angle=i/vomitories*Math.PI*2, midT=0.45;
-      const radius=0.29+midT*0.19, y=-0.4+midT*0.70;
-      const cx=Math.cos(angle)*radius, cz=Math.sin(angle)*radius;
-      box([cx,y+0.075,cz],[0.13,0.03,0.11],0x6f7a7c);
-      box([cx,y+0.19,cz],[0.15,0.02,0.13],trim);
-      // A short flight down through the opening.
-      for(let step=0;step<3;step++) box([cx,y-0.02-step*0.035,cz+step*0.012],[0.11,0.02,0.07],0xb6b2a4);
-    }
-    // Floodlight masts at the rim, each with a head of lamps, which is what lights a night match.
-    const masts = 4 + tier * 2;
-    for(let i=0;i<masts;i++){
-      const angle=i/masts*Math.PI*2+Math.PI/masts;
-      const cx=Math.cos(angle)*0.47, cz=Math.sin(angle)*0.47;
-      tube([[cx,0.30,cz],[cx,0.48,cz]],0.011,metal);
-      box([cx,0.50,cz],[0.11,0.05,0.05],0xd8dcd6);
-      for(let lamp=0;lamp<3;lamp++) box([cx+(lamp-1)*0.033,0.505,cz+0.028],[0.026,0.024,0.012],0xf0e4bb);
-    }
-    // A perimeter barrier between the pitch and the lowest tier.
-    for(let i=0;i<10;i++){
-      const angle=i/10*Math.PI*2;
-      box([Math.cos(angle)*0.276,-0.388,Math.sin(angle)*0.276],[0.02,0.03,0.02],0x8f9798);
-    }
-    ring(0.276,0.007,[0,-0.376,0],0x9aa0a0);
+    // Vomitory openings, floodlight masts and the pitch perimeter barrier are contributed by
+    // facilityCivilDetails.js, which turns the portals onto the measured seating cone rather than
+    // axis-aligning them, so they are deliberately not built here.
   } else if (kind === "observatory-dome") {
     // A slit, a shutter that slides over it, the shutter rails, and the telescope the building
     // exists for, all on a drum that rotates.
@@ -326,6 +309,33 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     }
     box([0,-0.46,0],[0.71,0.05,depth],0xa6aaa6);
     if(kind==='utility-gallery')for(const x of [-0.28,0.28])tube([[x,-0.20,-depth/2],[x,-0.20,depth/2]],0.035,0x9ebfc0);
+  }
+  // Construction members contributed by the per-family detail modules. They receive helpers bound to
+  // their own sink rather than to `parts`, because the helpers register what they are handed; a
+  // module that both registers through them and returns the members would otherwise have every
+  // member added twice, doubling the merge cost for geometry that renders identically.
+  const detailParts = [];
+  const detailPut = (geometry, color, position = [0, 0, 0], rotation = [0, 0, 0]) =>
+    put(geometry, color, position, rotation, detailParts);
+  const detailHelpers = {
+    put: detailPut,
+    box: (p, size, color = wall, bevel = 0.006) => detailPut(
+      new RoundedBoxGeometry(...size, tier + 1, Math.min(bevel, ...size.map(s => s * 0.16))), color, p),
+    cylinder: (p, radius, height, color = metal) => detailPut(new THREE.CylinderGeometry(radius, radius, height, radial), color, p),
+    tube: (points, radius, color = metal) => detailPut(new THREE.TubeGeometry(
+      new THREE.CatmullRomCurve3(points.map(point => new THREE.Vector3(...point))), 12 + tier * 8, radius, 8 + tier * 4, false), color),
+    ring: (radius, tubeRadius, p, color = metal) => detailPut(new THREE.TorusGeometry(radius, tubeRadius, 6 + tier * 2, radial), color, p, [Math.PI / 2, 0, 0]),
+    tier, radial,
+    // The sink the helpers register into, exposed because the detail modules read it back to collect
+    // exactly the members their own helper calls emitted.
+    parts: detailParts,
+    colors: { wall, trim, glass, metal }
+  };
+  for (const contribute of [buildingDetailParts, industrialDetailParts, civilDetailParts]) {
+    const contributed = contribute(kind, detailHelpers);
+    for (const member of Array.isArray(contributed) ? contributed : []) {
+      if (!parts.includes(member)) parts.push(member);
+    }
   }
   const merged = mergeGeometries(parts,false); parts.forEach(part=>part.dispose());
   const geometry = mergeVertices(merged, 1e-6); merged.dispose();
