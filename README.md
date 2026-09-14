@@ -170,6 +170,14 @@ by the author is marked as calibrated, so the two cannot be confused.
 
 ## Getting Started
 
+**Try it without installing anything:** <https://laiyukai910-star.github.io/geolab-128/>
+
+That hosted copy is the same browser build described below, published by
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml) with the Rust WebAssembly core
+compiled from source. It makes no network requests at runtime, so it behaves exactly like the
+local one. Running locally remains the primary path: it keeps your scenarios on your own machine
+and adds the native Rust service.
+
 ### Desktop
 
 ```powershell
