@@ -121,7 +121,26 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     for (const x of [-0.15,0.15]) cylinder([x,-0.15,0.52],0.023,0.55,trim);
     box([0,0.14,0.52],[0.4,0.04,0.18],trim);
   } else if (kind === "hipped-roof") {
-    roof(0,-0.45,0,0.98,0.90,0.96);
+    // A roof is not a building. This carries the walls, a plinth, a real entrance with a canopy, a
+    // chimney and a rainwater butt under the roof, so it reads as a dwelling rather than a roof
+    // floating on nothing.
+    const w = 0.86, d = 0.74, height = 0.56;
+    // A dwelling is a small structure, so its walls carry few openings: the perforated-wall block is
+    // used at its lowest subdivision rather than the tower rates, which would cost an order of
+    // magnitude more triangles for a building a fraction of the size.
+    block([0, -0.5 + height / 2, 0], [w, height, d], 1, 2);
+    box([0, -0.485, 0], [w + 0.04, 0.03, d + 0.04], trim);
+    roof(0, -0.5 + height, 0, 0.98, 0.90, 0.96);
+    // A chimney breaking the ridge, as a real flue does.
+    box([0.22, -0.5 + height + 0.34, -0.10], [0.075, 0.30, 0.075], 0xb8aa9c);
+    box([0.22, -0.5 + height + 0.50, -0.10], [0.095, 0.02, 0.095], trim);
+    // Entrance canopy and step.
+    box([0, -0.30, d / 2 + 0.045], [0.24, 0.02, 0.09], trim);
+    for (const x of [-0.11, 0.11]) box([x, -0.38, d / 2 + 0.075], [0.012, 0.15, 0.012], wall);
+    box([0, -0.485, d / 2 + 0.05], [0.26, 0.035, 0.12], 0xb6b2a4);
+    // Rainwater butt and downpipe on the flank.
+    cylinder([-w / 2 - 0.04, -0.40, 0.14], 0.045, 0.16, 0x7f8a86);
+    tube([[-w / 2 + 0.01, -0.30, 0.20], [-w / 2 - 0.04, -0.34, 0.17]], 0.008, metal);
   } else if (kind === "tapered-landmark") {
     const points = Array.from({length:17},(_,i)=>new THREE.Vector2(0.38*(1-i/22)+0.055*Math.sin(i/16*Math.PI*2),i/16-0.5));
     put(new THREE.LatheGeometry(points,radial*2),glass);
@@ -155,9 +174,18 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     box([0,-0.44,0],[0.96,0.10,0.86],wall,0.02);
     for(const x of [-0.25,0.25]) {
       const g=new THREE.CylinderGeometry(0.13,0.17,0.76,radial);put(g,wall,[x,-0.01,0]);
-      box([x,0.41,0],[0.25,0.07,0.29],metal);
+      // A pier carries its bearing, not the deck directly: a plinth, then the bearing pad, then the
+      // girder seat, which is what a real pier head looks like from the side.
+      box([x,0.30,0],[0.30,0.06,0.34],wall);
+      box([x,0.35,0],[0.20,0.035,0.24],0x6f7a7c);
+      box([x,0.375,0],[0.24,0.02,0.28],metal);
+      // Chamfered cutwater on the upstream face.
+      box([x,-0.10,-0.50],[0.20,0.55,0.10],wall,0.03);
     }
     box([0,0.35,0],[0.98,0.17,0.46],trim,0.03);
+    // Bearing seats under the deck soffit and a maintenance kerb along it.
+    for(const x of [-0.25,0.25]) box([x,0.30,0],[0.34,0.03,0.52],0x8f9798);
+    for(const z of [-0.24,0.24]) box([0,0.31,z],[0.98,0.02,0.05],0x9aa0a0);
   } else if (kind === "crowned-road") {
     const geometry=new THREE.PlaneGeometry(1,1,4,8+tier*4);geometry.rotateX(-Math.PI/2);
     const position=geometry.attributes.position;
@@ -210,9 +238,27 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     cylinder([0,-0.44,0],0.49,0.055,wall);
     box([0,-0.40,0],[0.34,0.012,0.48],0x80a674);
   } else if (kind === "observatory-dome") {
+    // A slit, a shutter that slides over it, the shutter rails, and the telescope the building
+    // exists for, all on a drum that rotates.
     cylinder([0,-0.28,0],0.46,0.35,wall);ring(0.46,0.02,[0,-0.08,0],metal);
     put(new THREE.SphereGeometry(0.46,radial*2,radial,0.16,Math.PI*2-0.32,0,Math.PI/2),trim,[0,-0.08,0]);
-    cylinder([0,-0.14,0],0.08,0.40,metal);
+    // The slit edges as two arcs, and the shutter parked over the lower half of the opening.
+    for(const angle of [0.16,Math.PI*2-0.16]){
+      const arc=Array.from({length:13},(_,j)=>{
+        const phi=j/12*Math.PI/2;
+        return [Math.sin(phi)*Math.sin(angle)*0.462,Math.cos(phi)*0.462,-0.08+Math.sin(phi)*Math.cos(angle)*0.462];
+      });
+      tube(arc,0.012,metal);
+    }
+    for(let i=0;i<5+tier*2;i++){
+      const t=i/(4+tier*2),phi=(0.12+t*0.42)*Math.PI/2;
+      box([Math.sin(phi)*0.40,-0.08+Math.cos(phi)*0.40,0.24-phi*0.06],[0.30,0.016,0.05],0xcfd4d0);
+    }
+    // The telescope: a tube on a fork mount inside the dome.
+    for(const z of [-0.10,0.10]) tube([[0,-0.10,z],[0,0.10,z]],0.014,metal);
+    tube([[0,0.02,-0.06],[0,0.30,0.16]],0.055,0x8bafb9);
+    tube([[0,0.30,0.16],[0,0.40,0.26]],0.030,metal);
+    cylinder([0,-0.14,0],0.10,0.10,metal);
     tube([[0,0.01,0],[0.24,0.33,0]],0.06,0x8bafb9);
   } else if (kind === "crane-boom") {
     const bays=7+tier*3;
