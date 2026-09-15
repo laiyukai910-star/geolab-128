@@ -9,7 +9,7 @@ import { ScannedRockInstances } from "./scannedRockInstances.js";
 import { createRiverMaterial } from "./riverMaterial.js";
 import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal, surfaceDetailSuitability, surfaceGeomorphology, packTerrainStructure } from "./terrainAppearance.js";
 import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
-import { lithologyDisplayColor } from "./geoLithology.js";
+import { lithologyDisplayColor, columnDepthEdgesM } from "./geoLithology.js";
 import { createTerrainSurfaceMaterial, updateTerrainSurfaceMaterial } from "./terrainSurfaceMaterial.js";
 import { SceneVolume } from "./sceneVolume.js";
 import { ORGANISM_KINDS, createOrganismMaterial } from "./organismGeometry.js";
@@ -1443,9 +1443,13 @@ export class TerrainRenderer {
       const wx = (x / (n - 1) - 0.5) * sizeKm;
       const wz = (y / (n - 1) - 0.5) * sizeKm;
       const surfaceY = (model.height[surfaceIndex] / 1000) * verticalScale;
+      // The slabs sit at this column's own interfaces, the same geometry the exposed section bands
+      // and the stratigraphic profile report, so the underground reads consistently everywhere. The
+      // stored voxel arrays and the exported cube coordinates still use the reference edges.
+      const columnEdges = columnDepthEdgesM(model, columnIndex, { seaLevel: Number(this.params.seaLevel) || 0 });
       for (let layer = 0; layer < volume.layerCount; layer += 1) {
-        const top = volume.depthEdgesM[layer];
-        const bottom = volume.depthEdgesM[layer + 1];
+        const top = columnEdges[layer];
+        const bottom = columnEdges[layer + 1];
         const centerDepthKm = ((top + bottom) / 2 / 1000) * undergroundScale;
         const thicknessKm = Math.max(0.006, ((bottom - top) / 1000) * undergroundScale);
         const voxelIndex = layer * volume.columnCellCount + columnIndex;

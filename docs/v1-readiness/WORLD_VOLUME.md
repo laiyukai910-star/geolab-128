@@ -122,10 +122,16 @@ quadratic.
 The absolute thickness of the sediment package is still not claimed: that remains the scenario's own
 `subsurfaceDepthM`. Only the thickness relative to the region's own bedrock-depth field varies.
 
-The exposed section face bands each column at that column's own interfaces, so the display, the
-stratigraphic profile and the cave anchoring all read the same geometry and an anchored cave cannot
-render in a differently banded slice. The reference array itself is never rewritten, so the exported
-cube coordinates and the CSV column sets keep their stated reference-depth semantics.
+The exposed section face and the 3-D voxel slabs both place each column at that column's own
+interfaces, so the display, the stratigraphic profile and the cave anchoring all read the same
+geometry and an anchored cave cannot render in a differently banded slice.
+
+The exported layers are deliberately left on the reference geometry. The stored voxel arrays are
+indexed by layer and column and the cube-coordinate and column CSV exports publish one depth range
+per layer, which is a reference-depth contract; moving those to per-column values would change the
+meaning of a published column set rather than the appearance of a view. The reference array itself is
+never rewritten, so that contract is intact, and the per-column values are what the display and the
+stratigraphic derivation read.
 
 ## Geological Section
 
