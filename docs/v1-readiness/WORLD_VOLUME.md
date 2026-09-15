@@ -91,6 +91,33 @@ no soluble-looking host yields no plan and the volume view keeps its generic cav
 inventing contacts. It remains illustrative geometry: it infers no cave from observations and
 changes no groundwater calculation.
 
+### Lateral Sediment Thickness
+
+The volume stores one reference depth-edge array, and every column used to be read against it, so a
+128 km region gave all 4096 columns the same layer boundaries and the layer thickness that the
+surface derives its joint spacing from was a single constant. Measured before this change: one
+distinct layer-boundary set, one top-layer thickness, one joint spacing across the whole region.
+
+The absolute thickness of a sediment package is not knowable without regional subsurface data, and
+the derivation does not claim to know it: the overall scale remains whatever the scenario's
+`subsurfaceDepthM` states. What varies laterally is the column's **relative** position within the
+region, read from the model's own arrays — the elevation rank above the region's low ground,
+corroborated by curvature and the topographic position index — on the standard reasoning for a
+depositional basin, that the package is thickest where the basement is deepest and thins over the
+highs that shed it. A column low and enclosed in its own region keeps the full reference thickness;
+one high and divergent thins toward the margin, to a floor of 0.55 of the reference.
+
+The package is therefore redistributed rather than inflated. The shallowest interface stays at the
+surface, the base stays exactly at the scenario's base, the layer count never changes, and the
+interface sequence stays monotonic, which is what keeps the exported cube coordinates, the CSV
+column sets and the section display consistent with it. Measured after the change: 145 distinct
+thickness factors over a region with relief, top-layer carbonate joint spacing spanning 13.5 m to
+17.1 m, and the base still exactly at its reference depth.
+
+The two constants involved — the 0.55 thinning floor and the balance between elevation and the
+corroborating indices — are marked CALIBRATED. The reference thickness itself is not calibrated
+here at all; it is the scenario's own parameter.
+
 ## Geological Section
 
 The Layers drawer provides a Volume view selector. Geological section removes

@@ -18,6 +18,8 @@ import {
   karstHostAssessment,
   KARST_HOST_THRESHOLD,
   stratigraphicProfile,
+  columnDepthEdgesM,
+  lateralThicknessFactor,
   columnKarstHost
 } from '../src/geoLithology.js';
 import { SUBSURFACE_LITHOLOGY } from '../src/lithologyTable.js';
@@ -397,6 +399,79 @@ assert.ok(karstHostScore(carbonate({ porosity: 0.5, densityKgM3: 2400 }))
   > karstHostScore(carbonate({ porosity: 0.5, densityKgM3: 2700 })),
   'within the class, a denser carbonate still scores lower than a lighter one');
 
+
+// ================================================== lateral sediment thickness
+
+// A region with real relief: a high in one corner and a hollow in the other. The sediment package
+// has to be thicker over the low, convergent ground than over the high, divergent ground, while the
+// base stays exactly where the scenario put it.
+{
+  const side = 16, count = side * side;
+  const relief = (x, y) => 200 + 700 * Math.exp(-(((x - 0.25) ** 2 + (y - 0.25) ** 2)) * 8);
+  const lateralModel = {
+    n: side, sizeKm: 128, cellSizeKm: 128 / (side - 1),
+    height: Float32Array.from({ length: count }, (_, i) => relief((i % side) / (side - 1), Math.floor(i / side) / (side - 1))),
+    slope: new Float32Array(count).fill(8),
+    temperature: new Float32Array(count).fill(10),
+    precipitation: new Float32Array(count).fill(900),
+    wetnessIndex: new Float32Array(count).fill(6),
+    surface: { vegetation: new Float32Array(count).fill(0.3), imperviousFraction: new Float32Array(count).fill(0) },
+    hydraulics: { erosionRisk: new Float32Array(count).fill(0.5), depositionRisk: new Float32Array(count).fill(0.1) },
+    terrainDiagnostics: {
+      curvature: Float32Array.from({ length: count }, (_, i) => -0.06 * Math.exp(-(((i % side) / (side - 1) - 0.25) ** 2 + (Math.floor(i / side) / (side - 1) - 0.25) ** 2) * 8)),
+      tpi: new Float32Array(count).fill(0)
+    },
+    stats: { maxElevation: 900 },
+    subsurface: {
+      gridN: side, columnCellCount: count, layerCount: 4,
+      depthEdgesM: new Float32Array([0, 20, 60, 140, 240]),
+      lithologyCode: Uint8Array.from({ length: count * 4 }, (_, i) => (Math.floor(i / count) === 0 ? 7 : 5))
+    }
+  };
+  const base = 240;
+  const factors = [], topThickness = [], topSpacing = [];
+  for (let column = 0; column < count; column += 1) {
+    const profile = stratigraphicProfile(lateralModel, column, { lithologyTable: table });
+    const edges = profile.depthEdgesM;
+    assert.equal(edges[0], 0, 'the shallowest interface must sit at the surface in every column');
+    assert.equal(edges.at(-1), base, 'every column must reach exactly the scenario base');
+    for (let layer = 1; layer < edges.length; layer += 1) {
+      assert.ok(edges[layer] >= edges[layer - 1], `interfaces must not invert at column ${column}`);
+    }
+    for (const layer of profile.layers) assert.ok(layer.thicknessM >= 0, 'thicknesses must be non-negative');
+    assert.equal(edges.length, lateralModel.subsurface.layerCount + 1, 'the layer count must not change');
+    factors.push(lateralThicknessFactor(lateralModel, column));
+    topThickness.push(profile.layers[0].thicknessM);
+    topSpacing.push(profile.layers[0].jointSpacingM);
+  }
+  assert.equal(new Set(factors.map(v => v.toFixed(6))).size > 1, true, 'lateral thickness must vary across a region with relief');
+  assert.equal(new Set(topThickness.map(v => v.toFixed(4))).size > 1, true, 'layer thickness must vary across a region with relief');
+  assert.equal(new Set(topSpacing.map(v => v.toFixed(4))).size > 1, true, 'joint spacing must follow the thickness and therefore vary too');
+  assert.ok(Math.min(...factors) >= 0.55 - 1e-9 && Math.max(...factors) <= 1 + 1e-9,
+    `the thickness factor must stay inside its declared band, got ${Math.min(...factors)}..${Math.max(...factors)}`);
+  // The low, convergent column must be thicker than the high, divergent one.
+  const lowest = factors.indexOf(Math.max(...factors));
+  const highest = factors.indexOf(Math.min(...factors));
+  assert.ok(topThickness[lowest] > topThickness[highest],
+    'the low, convergent column must carry the thicker package');
+  assert.equal(lateralModel.subsurface.depthEdgesM[1], 20, 'the reference edges must not be rewritten in place');
+
+  // Degenerate inputs must not throw and must not invent a base.
+  assert.deepEqual(columnDepthEdgesM({ n: 2, height: new Float32Array(4).fill(10) }, 0), [0]);
+  const noEdges = { n: 2, sizeKm: 1, cellSizeKm: 1, height: new Float32Array(4).fill(10), subsurface: { gridN: 2, columnCellCount: 4, layerCount: 0, depthEdgesM: new Float32Array([0]) } };
+  assert.deepEqual(columnDepthEdgesM(noEdges, 0), [0]);
+  const flat = { ...lateralModel, height: new Float32Array(count).fill(500) };
+  const flatEdges = columnDepthEdgesM(flat, 0, {});
+  assert.equal(flatEdges.at(-1), base, 'flat terrain must still reach the base');
+  for (let layer = 1; layer < flatEdges.length; layer += 1) assert.ok(flatEdges[layer] >= flatEdges[layer - 1]);
+  const nanHeight = { ...lateralModel, height: Float32Array.from(lateralModel.height, () => NaN) };
+  const nanEdges = columnDepthEdgesM(nanHeight, 0, {});
+  assert.equal(nanEdges.at(-1), base, 'non-finite heights must not lose the base');
+  assert.ok(nanEdges.every(Number.isFinite), 'non-finite heights must not produce non-finite depths');
+  assert.equal(lateralThicknessFactor(null, 0), 1, 'a missing model must read as the reference thickness');
+  assert.equal(lateralThicknessFactor(lateralModel, -1), 1, 'an out-of-range column must read as the reference thickness');
+}
+
 // ================================================================ column stratigraphy
 
 // One column, three layers, three different materials, and a second column that is bedrock all the
@@ -415,7 +490,18 @@ const bedrockProfile = stratigraphicProfile(bedrockColumnModel, 0);
 assert.equal(karstProfile.layerCount, 3, 'the profile must report one record per modelled layer');
 assert.equal(karstProfile.layers.length, 3);
 assert.equal(karstProfile.depthEdgesM.length, karstProfile.layerCount + 1);
-assert.deepEqual(karstProfile.depthEdgesM, [0, 1, 4, 12], 'the profile must reproduce the model depth edges');
+// The boundaries are read per column, so a column nearer the region's depocentre carries a thicker
+// package than one on a high. The surface and the base are pinned to the scenario's own edges, so the
+// package is redistributed rather than inflated, and the layer count never changes.
+const referenceEdges = Array.from(stratigraphyModel.subsurface.depthEdgesM);
+assert.equal(karstProfile.depthEdgesM[0], referenceEdges[0], 'the shallowest interface must stay at the surface');
+assert.equal(karstProfile.depthEdgesM.at(-1), referenceEdges.at(-1), 'the base must stay at the reference base');
+for (let layer = 1; layer < karstProfile.depthEdgesM.length; layer += 1) {
+  assert.ok(karstProfile.depthEdgesM[layer] >= karstProfile.depthEdgesM[layer - 1],
+    `layer interfaces must not invert at layer ${layer}`);
+}
+assert.ok(karstProfile.depthEdgesM[1] <= referenceEdges[1] + 1e-9,
+  'a column can only thin the package, never thicken it past the reference, because the absolute scale is the scenario\'s');
 let previousBottom = 0;
 karstProfile.layers.forEach((entry, i) => {
   assert.equal(entry.layer, i, 'layer records must be ordered and self-describing');

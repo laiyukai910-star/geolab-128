@@ -312,6 +312,9 @@ const DENSITY_HOST_FRACTION = 0.9;
 const PERMEABILITY_HOST_MM_HR = 14;
 const PERMEABILITY_WEIGHT = 0.08;
 export const KARST_HOST_THRESHOLD = 0.7;
+// CALIBRATED: the thinnest a sediment package is allowed to become over a region's highest, most
+// divergent ground, as a share of the scenario's reference thickness.
+const LATERAL_THICKNESS_FLOOR = 0.55;
 // CALIBRATED: the mobile soil layer is thin even on stable humid ground, so its production term is
 // capped well below a metre of pure production.
 const SOIL_PRODUCTION_SCALE_M = 1.2;
@@ -367,6 +370,143 @@ export function karstHostAssessment(lithology) {
 
 // ---------------------------------------------------------------- column stratigraphy
 
+/*
+ * Lateral sediment thickness.
+ *
+ * The volume stores ONE depth-edge array, so every column in a region previously received identical
+ * layer boundaries: at 128 km across, 4096 columns shared one set of interfaces, and the layer
+ * thickness that the surface derives its joint spacing from was a single constant.
+ *
+ * The absolute thickness of the sediment package is not knowable without regional subsurface data,
+ * and this module does not pretend otherwise: the overall scale stays whatever the scenario's own
+ * `subsurfaceDepthM` says. What IS knowable from the model's own arrays is the RELATIVE position of
+ * a column within the region, and that is what varies here.
+ *
+ * The reasoning is the standard one for a depositional basin: the sediment package is thickest where
+ * the basement is deepest and thins over the highs that shed it. In this model basement relief is
+ * expressed by the land surface, so the surface elevation *relative to the region* stands in for it,
+ * corroborated by curvature and the topographic position index, which separate convergent hollows
+ * and valley floors from divergent crests. A column low and enclosed in its own region is read as
+ * nearer the depocentre and keeps the full reference thickness; a column high and divergent thins
+ * toward the margin.
+ *
+ * CALIBRATED: the 0.55 thinning floor and the 0.35 corroboration weight. The reference thickness
+ * itself is not calibrated here at all - it is the scenario's own parameter.
+ */
+
+/**
+ * Reference elevation to rank against: the low quantile of the region's land, so one deep valley floor
+ * does not set the scale for the whole region.
+ *
+ * Memoised per model, because it is a property of the region rather than of a column and the region
+ * can hold a quarter of a million columns at 512 km: computing it per column would sort the whole
+ * elevation array 262,144 times and take the profile from milliseconds to minutes. The cache is keyed
+ * weakly on the model object, so a replaced model cannot read a stale quantile.
+ */
+const REGION_LOW_CACHE = new WeakMap();
+
+function regionLowElevation(model, seaLevel) {
+  const heights = model?.height;
+  if (!heights?.length) return seaLevel;
+  const cached = REGION_LOW_CACHE.get(model);
+  if (cached && cached.seaLevel === seaLevel && cached.length === heights.length) return cached.value;
+  // The low quantile is found by selection rather than by sorting, so one pass over the elevations is
+  // enough however many columns ask for it.
+  const land = [];
+  for (let index = 0; index < heights.length; index += 1) {
+    const value = Number(heights[index]);
+    if (Number.isFinite(value) && value > seaLevel) land.push(value);
+  }
+  let value = seaLevel;
+  if (land.length) {
+    const target = Math.min(land.length - 1, Math.floor(land.length * 0.1));
+    let low = 0, high = land.length - 1;
+    while (low < high) {
+      let pivotIndex = low;
+      const pivot = land[high];
+      for (let index = low; index < high; index += 1) {
+        if (land[index] < pivot) {
+          const swap = land[index]; land[index] = land[pivotIndex]; land[pivotIndex] = swap;
+          pivotIndex += 1;
+        }
+      }
+      const swap = land[pivotIndex]; land[pivotIndex] = land[high]; land[high] = swap;
+      if (pivotIndex === target) break;
+      if (pivotIndex < target) low = pivotIndex + 1; else high = pivotIndex - 1;
+    }
+    value = land[target];
+  }
+  REGION_LOW_CACHE.set(model, { seaLevel, length: heights.length, value });
+  return value;
+}
+
+/** The surface cell a subsurface column samples, matching the renderer's own nearest-neighbour rule. */
+function surfaceIndexForColumn(model, columnIndex) {
+  const volume = model?.subsurface;
+  const n = Math.max(1, Math.trunc(finite(model?.n, 1)));
+  if (!volume || columnIndex < 0) return -1;
+  if (volume.columnCellCount === n * n) return columnIndex;
+  const grid = Math.max(1, Math.trunc(finite(volume.gridN, 0)));
+  const gx = columnIndex % grid, gy = Math.floor(columnIndex / grid);
+  const x = Math.round((gx / Math.max(1, grid - 1)) * (n - 1));
+  const y = Math.round((gy / Math.max(1, grid - 1)) * (n - 1));
+  return Math.min(n * n - 1, Math.max(0, y * n + x));
+}
+
+/**
+ * How thick the sediment package is at one column, as a factor of the scenario's reference thickness.
+ * 1 means the reference thickness; the floor is the thinning limit on a high, divergent flank.
+ */
+export function lateralThicknessFactor(model, columnIndex, options = {}) {
+  const seaLevel = Number.isFinite(Number(options.seaLevel)) ? Number(options.seaLevel) : 0;
+  const surfaceIndex = surfaceIndexForColumn(model, columnIndex);
+  if (surfaceIndex < 0) return 1;
+  const reference = regionLowElevation(model, seaLevel);
+  const rise = Math.max(1, finite(model.stats?.maxElevation, seaLevel + 1) - reference);
+  const elevation = Number(model.height?.[surfaceIndex]);
+  if (!Number.isFinite(elevation)) return 1;
+  // Elevation above the region's low ground, as a share of the region's total rise.
+  const elevationRank = clamp01((elevation - reference) / rise);
+  // Corroboration: convergent ground (negative curvature) and low topographic position are basin-like;
+  // divergent crests are not. Kept as a minority weight because curvature is the noisier signal.
+  const curvature = Number(model.terrainDiagnostics?.curvature?.[surfaceIndex]);
+  const tpi = Number(model.terrainDiagnostics?.tpi?.[surfaceIndex]);
+  const curvatureRank = Number.isFinite(curvature) ? clamp01(0.5 - curvature / 0.16) : 0.5;
+  const tpiRank = Number.isFinite(tpi) ? clamp01(0.5 - tpi / Math.max(1, rise * 0.25)) : 0.5;
+  const basinPosition = clamp01(0.65 * (1 - elevationRank) + 0.35 * (0.5 * curvatureRank + 0.5 * tpiRank));
+  return LATERAL_THICKNESS_FLOOR + (1 - LATERAL_THICKNESS_FLOOR) * basinPosition;
+}
+
+/**
+ * Layer boundaries for ONE column: the scenario's reference edges scaled by that column's lateral
+ * thickness factor. The surface stays at zero and the base stays at the reference base, so the
+ * package as a whole is neither thicker nor thinner than the scenario states - it is redistributed,
+ * not inflated - and the layer count is unchanged, which keeps the exported cube and column
+ * contracts intact.
+ */
+export function columnDepthEdgesM(model, columnIndex, options = {}) {
+  const volume = model?.subsurface;
+  const rawEdges = Array.from(volume?.depthEdgesM || [0], value => Math.max(0, finite(Number(value), 0)));
+  const edges = rawEdges.map((value, index) => (index === 0 ? value : Math.max(value, rawEdges[index - 1])));
+  if (edges.length < 2) return edges;
+  const base = edges[edges.length - 1];
+  const factor = lateralThicknessFactor(model, columnIndex, options);
+  if (base <= 0 || factor === 1) return edges;
+  // Thicknesses scale, then the last layer absorbs whatever the base clamp leaves, so the base is
+  // exact and the sequence stays monotonic.
+  const scaled = [0];
+  let running = 0;
+  for (let layer = 1; layer < edges.length - 1; layer += 1) {
+    running += (edges[layer] - edges[layer - 1]) * factor;
+    scaled.push(Math.min(base, running));
+  }
+  scaled.push(base);
+  for (let index = 1; index < scaled.length - 1; index += 1) {
+    scaled[index] = Math.max(scaled[index], scaled[index - 1]);
+  }
+  return scaled;
+}
+
 /**
  * Stratigraphic profile of ONE subsurface column, read from the model.
  *
@@ -394,9 +534,10 @@ export function stratigraphicProfile(model, column, options = {}) {
   const usableColumn = columnIndex >= 0 && columnIndex < columnCellCount;
   const wetness = clamp01(options.wetness);
   // The model's own depth edges are the layer geometry; they are only guarded against a
-  // non-monotonic or non-finite array, never redefined here.
-  const rawEdges = Array.from(volume?.depthEdgesM || [0], value => Math.max(0, finite(Number(value), 0)));
-  const depthEdgesM = rawEdges.map((value, index) => (index === 0 ? value : Math.max(value, rawEdges[index - 1])));
+  // non-monotonic or non-finite array, never redefined here. They are read per column, so a column
+  // nearer the region's depocentre carries a thicker sediment package than one on a high, which is
+  // what makes the layer thickness - and through it the joint spacing - vary across a region.
+  const depthEdgesM = columnDepthEdgesM(model, usableColumn ? columnIndex : -1, { seaLevel: options.seaLevel });
   const layerLimit = Math.max(0, Math.min(layerCount, Math.max(0, depthEdgesM.length - 1)));
   const layers = [];
   let scoreSum = 0, scoredThicknessM = 0, columnThicknessM = 0;
