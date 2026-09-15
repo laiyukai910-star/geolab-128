@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { createFoliageGeometry } from "./foliageGeometry.js";
 import { createFacilityGeometry, REBUILT_FACILITY_KINDS } from "./facilityGeometry.js";
-import { ORGANISM_KINDS, createOrganismGeometry } from "./organismGeometry.js";
+import { ORGANISM_KINDS, WILDLIFE_ANATOMY_KINDS, createOrganismGeometry } from "./organismGeometry.js";
+import { wildlifeMorphotypeIndex } from "./wildlifeMorphotypes.js";
 import {
   assetPipelineDiagnostics,
   normalizeRenderDetailQuality,
@@ -77,7 +78,21 @@ export function createSemanticAssetGeometry(label, quality = "ultra", variant = 
   return kind ? createProceduralGeometry(kind, quality, variant, structure) : null;
 }
 
+/**
+ * The geometry variant a species should be built at. Position must NOT decide this: it would draw one
+ * species as a deer in one place and a moose in another, and change which animal it is as the herd
+ * moves. Position keeps driving size and colour, which is per-individual variation and belongs there.
+ */
+export function wildlifeOrganismVariant(species) {
+  return wildlifeMorphotypeIndex(species);
+}
+
 export function wildlifeProceduralKind(species, part) {
+  // A class with a real animal anatomy gets that anatomy, so a red deer is built as a deer rather than
+  // assembled from generic torso and leg parts. `wildlifeMorphotypeIndex` then selects which animal of
+  // the anatomy's morphotype list the species is, and the renderer reads it per species rather than
+  // per instance.
+  if (WILDLIFE_ANATOMY_KINDS.has(species?.geometryClass)) return `wildlife-organism-${species.geometryClass}`;
   if(ORGANISM_KINDS.includes(species?.geometryClass))return `wildlife-organism-${species.geometryClass}`;
   const id = String(part?.id || "").toLowerCase();
   if (id.includes("eye")) return "wildlife-eye";

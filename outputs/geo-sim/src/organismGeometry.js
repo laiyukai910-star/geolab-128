@@ -1,7 +1,17 @@
 import * as THREE from "three";
 import { mergeGeometries } from "../vendor/three/addons/utils/BufferGeometryUtils.js";
+import { ungulateAnatomy } from "./organismAnatomyUngulate.js";
+import { carnivoreAnatomy } from "./organismAnatomyCarnivore.js";
 
-export const ORGANISM_KINDS = Object.freeze(["fish-trout","fish-perch","fish-reef","ray","octopus","jelly","crab","mussel","bat","fern","fungus","coral","kelp"]);
+// Aquatic anatomies have one morphotype each; the terrestrial entries select a morphotype through the
+// `variant` argument, so `ungulate` is three animals (deer, moose, zebra) rather than one quadruped.
+export const ORGANISM_KINDS = Object.freeze([
+  "fish-trout","fish-perch","fish-reef","ray","octopus","jelly","crab","mussel","bat","fern","fungus","coral","kelp",
+  "ungulate","canid","feline","bear"
+]);
+// The terrestrial classes that now resolve to a real animal anatomy instead of being assembled from
+// generic torso and leg parts. A class absent here still falls back to that part assembly.
+export const WILDLIFE_ANATOMY_KINDS = Object.freeze(new Set(["ungulate","canid","feline","bear"]));
 const TAU=Math.PI*2;
 const vec=p=>new THREE.Vector3(...p);
 
@@ -245,7 +255,7 @@ function bat(detail) {
 export function createOrganismGeometry(kind,quality="ultra",variant=0) {
   if(!ORGANISM_KINDS.includes(kind))throw new Error(`Unknown organism anatomy: ${kind}`);
   const detail=quality==="exhaustive"?48:quality==="ultra"?32:18;
-  const parts=kind.startsWith("fish-")?fish(kind,detail,variant):kind==="ray"?ray(detail):kind==="octopus"?octopus(detail):kind==="jelly"?jelly(detail):kind==="crab"?crab(detail):kind==="mussel"?mussel(detail):kind==="bat"?bat(detail):plant(kind,detail);
+  const parts=kind==="ungulate"?ungulateAnatomy(detail,variant):(kind==="canid"||kind==="feline"||kind==="bear")?carnivoreAnatomy(detail,kind==="canid"?0:kind==="feline"?1:2):kind.startsWith("fish-")?fish(kind,detail,variant):kind==="ray"?ray(detail):kind==="octopus"?octopus(detail):kind==="jelly"?jelly(detail):kind==="crab"?crab(detail):kind==="mussel"?mussel(detail):kind==="bat"?bat(detail):plant(kind,detail);
   const geometry=mergeGeometries(parts);for(const part of parts)part.dispose();
   geometry.computeBoundingBox();geometry.computeBoundingSphere();
   geometry.userData.anatomy={kind,quality,parts:parts.length,variant,representation:"procedural anatomical morphotype, not a scanned specimen"};

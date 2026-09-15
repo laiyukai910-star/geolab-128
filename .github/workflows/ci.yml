@@ -68,6 +68,9 @@ jobs:
           node outputs/geo-sim/tests/facilityEnvelopeDetails.test.mjs
           node outputs/geo-sim/tests/facilityIndustrialDetails.test.mjs
           node outputs/geo-sim/tests/facilityCivilDetails.test.mjs
+          node outputs/geo-sim/tests/humanPresence.test.mjs
+          node outputs/geo-sim/tests/organismAnatomyUngulate.test.mjs
+          node outputs/geo-sim/tests/organismAnatomyCarnivore.test.mjs
           node outputs/geo-sim/tests/scannedAssets.test.mjs
           node outputs/geo-sim/tests/riverReconstruction.test.mjs
           node outputs/geo-sim/tests/modelEnvelope.test.mjs
@@ -104,6 +107,10 @@ jobs:
           test -f outputs/geo-sim/src/facilityEnvelopeDetails.js
           test -f outputs/geo-sim/src/facilityIndustrialDetails.js
           test -f outputs/geo-sim/src/facilityCivilDetails.js
+          test -f outputs/geo-sim/src/humanPresence.js
+          test -f outputs/geo-sim/src/wildlifeMorphotypes.js
+          test -f outputs/geo-sim/src/organismAnatomyUngulate.js
+          test -f outputs/geo-sim/src/organismAnatomyCarnivore.js
           test -f outputs/geo-sim/src/lithologyTable.js
           test -f outputs/geo-sim/src-ts/assetPipeline.ts
           test -f outputs/geo-sim/src-ts/aquaticHabitats.ts
