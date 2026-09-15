@@ -4,7 +4,8 @@ import {
   soilThicknessM,
   landformClass,
   lithologyMechanicalProperties,
-  layerStructureSpacingM
+  layerStructureSpacingM,
+  columnDepthEdgesM
 } from "./geoLithology.js";
 import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
 
@@ -62,12 +63,12 @@ export function surfaceGeomorphology(model, params, index, options = {}) {  cons
     };
   }
 
-  const depthEdges = volume?.depthEdgesM;
   // The jointed unit behind the surface is the whole weathered-plus-bedrock package, not just the
   // topmost slice, so its characteristic bed thickness is the thickness-weighted harmonic mean of
   // the layers. A thinly interbedded sequence therefore stays closely jointed even when one thick
-  // bed sits at the top.
-  const bedThicknessM = effectiveBedThicknessM(volume, columnIndex, depthEdges);
+  // bed sits at the top. The edges are read for THIS column, so the thickness follows the lateral
+  // variation the stratigraphic derivation applies, and the surface and the geology agree.
+  const bedThicknessM = effectiveBedThicknessM(volume, columnIndex, columnDepthEdgesM(model, columnIndex, { seaLevel: params?.seaLevel }));
   const topLayerLithology = lithology;
   const { spacingM, style, stiffness, materialClass } = layerStructureSpacingM(resolvedCode, bedThicknessM, 0, table);
   const strength = rockMassStrength(topLayerLithology, spacingM, smooth(4, 14, wetnessIndex));
@@ -109,7 +110,10 @@ export function surfaceGeomorphology(model, params, index, options = {}) {  cons
     lithologyCode: resolvedCode, lithologyName: lithology.name,
     lithologyId: lithologyCode, unresolvedLithology: resolvedCode !== lithologyCode,
     landform: landformClass({ rockMassStrengthValue: strength, regolithM, slopeDeg: slope }),
-    rockMassStrength: strength, regolithM, soilM, saproliteM: Math.max(0, regolithM - soilM), jointSpacingM: spacingM, jointStyle: style, materialClass, stiffness,
+    rockMassStrength: strength, regolithM, soilM, saproliteM: Math.max(0, regolithM - soilM),
+    // Exposed so the packed surface structure bands at the same thickness the geology reports.
+    bedThicknessM,
+    jointSpacingM: spacingM, jointStyle: style, materialClass, stiffness,
     rock, scree, vegetation, regolith,
     wet: smooth(4, 14, wetnessIndex), sealed, seeded
   };
@@ -182,9 +186,15 @@ export const unpackLog = (byte, [low, high]) => low * Math.pow(high / low, byte 
 
 /** Pack geomorphic structure into four normalized bytes for the terrain vertex buffer. */
 export function packTerrainStructure(model, geomorphology) {
-  const bedThicknessM = model?.subsurface?.depthEdgesM
-    ? Math.max(0.01, (model.subsurface.depthEdgesM[1] ?? 1) - (model.subsurface.depthEdgesM[0] ?? 0))
+  // The bed thickness has to be the same per-column quantity the stratigraphic derivation uses, or
+  // the shader would band the surface at the region's reference thickness while the geology reports a
+  // different one for that column. `geomorphology.bedThicknessM` is that value; the reference array is
+  // only the fallback for a caller that built the geomorphology some other way.
+  const referenceEdges = model?.subsurface?.depthEdgesM;
+  const referenceThickness = referenceEdges
+    ? Math.max(0.01, (referenceEdges[1] ?? 1) - (referenceEdges[0] ?? 0))
     : 1;
+  const bedThicknessM = Math.max(0.01, Number(geomorphology?.bedThicknessM) || referenceThickness);
   return [
     packLog(geomorphology?.jointSpacingM ?? 1, JOINT_SPACING_RANGE_M),
     packLog(bedThicknessM, BED_THICKNESS_RANGE_M),
