@@ -425,6 +425,8 @@ assert.ok(karstHostScore(carbonate({ porosity: 0.5, densityKgM3: 2400 }))
     subsurface: {
       gridN: side, columnCellCount: count, layerCount: 4,
       depthEdgesM: new Float32Array([0, 20, 60, 140, 240]),
+      // The engine's own per-column sediment thickness: thinner over the high, thicker in the hollow.
+      columnBedrockDepthM: Float32Array.from({ length: count }, (_, i) => relief((i % side) / (side - 1), Math.floor(i / side) / (side - 1)) * 0.06),
       lithologyCode: Uint8Array.from({ length: count * 4 }, (_, i) => (Math.floor(i / count) === 0 ? 7 : 5))
     }
   };
@@ -447,8 +449,16 @@ assert.ok(karstHostScore(carbonate({ porosity: 0.5, densityKgM3: 2400 }))
   assert.equal(new Set(factors.map(v => v.toFixed(6))).size > 1, true, 'lateral thickness must vary across a region with relief');
   assert.equal(new Set(topThickness.map(v => v.toFixed(4))).size > 1, true, 'layer thickness must vary across a region with relief');
   assert.equal(new Set(topSpacing.map(v => v.toFixed(4))).size > 1, true, 'joint spacing must follow the thickness and therefore vary too');
-  assert.ok(Math.min(...factors) >= 0.55 - 1e-9 && Math.max(...factors) <= 1 + 1e-9,
-    `the thickness factor must stay inside its declared band, got ${Math.min(...factors)}..${Math.max(...factors)}`);
+  // The factor is the column's sediment thickness over the region median, so it is centred on 1 and
+  // has no declared floor or ceiling: it is bounded only by the field's own spread.
+  assert.ok(factors.every(value => Number.isFinite(value) && value > 0),
+    'every thickness factor must be positive and finite');
+  const sortedFactors = [...factors].sort((a, b) => a - b);
+  const median = sortedFactors[Math.floor(sortedFactors.length / 2)];
+  assert.ok(Math.abs(median - 1) < 0.08,
+    `the factor must be centred on the region median, got a median of ${median}`);
+  assert.ok(sortedFactors.at(-1) > 1 && sortedFactors[0] < 1,
+    'a region with relief must produce both thicker and thinner columns, not a uniform thinning');
   // The low, convergent column must be thicker than the high, divergent one.
   const lowest = factors.indexOf(Math.max(...factors));
   const highest = factors.indexOf(Math.min(...factors));
