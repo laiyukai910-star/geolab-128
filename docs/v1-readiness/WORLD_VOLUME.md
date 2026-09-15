@@ -98,25 +98,34 @@ The volume stores one reference depth-edge array, and every column used to be re
 surface derives its joint spacing from was a single constant. Measured before this change: one
 distinct layer-boundary set, one top-layer thickness, one joint spacing across the whole region.
 
-The absolute thickness of a sediment package is not knowable without regional subsurface data, and
-the derivation does not claim to know it: the overall scale remains whatever the scenario's
-`subsurfaceDepthM` states. What varies laterally is the column's **relative** position within the
-region, read from the model's own arrays — the elevation rank above the region's low ground,
-corroborated by curvature and the topographic position index — on the standard reasoning for a
-depositional basin, that the package is thickest where the basement is deepest and thins over the
-highs that shed it. A column low and enclosed in its own region keeps the full reference thickness;
-one high and divergent thins toward the margin, to a floor of 0.55 of the reference.
+The model already computed a per-column sediment thickness. `computeSubsurfaceVolume` derives
+`columnBedrockDepthM` per column from root depth, valley fill, slope, complexity and terrain noise,
+and `inferSubsurfaceLithology` already uses it to place the sediment-bedrock contact; on a default
+128 km model it holds 10880 distinct values from 14.0 m to 59.5 m. That field is what varies the
+layer geometry.
 
-The package is therefore redistributed rather than inflated. The shallowest interface stays at the
-surface, the base stays exactly at the scenario's base, the layer count never changes, and the
-interface sequence stays monotonic, which is what keeps the exported cube coordinates, the CSV
-column sets and the section display consistent with it. Measured after the change: 145 distinct
-thickness factors over a region with relief, top-layer carbonate joint spacing spanning 13.5 m to
-17.1 m, and the base still exactly at its reference depth.
+An earlier attempt derived the variation from the surface elevation rank instead and was withdrawn
+after review. It was wrong in four measured ways: it returned a uniform 7.9 percent thinning on
+perfectly flat terrain, where the surface carries no lateral information at all, and never returned
+the neutral value; it scaled every interface including the bedrock layers the engine had already
+placed below the bedrock contact, so the whole remainder landed in a layer that is bedrock or
+fractured rock in every column; it computed a region-wide elevation quantile per column, which is
+quadratic; and it left the display publishing the reference geometry while the geology used a
+per-column one.
 
-The two constants involved — the 0.55 thinning floor and the balance between elevation and the
-corroborating indices — are marked CALIBRATED. The reference thickness itself is not calibrated
-here at all; it is the scenario's own parameter.
+The factor is now the column's sediment thickness over the region median, centred on 1 and producing
+both thicker and thinner columns. It is exactly 1 for a model with no bedrock-depth field and for a
+column at the median, so no information produces no change rather than a silent thinning. The median
+is memoised per field array, so a profile costs about four microseconds per column rather than being
+quadratic.
+
+The absolute thickness of the sediment package is still not claimed: that remains the scenario's own
+`subsurfaceDepthM`. Only the thickness relative to the region's own bedrock-depth field varies.
+
+The exposed section face bands each column at that column's own interfaces, so the display, the
+stratigraphic profile and the cave anchoring all read the same geometry and an anchored cave cannot
+render in a differently banded slice. The reference array itself is never rewritten, so the exported
+cube coordinates and the CSV column sets keep their stated reference-depth semantics.
 
 ## Geological Section
 

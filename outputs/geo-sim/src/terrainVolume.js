@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { caveContains } from "./caveField.js";
-import { lithologyDisplayColor, unclassifiedDisplayColor, wetRockDisplayColor, stratigraphicProfile, cavePassagePlan } from "./geoLithology.js";
+import { lithologyDisplayColor, unclassifiedDisplayColor, wetRockDisplayColor, stratigraphicProfile, cavePassagePlan, columnDepthEdgesM } from "./geoLithology.js";
 import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
@@ -173,18 +173,33 @@ export function buildTerrainVolume(model, config) {
   const unknown = unclassifiedTone();
   const seaY = seaLevel * verticalScale / 1000;
   const waterTop = new THREE.Color(0x5fa6b3), waterBottom = new THREE.Color(0x145064);
+  // The section bands each column at that column's own sediment thickness, so the exposed face shows
+  // the same stratigraphy the cave anchoring and the surface structure are derived from. Without this
+  // the display published the region's reference geometry while the geology reported a per-column one,
+  // and an anchored cave could render in a differently banded slice.
+  const edgesCache = new Map();
+  const edgesFor = surfaceIndex => {
+    if (!edgesCache.has(surfaceIndex)) {
+      const edges = columnDepthEdgesM(model, subsurfaceColumnIndex(model, surfaceIndex), { seaLevel });
+      edgesCache.set(surfaceIndex, edges);
+    }
+    return edgesCache.get(surfaceIndex);
+  };
   for (let r = 0; r < rim.length; r++) {
     const ia = rim[r], ib = rim[(r + 1) % rim.length];
     const a = point(ia), b = point(ib);
+    const edgesA = edgesFor(ia), edgesB = edgesFor(ib);
     for (let layer = 0; layer < edges.length; layer++) {
-      const top = edges[layer] * depthScale * verticalScale / 1000;
-      const low = edges[layer + 1] * depthScale * verticalScale / 1000;
+      const topA = edgesA[layer] * depthScale * verticalScale / 1000;
+      const lowA = edgesA[layer + 1] * depthScale * verticalScale / 1000;
+      const topB = edgesB[layer] * depthScale * verticalScale / 1000;
+      const lowB = edgesB[layer + 1] * depthScale * verticalScale / 1000;
       const last = layer === edges.length - 1;
       const ca = last ? unknown : sampleStratumColor(model, ia % n, Math.floor(ia/n), layer).lerp(layerTones[layer],0.92);
       const cb = last ? unknown : sampleStratumColor(model, ib % n, Math.floor(ib/n), layer).lerp(layerTones[layer],0.92);
-      solid.polygon([[a[0], a[1] - top, a[2]], [b[0], b[1] - top, b[2]],
-        [b[0], last ? baseY : b[1] - low, b[2]], [a[0], last ? baseY : a[1] - low, a[2]]], [ca, cb, cb, ca],
-        [edges[layer], edges[layer], last ? (b[1]-baseY)*1000/(depthScale*verticalScale) : edges[layer+1], last ? (a[1]-baseY)*1000/(depthScale*verticalScale) : edges[layer+1]]);
+      solid.polygon([[a[0], a[1] - topA, a[2]], [b[0], b[1] - topB, b[2]],
+        [b[0], last ? baseY : b[1] - lowB, b[2]], [a[0], last ? baseY : a[1] - lowA, a[2]]], [ca, cb, cb, ca],
+        [edgesA[layer], edgesB[layer], last ? (b[1]-baseY)*1000/(depthScale*verticalScale) : edgesB[layer+1], last ? (a[1]-baseY)*1000/(depthScale*verticalScale) : edgesA[layer+1]]);
     }
     solid.polygon([[(config.cutX - sizeKm / 2) / 2, baseY, 0], [a[0], baseY, a[2]], [b[0], baseY, b[2]]], [unknown, unknown, unknown]);
     if (a[1] < seaY || b[1] < seaY) {
