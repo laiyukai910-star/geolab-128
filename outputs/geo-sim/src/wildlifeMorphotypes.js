@@ -30,7 +30,14 @@ const MORPHOTYPES = Object.freeze({
   giraffe: Object.freeze(["giraffe"]),
   marsupial: Object.freeze(["macropod"]),
   "small-mammal": Object.freeze(["lagomorph"]),
-  human: Object.freeze(["standing", "walking", "seated"])
+  human: Object.freeze(["standing", "walking", "seated"]),
+  // One build each: these classes have a single defining body plan, so their morphotype list has one
+  // entry and the variant is always 0.
+  boar: Object.freeze(["suid"]),
+  elephant: Object.freeze(["elephant"]),
+  giraffe: Object.freeze(["giraffe"]),
+  marsupial: Object.freeze(["macropod"]),
+  "small-mammal": Object.freeze(["lagomorph"])
 });
 
 /**
@@ -72,6 +79,7 @@ const SPECIES_MORPHOTYPE = Object.freeze({
   golden_eagle: "raptor",
   andean_condor: "raptor",
   emperor_penguin: "penguin",
+  // The suid build is the boar itself; the marsupial and lagomorph builds are single-morphotype classes.
   // semi-aquatic: the otter's sinuous tail, the rodent's flat paddle and the pinniped's flippers are
   // three builds, not one rescaled swimmer.
   beaver: "rodent",

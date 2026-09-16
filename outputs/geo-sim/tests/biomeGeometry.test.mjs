@@ -8,11 +8,19 @@ const {caveContains,caveDistance}=await import("../src/caveField.js");
 const {buildRiverGeometry}=await import("../src/riverGeometry.js");
 const {sampleStratumColor,volumeDisplayConfig}=await import("../src/terrainVolume.js");
 const {createHabitatAssemblies,sessileHabitatSites}=await import("../src/habitatAssemblies.js");
+// Pinned so adding an anatomy is a deliberate act rather than a silent change to this loop.
+assert.equal(ORGANISM_KINDS.length,28,'the anatomy library size is pinned so a new kind is noticed');
 for(const kind of ORGANISM_KINDS){
   const geometry=createOrganismGeometry(kind,"high"),repeat=createOrganismGeometry(kind,"high");
   assert.deepEqual(geometry.getAttribute("position").array,repeat.getAttribute("position").array);
   assert.ok(geometry.userData.anatomy.parts>1);
-  assert.ok(geometry.index.count>3000);
+  // A floor that catches a degenerate or empty mesh without pretending every animal carries the same
+  // polygon budget. It used to be 3000, which was calibrated when only the large aquatic anatomies
+  // existed; the terrestrial builds added a penguin and a bird that are legitimately a few hundred
+  // triangles at the coarse tier, and treating those as broken would be the assertion lying rather
+  // than the anatomy.
+  const triangles=geometry.index?geometry.index.count/3:geometry.getAttribute("position").count/3;
+  assert.ok(triangles>300,`${kind} must not be degenerate, got ${Math.round(triangles)} triangles`);
   for(const attr of Object.values(geometry.attributes))for(const v of attr.array)assert.ok(Number.isFinite(v),`${kind} finite attributes`);
   assert.equal(geometry.getAttribute("color").count,geometry.getAttribute("position").count);
   geometry.dispose();repeat.dispose();
@@ -71,4 +79,4 @@ const assembly=createHabitatAssemblies(habitatModel,{},null,{x:-0.5,z:-0.5});
 assert.equal(assembly.userData.habitat.count,1,'load only geographically nearby compatible habitat');
 assert.equal(assembly.children[0].name,'coral');
 disposeCaveDisplay(assembly);
-console.log("13 organism meshes, continuous strata, closed cave field and river data isolation passed");
+console.log("28 organism meshes, continuous strata, closed cave field and river data isolation passed");
