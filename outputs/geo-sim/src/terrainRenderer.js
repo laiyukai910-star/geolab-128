@@ -10,6 +10,7 @@ import { createRiverMaterial } from "./riverMaterial.js";
 import { naturalTerrainColor, terrainSurfaceWeights, terrainVertexNormal, surfaceDetailSuitability, surfaceGeomorphology, packTerrainStructure } from "./terrainAppearance.js";
 import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
 import { lithologyDisplayColor, columnDepthEdgesM } from "./geoLithology.js";
+import { cc0GeometrySync, cc0GeometriesByCategory, CC0_ATTRIBUTION_TEXT } from "./cc0Assets.js";
 import { createTerrainSurfaceMaterial, updateTerrainSurfaceMaterial } from "./terrainSurfaceMaterial.js";
 import { SceneVolume } from "./sceneVolume.js";
 import { ORGANISM_KINDS, createOrganismMaterial } from "./organismGeometry.js";
@@ -1876,8 +1877,8 @@ export class TerrainRenderer {
     }
 
     addInstancedCylinder(group, "树干", buckets.trunks, 0x9b6a43, { radiusSegments: 7, roughness: 0.88, emissiveIntensity: 0.26 });
-    addInstancedBox(group, "阔叶冠层", buckets.broadleaf, 0x54a866, { geometryFactory: (variant) => createAssetGeometry("broadleaf-canopy", budgetPlan.quality, variant), roughness: 0.96, side: THREE.DoubleSide });
-    addInstancedBox(group, "针叶林冠", buckets.conifers, 0x3b8456, { geometryFactory: (variant) => createAssetGeometry("layered-conifer", budgetPlan.quality, variant), roughness: 0.95, side: THREE.DoubleSide });
+    addInstancedBox(group, "阔叶冠层", buckets.broadleaf, 0x54a866, { geometryFactory: (variant) => cc0TreeGeometry(variant) || createAssetGeometry("broadleaf-canopy", budgetPlan.quality, variant), roughness: 0.96, side: THREE.DoubleSide });
+    addInstancedBox(group, "针叶林冠", buckets.conifers, 0x3b8456, { geometryFactory: (variant) => cc0ConiferGeometry(variant) || createAssetGeometry("layered-conifer", budgetPlan.quality, variant), roughness: 0.95, side: THREE.DoubleSide });
     addInstancedBox(group, "灌草斑块", buckets.shrubs, 0x82b864, { geometryFactory: (variant) => createAssetGeometry("irregular-shrub", budgetPlan.quality, variant), roughness: 0.98, transparent: true, opacity: 0.86 });
     addInstancedCylinder(group, "湿地芦苇", buckets.reeds, 0x86b861, { radiusSegments: 5, roughness: 0.96, transparent: true, opacity: 0.88 });
     addInstancedBox(group, "林下植被", buckets.understory, 0x669f5b, { geometryFactory: (variant) => createAssetGeometry("understory-cluster", budgetPlan.quality, variant), roughness: 0.98, transparent: true, opacity: 0.84 });
@@ -5587,6 +5588,45 @@ function buildAdaptationDetailPlan(buckets) {
 
 function isConiferLandCover(landCover) {
   return landCover === 42 || landCover === 43;
+}
+
+/**
+ * A bundled CC0 tree model for a scatter variant, or null when the collection is not preloaded.
+ *
+ * The application's own vegetation is procedural; this substitutes a real public-domain model when one
+ * is available, and falls back to the procedural geometry otherwise. Returning null rather than
+ * throwing is deliberate: a slow or failed asset load must leave the scene drawing what it can.
+ */
+function cc0TreeGeometry(variant) {
+  const broadleaf = CC0_TREE_IDS;
+  if (!broadleaf.length) return null;
+  return cc0GeometrySync(broadleaf[Math.abs(Math.trunc(Number(variant) || 0)) % broadleaf.length]);
+}
+
+function cc0ConiferGeometry(variant) {
+  const conifers = CC0_CONIFER_IDS;
+  if (!conifers.length) return null;
+  return cc0GeometrySync(conifers[Math.abs(Math.trunc(Number(variant) || 0)) % conifers.length]);
+}
+
+// Resolved once from the bundled collection's own manifest, so the ids cannot drift from the files.
+let CC0_TREE_IDS = [], CC0_CONIFER_IDS = [];
+export function registerCc0Vegetation() {
+  const trees = cc0GeometriesByCategory("tree").map(entry => entry.id);
+  CC0_TREE_IDS = trees.filter(id => /cone|pine/i.test(id));
+  CC0_CONIFER_IDS = CC0_TREE_IDS.slice();
+  return { broadleaf: trees.length - CC0_TREE_IDS.length, conifer: CC0_CONIFER_IDS.length };
+}
+
+/** What the scene's vegetation is currently built from, and under what licence. */
+export function vegetationProvenance() {
+  const bundled = CC0_TREE_IDS.length + cc0GeometriesByCategory("rock").length +
+    cc0GeometriesByCategory("plant").length + cc0GeometriesByCategory("human").length;
+  return {
+    source: bundled > 0 ? "bundled CC0 models with procedural fallback" : "procedural only",
+    bundledModels: bundled,
+    attribution: CC0_ATTRIBUTION_TEXT
+  };
 }
 
 function isShrubOrGrassLandCover(landCover) {

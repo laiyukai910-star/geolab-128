@@ -73,7 +73,25 @@ import {
   runBackendVerification
 } from "./backendClient.js";
 import { ModelWorkerClient } from "./modelWorkerClient.js";
+import { preloadCc0Collection, CC0_ATTRIBUTION_TEXT } from "./cc0Assets.js";
+import { registerCc0Vegetation } from "./terrainRenderer.js";
 import { mergeLayerBundle, readLayerFile, readLayerObject, summarizeLayerBundle } from "./dataAdapters.js";
+
+// The bundled CC0 collection is loaded once, at start-up, so the vegetation scatter has real models to
+// instance instead of always falling back to its procedural geometry. This is deliberately not awaited:
+// the application must become usable whether the assets arrive or not, and every consumer of the
+// collection falls back on its own. The result is recorded so the scene can state what it is drawing.
+const cc0Readiness = preloadCc0Collection()
+  .then(report => {
+    const registered = registerCc0Vegetation();
+    window.__geoLabCc0Assets = { ...report, registered, attribution: CC0_ATTRIBUTION_TEXT, ok: report.failed.length === 0 };
+    return window.__geoLabCc0Assets;
+  })
+  .catch(error => {
+    window.__geoLabCc0Assets = { requested: 0, loaded: 0, failed: [{ id: "*", reason: error.message }], attribution: CC0_ATTRIBUTION_TEXT, ok: false };
+    return window.__geoLabCc0Assets;
+  });
+export function cc0AssetStatus() { return cc0Readiness; }
 import {
   buildAcquisitionPlan,
   checkAcquisitionPlan,

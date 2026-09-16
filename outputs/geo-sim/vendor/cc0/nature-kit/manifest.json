@@ -1,0 +1,205 @@
+{
+  "collection": "Kenney Nature Kit",
+  "version": "2.1",
+  "source": "https://kenney.nl/assets/nature-kit",
+  "licence": "CC0-1.0",
+  "licenceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "attributionRequired": false,
+  "attributionRequested": "Kenney (www.kenney.nl)",
+  "note": "CC0 places this in the public domain, so bundling and redistribution are permitted and no credit is legally required. The credit is recorded anyway because the shipped licence file asks for it. KENNEY-LICENSE.txt is the file that shipped with the collection, unmodified.",
+  "curated": "32 of 329 models, chosen to cover a natural landscape and the human structures that sit in it. The rest of the collection is not bundled.",
+  "models": [
+    {
+      "id": "tree_default",
+      "category": "tree",
+      "description": "broadleaf canopy",
+      "bytes": 9428
+    },
+    {
+      "id": "tree_default_dark",
+      "category": "tree",
+      "description": "broadleaf canopy, dark",
+      "bytes": 9436
+    },
+    {
+      "id": "tree_default_fall",
+      "category": "tree",
+      "description": "broadleaf canopy, autumn",
+      "bytes": 16940
+    },
+    {
+      "id": "tree_cone",
+      "category": "tree",
+      "description": "conifer",
+      "bytes": 10924
+    },
+    {
+      "id": "tree_cone_dark",
+      "category": "tree",
+      "description": "conifer, dark",
+      "bytes": 19940
+    },
+    {
+      "id": "tree_cone_fall",
+      "category": "tree",
+      "description": "conifer, autumn",
+      "bytes": 10916
+    },
+    {
+      "id": "tree_pineDefaultA",
+      "category": "tree",
+      "description": "pine",
+      "bytes": 17220
+    },
+    {
+      "id": "tree_pineRoundA",
+      "category": "tree",
+      "description": "pine, rounded",
+      "bytes": 14488
+    },
+    {
+      "id": "tree_thin",
+      "category": "tree",
+      "description": "slender trunk",
+      "bytes": 17200
+    },
+    {
+      "id": "tree_blocks",
+      "category": "tree",
+      "description": "blocky canopy",
+      "bytes": 10128
+    },
+    {
+      "id": "rock_largeA",
+      "category": "rock",
+      "description": "boulder",
+      "bytes": 7552
+    },
+    {
+      "id": "rock_largeC",
+      "category": "rock",
+      "description": "boulder",
+      "bytes": 7004
+    },
+    {
+      "id": "rock_smallA",
+      "category": "rock",
+      "description": "cobble",
+      "bytes": 3044
+    },
+    {
+      "id": "rock_smallC",
+      "category": "rock",
+      "description": "cobble",
+      "bytes": 3044
+    },
+    {
+      "id": "stone_largeA",
+      "category": "rock",
+      "description": "stone block",
+      "bytes": 7124
+    },
+    {
+      "id": "stone_smallA",
+      "category": "rock",
+      "description": "stone chip",
+      "bytes": 2620
+    },
+    {
+      "id": "cliff_block_rock",
+      "category": "rock",
+      "description": "cliff block",
+      "bytes": 2776
+    },
+    {
+      "id": "cliff_block_stone",
+      "category": "rock",
+      "description": "cliff block",
+      "bytes": 2780
+    },
+    {
+      "id": "plant_bush",
+      "category": "plant",
+      "description": "shrub",
+      "bytes": 4396
+    },
+    {
+      "id": "plant_bushDetailed",
+      "category": "plant",
+      "description": "shrub, detailed",
+      "bytes": 10172
+    },
+    {
+      "id": "grass",
+      "category": "plant",
+      "description": "grass tuft",
+      "bytes": 11496
+    },
+    {
+      "id": "grass_large",
+      "category": "plant",
+      "description": "grass tuft, large",
+      "bytes": 18504
+    },
+    {
+      "id": "flower_redA",
+      "category": "plant",
+      "description": "flower",
+      "bytes": 7104
+    },
+    {
+      "id": "flower_purpleA",
+      "category": "plant",
+      "description": "flower",
+      "bytes": 7112
+    },
+    {
+      "id": "mushroom_red",
+      "category": "plant",
+      "description": "fungus",
+      "bytes": 6364
+    },
+    {
+      "id": "stump_round",
+      "category": "plant",
+      "description": "cut stump",
+      "bytes": 5644
+    },
+    {
+      "id": "log",
+      "category": "plant",
+      "description": "fallen log",
+      "bytes": 14288
+    },
+    {
+      "id": "tent_detailedOpen",
+      "category": "human",
+      "description": "camp tent",
+      "bytes": 15324
+    },
+    {
+      "id": "campfire_logs",
+      "category": "human",
+      "description": "campfire",
+      "bytes": 9284
+    },
+    {
+      "id": "fence_planks",
+      "category": "human",
+      "description": "timber fence",
+      "bytes": 7720
+    },
+    {
+      "id": "sign",
+      "category": "human",
+      "description": "waymark sign",
+      "bytes": 5040
+    },
+    {
+      "id": "bridge_wood",
+      "category": "human",
+      "description": "timber bridge",
+      "bytes": 15692
+    }
+  ]
+}
