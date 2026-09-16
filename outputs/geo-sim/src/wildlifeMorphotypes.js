@@ -20,13 +20,13 @@ const MORPHOTYPES = Object.freeze({
   bovine: Object.freeze(["bison", "yak"]),
   feline: Object.freeze(["felid", "lynx", "lion"]),
   canid: Object.freeze(["wolf", "fox"]),
-  bear: Object.freeze(["bear"]),
+  bear: Object.freeze(["bear", "panda"]),
   boar: Object.freeze(["boar"]),
-  bird: Object.freeze(["wading", "raptor", "penguin"]),
+  bird: Object.freeze(["wading", "raptor", "penguin", "ratite", "seabird"]),
   raptor: Object.freeze(["raptor"]),
   penguin: Object.freeze(["penguin"]),
   "semi-aquatic": Object.freeze(["otter", "rodent", "pinniped"]),
-  elephant: Object.freeze(["elephant"]),
+  elephant: Object.freeze(["elephant", "elephant-african"]),
   giraffe: Object.freeze(["giraffe"]),
   marsupial: Object.freeze(["macropod"]),
   "small-mammal": Object.freeze(["lagomorph"]),
@@ -55,7 +55,20 @@ export function wildlifeMorphotypeIndex(species) {
   }
   const declared = Number(species?.morphotypeIndex);
   if (Number.isFinite(declared) && declared >= 0) return Math.min(morphotypes.length - 1, Math.trunc(declared));
+  // A class with more than one build must say which build each species is. Silently returning the
+  // first one is how a soaring albatross ended up drawn as a long-legged wading crane, so the fallback
+  // is recorded instead of hidden: the renderer still gets a usable variant, and the caller can see
+  // that this species was never assigned one.
+  UNASSIGNED_MORPHOTYPE_SPECIES.add(species?.id);
   return 0;
+}
+
+/** Species in a multi-build class that name no build. Exported so a test can assert this stays empty. */
+export const UNASSIGNED_MORPHOTYPE_SPECIES = new Set();
+
+/** Every species that resolves to no explicit build, for diagnostics. */
+export function unassignedMorphotypeSpecies() {
+  return [...UNASSIGNED_MORPHOTYPE_SPECIES];
 }
 
 /**
@@ -79,6 +92,15 @@ const SPECIES_MORPHOTYPE = Object.freeze({
   golden_eagle: "raptor",
   andean_condor: "raptor",
   emperor_penguin: "penguin",
+  // The albatross is a soaring seabird, not a long-legged wader: it takes the raptor-style long wing
+  // with a different body build. The cassowary is a flightless ratite with a casque.
+  albatross: "seabird",
+  cassowary: "ratite",
+  // A giant panda is a bear in build but not in pattern, so it gets its own morphotype rather than
+  // being a recoloured brown bear.
+  giant_panda: "panda",
+  // The African elephant is the larger build with the bigger ear plate.
+  african_elephant: "elephant-african",
   // The suid build is the boar itself; the marsupial and lagomorph builds are single-morphotype classes.
   // semi-aquatic: the otter's sinuous tail, the rodent's flat paddle and the pinniped's flippers are
   // three builds, not one rescaled swimmer.

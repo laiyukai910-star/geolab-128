@@ -184,7 +184,7 @@ export function semiAquaticAnatomy(detail, variant) {
 /** Bird builds: 0 wading crane and hornbill, 1 soaring raptor, 2 flightless penguin. */
 export function bipedAnatomy(detail, variant) {
   const d = Math.max(12, Math.round(Number(detail) || 24));
-  const build = Math.abs(Math.floor(Number(variant) || 0)) % 3;
+  const build = Math.abs(Math.floor(Number(variant) || 0)) % 5; // 0 wader, 1 raptor, 2 penguin, 3 ratite, 4 seabird
   const parts = [];
   const body = build === 2 ? 0xb9c2c8 : 0x6d6b62;
   const dark = build === 2 ? 0x2c3438 : 0x4c4a44;
@@ -210,7 +210,8 @@ export function bipedAnatomy(detail, variant) {
       parts.push(limb([0.03, -0.34, side * 0.055], [0.11, -0.44, side * 0.06], 0.010, 0x8b8478, d));
       parts.push(plate([[0.11, -0.46, side * 0.02], [0.11, -0.46, side * 0.10], [0.19, -0.47, side * 0.10], [0.19, -0.47, side * 0.02]], 0x7d7568));
     }
-  } else {
+  } else if (build === 1) {
+    // Raptor: compact deep body, hooked bill, broad feathered wing with separated primaries.
     parts.push(sphere([0.17, 0.06, 0], [0.062, 0.058, 0.052], dark, d));
     parts.push(limb([0.21, 0.05, 0], [0.27, 0.02, 0], 0.015, 0xd8b45c, d));
     parts.push(sphere([0.285, 0.008, 0], [0.022, 0.026, 0.018], 0x6b5326, d));
@@ -226,20 +227,59 @@ export function bipedAnatomy(detail, variant) {
       parts.push(sphere([-0.06, -0.18, side * 0.05], [0.026, 0.012, 0.016], 0x8a7038, d));
     }
     parts.push(plate([[-0.14, 0.03, -0.07], [-0.14, 0.03, 0.07], [-0.40, 0.0, 0.10], [-0.40, 0.0, -0.10]], 0x605e57));
-    // CALIBRATED: a soaring raptor's wingspan is its largest dimension by nature, so the whole build is
-    // measured as the merged extents and scaled to fit the module's display envelope, rather than being
-    // shortened wingtip by wingtip. Measured after merge, not per part, because only the merged extents
-    // are what the engine's own envelope check sees.
-    fitToEnvelope(parts, 1.18);
+  } else if (build === 3) {
+    // Ratite: a flightless runner. Heavy horizontal body, a long bare neck, a small head with a casque
+    // ridge over it, powerful legs, and wings reduced to hanging plumes rather than flight surfaces.
+    parts.length = 0;
+    parts.push(sphere([-0.04, 0.06, 0], [0.20, 0.155, 0.13], 0x35322e, d));
+    parts.push(limb([0.09, 0.14, 0], [0.17, 0.22, 0], 0.045, 0x3d3a35, d));
+    parts.push(limb([0.17, 0.22, 0], [0.26, 0.31, 0], 0.034, 0x3d3a35, d));
+    parts.push(sphere([0.30, 0.32, 0], [0.052, 0.05, 0.045], 0x2b2925, d));
+    parts.push(limb([0.31, 0.36, 0], [0.30, 0.40, 0], 0.020, 0x5b5346, d));
+    parts.push(sphere([0.31, 0.385, 0], [0.030, 0.022, 0.026], 0x4a443a, d));
+    parts.push(limb([0.37, 0.31, 0], [0.47, 0.28, 0], 0.014, 0x8a7f52, d));
+    for (const side of [-1, 1]) {
+      parts.push(sphere([0.34, 0.33, side * 0.036], [0.015, 0.015, 0.013], 0x1b1a17, d));
+      // Reduced wing: a hanging plume of a few long feathers, not a wing.
+      for (let f = 0; f < 5; f++) {
+        const t = f / 4;
+        parts.push(plate([[-0.02 + t * 0.02, 0.05, side * 0.12], [-0.02 + t * 0.02, 0.02, side * 0.13],
+          [-0.20 + t * 0.03, -0.16, side * 0.15], [-0.19 + t * 0.03, -0.12, side * 0.14]], 0x2a2724));
+      }
+      parts.push(limb([0.0, -0.08, side * 0.055], [0.06, -0.30, side * 0.06], 0.026, 0x4a443a, d));
+      parts.push(limb([0.06, -0.30, side * 0.06], [0.13, -0.44, side * 0.065], 0.019, 0x4a443a, d));
+      parts.push(plate([[0.13, -0.47, side * 0.02], [0.13, -0.47, side * 0.09], [0.24, -0.48, side * 0.09], [0.24, -0.48, side * 0.02]], 0x6d6355));
+    }
+  } else {
+    // Seabird: a soaring albatross. Very long narrow wings on a compact body, a tubed bill and a
+    // short tail, which is a different silhouette from the raptor's broad feathered wing.
+    parts.length = 0;
+    parts.push(sphere([0, 0.02, 0], [0.15, 0.085, 0.09], 0x8d8f93, d));
+    parts.push(sphere([0.17, 0.05, 0], [0.048, 0.045, 0.042], 0xdadfe3, d));
+    parts.push(limb([0.20, 0.045, 0], [0.30, 0.02, 0], 0.014, 0xd9b98a, d));
+    parts.push(sphere([0.315, 0.012, 0], [0.020, 0.020, 0.016], 0x9a8558, d));
+    for (const side of [-1, 1]) {
+      // Long narrow wing: three narrow panels out to a fine tip, far higher aspect than the raptor.
+      parts.push(plate([[-0.03, 0.06, side * 0.07], [0.09, 0.055, side * 0.08], [0.02, 0.035, side * 0.40], [-0.07, 0.04, side * 0.38]], 0x75787d));
+      parts.push(plate([[-0.07, 0.04, side * 0.38], [0.02, 0.035, side * 0.40], [-0.01, 0.028, side * 0.62], [-0.08, 0.032, side * 0.60]], 0x6b6e73));
+      parts.push(plate([[-0.08, 0.032, side * 0.60], [-0.01, 0.028, side * 0.62], [-0.05, 0.024, side * 0.74], [-0.10, 0.027, side * 0.72]], 0x62656a));
+      parts.push(limb([-0.02, -0.05, side * 0.04], [-0.07, -0.11, side * 0.045], 0.012, 0xd9b98a, d));
+    }
+    parts.push(plate([[-0.13, 0.03, -0.055], [-0.13, 0.03, 0.055], [-0.32, 0.02, 0.075], [-0.32, 0.02, -0.075]], 0x7d8085));
   }
+  // CALIBRATED: a soaring bird's wingspan is its largest dimension by nature, so the whole build is
+  // measured as the merged extents and scaled to fit the module's display envelope, rather than being
+  // shortened wingtip by wingtip. Measured after merge, not per part, because only the merged extents
+  // are what the engine's own envelope check sees. The penguin and the wader are already inside it.
+  if (build === 1 || build >= 3) fitToEnvelope(parts, 1.18);
   return parts;
 }
 
 /** Pachyderm builds: 0 elephant with trunk and tusks, 1 giraffe with a long neck, 2 bison or yak. */
 export function pachydermAnatomy(detail, variant) {
   const d = Math.max(12, Math.round(Number(detail) || 24));
-  const build = Math.abs(Math.floor(Number(variant) || 0)) % 3;
-  const coat = build === 0 ? 0x8b8880 : build === 1 ? 0xb99a5f : 0x5c4632;
+  const build = Math.abs(Math.floor(Number(variant) || 0)) % 4; // 0 elephant, 1 giraffe, 2 bison, 3 African elephant
+  const coat = build === 1 ? 0xb99a5f : build === 2 ? 0x5c4632 : build === 3 ? 0x847f78 : 0x8b8880;
   const parts = [];
   const hipY = 0.0;
   if (build === 1) {
@@ -270,14 +310,17 @@ export function pachydermAnatomy(detail, variant) {
     parts.push(limb([-0.30, hipY + 0.14, 0], [-0.38, hipY - 0.05, 0], 0.014, 0x3f3122, d));
     return parts;
   }
-  // Elephant: barrel torso, columnar legs, a ringed trunk, broad ear plates and tusks.
-  parts.push(sphere([0, hipY + 0.16, 0], [0.24, 0.19, 0.15], coat, d));
+  // Elephant: barrel torso, columnar legs, a ringed trunk, broad ear plates and tusks. The African
+  // build is the larger one with the bigger ear plate, which is the field mark that separates them.
+  const earSpan = build === 3 ? 0.42 : 0.34;
+  const torso = build === 3 ? [0.27, 0.21, 0.16] : [0.24, 0.19, 0.15];
+  parts.push(sphere([0, hipY + 0.16, 0], torso, coat, d));
   parts.push(sphere([0.30, hipY + 0.18, 0], [0.11, 0.11, 0.10], coat, d));
   parts.push(limb([0.36, hipY + 0.14, 0], [0.46, hipY + 0.02, 0], 0.042, coat, d));
   parts.push(limb([0.46, hipY + 0.02, 0], [0.52, hipY - 0.22, 0], 0.030, coat, d));
   for (const side of [-1, 1]) {
     // Ear as a broad flattened plate rather than a lump.
-    parts.push(plate([[0.30, hipY + 0.30, side * 0.10], [0.30, hipY + 0.30, side * 0.34], [0.14, hipY + 0.02, side * 0.30], [0.14, hipY + 0.04, side * 0.10]], 0x9a968e));
+    parts.push(plate([[0.30, hipY + 0.32, side * 0.10], [0.30, hipY + 0.32, side * earSpan], [0.13, hipY + 0.01, side * (earSpan * 0.86)], [0.13, hipY + 0.03, side * 0.10]], 0x9a968e));
     parts.push(limb([0.38, hipY + 0.10, side * 0.055], [0.52, hipY + 0.06, side * 0.075], 0.015, 0xeee6d2, d));
     for (const legX of [0.16, -0.16]) parts.push(limb([legX, hipY + 0.02, side * 0.10], [legX, hipY - 0.48, side * 0.10], 0.048, coat, d));
   }

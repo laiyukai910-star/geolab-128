@@ -18,7 +18,8 @@ const { humanAnatomy, bipedAnatomy, pachydermAnatomy, smallFaunaAnatomy, semiAqu
 const { createOrganismGeometry, ORGANISM_KINDS, WILDLIFE_ANATOMY_KINDS } = await import("../src/organismGeometry.js");
 const { WILDLIFE_SPECIES } = await import("../src/landscapeEcology.js");
 const { wildlifeProceduralKind, wildlifeOrganismVariant } = await import("../src/proceduralAssets.js");
-const { wildlifeMorphotypeIndex, wildlifeMorphotypeCount } = await import("../src/wildlifeMorphotypes.js");
+const { wildlifeMorphotypeIndex, wildlifeMorphotypeCount, unassignedMorphotypeSpecies, WILDLIFE_MORPHOTYPES } =
+  await import("../src/wildlifeMorphotypes.js");
 
 const { readFileSync } = await import("node:fs");
 const SOURCE = readFileSync(new URL("../src/organismAnatomyHumanoid.js", import.meta.url), "utf8");
@@ -165,6 +166,52 @@ for (const [name, fn, variants, limit] of [
     const first = wildlifeMorphotypeIndex(species);
     assert.equal(wildlifeMorphotypeIndex(species), first, `${species.id} must have a stable morphotype`);
   }
+}
+
+// ---------------------------------------------------------------- no species silently becomes the wrong animal
+
+// This is the bug this guard exists for. A species in a class with several builds that named none of
+// them was silently given the class's FIRST build, so the albatross was drawn as a long-legged wading
+// crane - the emperor penguin had been declared but the albatross had not, and nothing said so. Asking
+// for every species must now assign every one of them, with no silent fallback.
+{
+  const unassigned = [];
+  for (const species of WILDLIFE_SPECIES) {
+    const total = wildlifeMorphotypeCount(species.geometryClass);
+    if (total < 2) continue;
+    const before = unassignedMorphotypeSpecies().length;
+    wildlifeMorphotypeIndex(species);
+    if (unassignedMorphotypeSpecies().length > before) unassigned.push(`${species.id} (${species.geometryClass})`);
+  }
+  assert.deepEqual(unassigned, [],
+    `every species in a multi-build class must name its build, or it is drawn as the wrong animal:\n${unassigned.join("\n")}`);
+}
+
+// A morphotype list must never offer more builds than the anatomy module can draw, or the extra names
+// alias onto an existing build and two species that should differ come out identical.
+{
+  const drawsBuilds = {
+    bipedAnatomy: 5, pachydermAnatomy: 4, smallFaunaAnatomy: 3, semiAquaticAnatomy: 3,
+    ungulateAnatomy: 3, carnivoreAnatomy: 3, humanAnatomy: 3
+  };
+  const moduleFor = geometryClass =>
+    ["bird", "raptor", "penguin"].includes(geometryClass) ? "bipedAnatomy"
+      : ["elephant", "giraffe", "bovine"].includes(geometryClass) ? "pachydermAnatomy"
+        : ["boar", "marsupial", "small-mammal"].includes(geometryClass) ? "smallFaunaAnatomy"
+          : geometryClass === "semi-aquatic" ? "semiAquaticAnatomy"
+            : geometryClass === "ungulate" ? "ungulateAnatomy"
+              : geometryClass === "human" ? "humanAnatomy"
+                : ["canid", "feline", "bear"].includes(geometryClass) ? "carnivoreAnatomy" : null;
+  const overclaimed = [];
+  for (const [geometryClass, morphotypes] of Object.entries(WILDLIFE_MORPHOTYPES)) {
+    const module = moduleFor(geometryClass);
+    if (!module) continue;
+    if (morphotypes.length > drawsBuilds[module]) {
+      overclaimed.push(`${geometryClass}: lists ${morphotypes.length} builds but ${module} draws ${drawsBuilds[module]}`);
+    }
+  }
+  assert.deepEqual(overclaimed, [],
+    `a morphotype list must not promise a build the anatomy cannot draw:\n${overclaimed.join("\n")}`);
 }
 
 const human = measure(humanAnatomy(48, 0), "summary");
