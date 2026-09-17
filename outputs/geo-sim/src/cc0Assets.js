@@ -21,8 +21,8 @@ import { mergeGeometries } from "../vendor/three/addons/utils/BufferGeometryUtil
  * lithology, cover, process - remains the scientific layer, and this module never writes to it.
  */
 
-const BASE = "../vendor/cc0/nature-kit";
-const MANIFEST_URL = `${BASE}/manifest.json`;
+const BASE = new URL("../vendor/cc0/nature-kit/", import.meta.url);
+const MANIFEST_URL = new URL("manifest.json", BASE);
 export const CC0_COLLECTION = Object.freeze({
   id: "kenney-nature-kit",
   name: "Kenney Nature Kit",
@@ -49,6 +49,9 @@ export function loadCc0Manifest() {
     manifestPromise = fetch(MANIFEST_URL).then(response => {
       if (!response.ok) throw new Error(`CC0 manifest unavailable: HTTP ${response.status}`);
       return response.json();
+    }).catch(error => {
+      manifestPromise = null;
+      throw error;
     });
   }
   return manifestPromise;
@@ -79,7 +82,7 @@ export async function loadCc0Geometry(id) {
   const models = await cc0ModelList();
   const entry = models.find(model => model.id === key);
   if (!entry) throw new Error(`Unknown CC0 model: ${key}`);
-  const response = await fetch(`${BASE}/models/${key}.glb`);
+  const response = await fetch(new URL(`models/${key}.glb`, BASE));
   if (!response.ok) throw new Error(`CC0 model ${key} unavailable: HTTP ${response.status}`);
   const buffer = await response.arrayBuffer();
   const gltf = await new Promise((resolve, reject) => {
@@ -101,6 +104,25 @@ export async function loadCc0Geometry(id) {
       const colors = new Float32Array(count * 3).fill(1);
       geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     }
+    const colors = geometry.getAttribute("color");
+    const tintVertex = (index, material) => {
+      const tint = material?.color;
+      if (tint) colors.setXYZ(index, colors.getX(index) * tint.r, colors.getY(index) * tint.g, colors.getZ(index) * tint.b);
+    };
+    if (Array.isArray(node.material)) {
+      // Deindex material groups so shared vertices cannot be tinted twice.
+      const expanded = geometry.index ? geometry.toNonIndexed() : geometry.clone();
+      const attribute = expanded.getAttribute("color");
+      for (const group of expanded.groups) {
+        const tint = node.material[group.materialIndex]?.color;
+        if (tint) for (let i=group.start;i<group.start+group.count;i++) attribute.setXYZ(i,attribute.getX(i)*tint.r,attribute.getY(i)*tint.g,attribute.getZ(i)*tint.b);
+      }
+      geometry.dispose();
+      expanded.userData.cc0 = { collection: CC0_COLLECTION.id, id: entry.id, category: entry.category, licence: CC0_COLLECTION.licence, attribution: CC0_COLLECTION.attribution };
+      parts.push(expanded);
+      return;
+    }
+    for (let i=0;i<colors.count;i++) tintVertex(i,node.material);
     geometry.userData.cc0 = {
       collection: CC0_COLLECTION.id,
       id: entry.id,
@@ -109,6 +131,11 @@ export async function loadCc0Geometry(id) {
       attribution: CC0_COLLECTION.attribution
     };
     parts.push(geometry);
+  });
+  gltf.scene.traverse(node => {
+    if (!node.isMesh) return;
+    node.geometry?.dispose();
+    for (const material of Array.isArray(node.material) ? node.material : [node.material]) material?.dispose();
   });
   const result = {
     id: entry.id,

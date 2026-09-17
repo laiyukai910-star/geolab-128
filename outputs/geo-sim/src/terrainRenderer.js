@@ -1814,7 +1814,9 @@ export class TerrainRenderer {
 
       if (canopy > 4.5 && !isShrubOrGrassLandCover(landCover) && vegetationType !== 5 && vegetationType !== 9) {
         const trunkHeight = Math.max(0.0025, height * 0.55);
-        buckets.trunks.push({
+        const conifer = vegetationType === 2 || (vegetationType !== 1 && (isConiferLandCover(landCover) || hash01(x, y, seed + 509) < 0.42));
+        const completeTree = (conifer ? CC0_CONIFER_IDS : CC0_TREE_IDS).length > 0;
+        if (!completeTree) buckets.trunks.push({
           x: wx,
           y: wy + trunkHeight / 2,
           z: wz,
@@ -1824,27 +1826,27 @@ export class TerrainRenderer {
           ry: angle,
           color: 0x9b6a43
         });
-        if (vegetationType === 2 || (vegetationType !== 1 && (isConiferLandCover(landCover) || hash01(x, y, seed + 509) < 0.42))) {
+        if (conifer) {
           buckets.conifers.push({
             x: wx,
-            y: wy + trunkHeight + Math.max(0.0015, height * 0.27),
+            y: completeTree ? wy + height / 2 : wy + trunkHeight + Math.max(0.0015, height * 0.27),
             z: wz,
             sx: crown * 1.34,
-            sy: Math.max(0.003, height * 0.62),
+            sy: completeTree ? height : Math.max(0.003, height * 0.62),
             sz: crown * 1.34,
             ry: angle,
-            color: typeColor
+            color: completeTree ? 0xffffff : typeColor
           });
         } else {
           buckets.broadleaf.push({
             x: wx,
-            y: wy + trunkHeight + crown * 0.42,
+            y: completeTree ? wy + height / 2 : wy + trunkHeight + crown * 0.42,
             z: wz,
             sx: crown * (1.35 + cover * 0.4),
-            sy: Math.max(0.0025, crown * 0.9),
+            sy: completeTree ? height : Math.max(0.0025, crown * 0.9),
             sz: crown * (1.15 + hash01(y, x, seed + 919) * 0.5),
             ry: angle,
-            color: typeColor
+            color: completeTree ? 0xffffff : typeColor
           });
         }
         if (biomass > 2.4 && cover > 0.62 && hash01(x, y, seed + 607) < 0.62) {
@@ -5600,27 +5602,40 @@ function isConiferLandCover(landCover) {
 function cc0TreeGeometry(variant) {
   const broadleaf = CC0_TREE_IDS;
   if (!broadleaf.length) return null;
-  return cc0GeometrySync(broadleaf[Math.abs(Math.trunc(Number(variant) || 0)) % broadleaf.length]);
+  return normalizedCc0Tree(broadleaf[Math.abs(Math.trunc(Number(variant) || 0)) % broadleaf.length]);
 }
 
 function cc0ConiferGeometry(variant) {
   const conifers = CC0_CONIFER_IDS;
   if (!conifers.length) return null;
-  return cc0GeometrySync(conifers[Math.abs(Math.trunc(Number(variant) || 0)) % conifers.length]);
+  return normalizedCc0Tree(conifers[Math.abs(Math.trunc(Number(variant) || 0)) % conifers.length]);
+}
+
+function normalizedCc0Tree(id) {
+  const source = cc0GeometrySync(id);
+  if (!source) return null;
+  const geometry = source.clone();
+  geometry.computeBoundingBox();
+  const size = geometry.boundingBox.getSize(new THREE.Vector3());
+  const center = geometry.boundingBox.getCenter(new THREE.Vector3());
+  geometry.translate(-center.x, -center.y, -center.z);
+  geometry.scale(1 / Math.max(size.x, 1e-6), 1 / Math.max(size.y, 1e-6), 1 / Math.max(size.z, 1e-6));
+  geometry.computeBoundingBox();geometry.computeBoundingSphere();
+  return geometry;
 }
 
 // Resolved once from the bundled collection's own manifest, so the ids cannot drift from the files.
 let CC0_TREE_IDS = [], CC0_CONIFER_IDS = [];
 export function registerCc0Vegetation() {
   const trees = cc0GeometriesByCategory("tree").map(entry => entry.id);
-  CC0_TREE_IDS = trees.filter(id => /cone|pine/i.test(id));
-  CC0_CONIFER_IDS = CC0_TREE_IDS.slice();
-  return { broadleaf: trees.length - CC0_TREE_IDS.length, conifer: CC0_CONIFER_IDS.length };
+  CC0_TREE_IDS = trees.filter(id => !/cone|pine/i.test(id));
+  CC0_CONIFER_IDS = trees.filter(id => /cone|pine/i.test(id));
+  return { broadleaf: CC0_TREE_IDS.length, conifer: CC0_CONIFER_IDS.length };
 }
 
 /** What the scene's vegetation is currently built from, and under what licence. */
 export function vegetationProvenance() {
-  const bundled = CC0_TREE_IDS.length + cc0GeometriesByCategory("rock").length +
+  const bundled = CC0_TREE_IDS.length + CC0_CONIFER_IDS.length + cc0GeometriesByCategory("rock").length +
     cc0GeometriesByCategory("plant").length + cc0GeometriesByCategory("human").length;
   return {
     source: bundled > 0 ? "bundled CC0 models with procedural fallback" : "procedural only",
@@ -7363,7 +7378,7 @@ function addInstancedAsset(group, name, transforms, fallbackColor, options, prim
       for(const mesh of [lod.near,lod.far])mesh.userData.assetKind=semanticKind;
       group.add(lod);meshes.push(lod.near,lod.far);return;
     }
-    if (semanticKind === "broadleaf-canopy" || semanticKind === "layered-conifer") {
+    if (!geometry.userData.cc0 && (semanticKind === "broadleaf-canopy" || semanticKind === "layered-conifer")) {
       const distant = sharedGeometry(group, `${cacheKey}:distant`, () => createFoliageGeometry(semanticKind === "layered-conifer", "distant", variant));
       const foliageDetail = foliageDetailProfile(assetQuality);
       const lod = new FoliageInstances(geometry, distant, material, variantTransforms, fallbackColor,

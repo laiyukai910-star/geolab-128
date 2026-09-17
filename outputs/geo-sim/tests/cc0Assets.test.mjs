@@ -3,14 +3,16 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import path from "node:path";
 
-// The module fetches its manifest and models by relative URL, which is how the browser reaches them.
-// In Node there is no ambient fetch for file paths, so one is installed that resolves the same
-// relative specifiers against the vendor directory. The code under test is unchanged either way.
-const vendorRoot = fileURLToPath(new URL("../src/", import.meta.url));
+// Require module-resolved URLs: browser fetch resolves bare paths against the page, not the module.
+let failManifestOnce = true;
 globalThis.fetch = async (url) => {
-  const resolved = path.resolve(vendorRoot, String(url));
+  assert.ok(url instanceof URL, "asset requests must not depend on the document base URL");
+  if (failManifestOnce && url.pathname.endsWith("manifest.json")) {
+    failManifestOnce = false;
+    return { ok: false, status: 503 };
+  }
+  const resolved = fileURLToPath(url);
   if (!existsSync(resolved)) return { ok: false, status: 404, json: async () => { throw new Error("404"); } };
   const buffer = await readFile(resolved);
   return {
@@ -35,6 +37,7 @@ const {
   loadCc0Manifest, cc0ModelList, cc0ModelsByCategory, loadCc0Geometry,
   cc0Diagnostics, disposeCc0Cache, CC0_COLLECTION, CC0_ATTRIBUTION_TEXT
 } = await import("../src/cc0Assets.js");
+await assert.rejects(loadCc0Manifest(), /503/);
 
 // ---------------------------------------------------------------- provenance is recorded, not assumed
 
@@ -85,8 +88,7 @@ const {
       assert.ok(position && position.count > 0, `${model.id} must have vertices`);
       assert.ok(part.getAttribute("normal"), `${model.id} must carry normals`);
       assert.ok(part.getAttribute("uv"), `${model.id} must carry uvs`);
-      // Flat white is added because the collection's meshes carry no colour, and without it the
-      // geometry cannot be merged with the application's own.
+      // Source material factors must survive merging into the vertex-colour renderer.
       const colour = part.getAttribute("color");
       assert.ok(colour, `${model.id} must carry a colour attribute so it can be merged`);
       assert.equal(colour.count, position.count, `${model.id} colour count must match positions`);
@@ -102,6 +104,9 @@ const {
     totalBytes += model.bytes;
   }
   assert.ok(totalParts >= models.length, "each model must contribute at least one mesh part");
+  const tree = await loadCc0Geometry("tree_default");
+  const palette = new Set(tree.parts.map(part => Array.from(part.attributes.color.array.slice(0,3)).join(',')));
+  assert.ok(palette.size > 1, "bark and leaves must retain distinct source material colours");
   console.log(`  ${models.length} models, ${totalParts} mesh parts, ${totalTriangles} triangles, ${Math.round(totalBytes / 1024)} KB`);
 }
 

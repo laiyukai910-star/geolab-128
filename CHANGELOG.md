@@ -4,6 +4,12 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+### Asset Loading Repairs
+
+- Resolve bundled model URLs relative to their module, not the active page, and allow manifest requests to recover after failure.
+- Correct broadleaf/conifer selection, preserve source material colours, and fit complete tree models to grounded full-tree transforms without adding a second trunk.
+- Keep bundled tree geometry consistent across camera distances rather than replacing a complete tree with a procedural canopy at the same transform.
+
 ### Added
 
 - Detailed the facility models. An audit of the 21-kind library counted every primitive per kind and found seven that could not read as what they claim: four had no body or defining member at all — a house that was only a roof, a turbine blade that was a single lofted shell, a road that was a bare pavement plane, and a dome with a slit but no shutter and no telescope — and three had plenty of primitives but were missing the one that defines them, including an elevated water tank with no supports and a tunnel that was equal-section lining with no portal. Three new modules contribute the missing construction members through the library's own helpers, so they carry the same colour and construction response and pass through the same merge and normalisation: storey bands, terraces, cores, masts and entrances on the buildings; structural bays, dock doors, gantries, tank foundations, spiral stairs, tilted racks and blade root flanges on the industrial kinds; and crest parapets, gallery portals, gate gantries, stilling basins, tower legs and bracing, stadium vomitories and floodlights, truss bracing and road kerbs on the civil works. Also corrected: the observatory telescope pointed about 90 degrees away from its own slit and sat entirely inside the shell.
