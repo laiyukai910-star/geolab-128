@@ -10,10 +10,10 @@ const MORPHOTYPES = Object.freeze({
   penguin: Object.freeze(["penguin"]),
   "semi-aquatic": Object.freeze(["otter", "rodent", "pinniped"]),
   human: Object.freeze(["standing", "walking", "seated"]),
+  elephant: Object.freeze(["elephant", "elephant-african"]),
   // One build each: these classes have a single defining body plan, so their morphotype list has one
   // entry and the variant is always 0.
   boar: Object.freeze(["suid"]),
-  elephant: Object.freeze(["elephant"]),
   giraffe: Object.freeze(["giraffe"]),
   marsupial: Object.freeze(["macropod"]),
   "small-mammal": Object.freeze(["lagomorph"])

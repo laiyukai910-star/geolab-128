@@ -7,7 +7,9 @@ assert.equal(index({id:"zebra",geometryClass:"ungulate"}),2);
 assert.equal(index({geometryClass:"ungulate",morphotypeIndex:"2"}),2);
 assert.equal(index({geometryClass:"ungulate",morphotypeIndex:99}),2);
 assert.equal(index({geometryClass:"bird",morphotype:"ratite"}),3);
-for (const geometryClass of ["elephant","boar","unknown","constructor","__proto__"]) {
+assert.equal(count("elephant"),2);
+assert.equal(index({id:"african_elephant",geometryClass:"elephant"}),1);
+for (const geometryClass of ["boar","unknown","constructor","__proto__"]) {
   assert.equal(count(geometryClass),1);
   assert.equal(index({geometryClass}),0);
 }

@@ -259,7 +259,22 @@ function bat(detail) {
 export function createOrganismGeometry(kind,quality="ultra",variant=0) {
   if(!ORGANISM_KINDS.includes(kind))throw new Error(`Unknown organism anatomy: ${kind}`);
   const detail=quality==="exhaustive"?48:quality==="ultra"?32:18;
-  const parts=kind==="ungulate"?ungulateAnatomy(detail,variant):(kind==="canid"||kind==="feline"||kind==="bear")?carnivoreAnatomy(detail,kind==="canid"?0:kind==="feline"?1:2):(kind==="bird"||kind==="raptor"||kind==="penguin")?bipedAnatomy(detail,kind==="bird"?0:kind==="raptor"?1:2):(kind==="elephant"||kind==="giraffe"||kind==="bovine")?pachydermAnatomy(detail,kind==="elephant"?0:kind==="giraffe"?1:2):(kind==="boar"||kind==="marsupial"||kind==="small-mammal")?smallFaunaAnatomy(detail,kind==="boar"?1:kind==="marsupial"?0:2):kind==="human"?humanAnatomy(detail,variant):kind==="semi-aquatic"?semiAquaticAnatomy(detail,variant):kind.startsWith("fish-")?fish(kind,detail,variant):kind==="ray"?ray(detail):kind==="octopus"?octopus(detail):kind==="jelly"?jelly(detail):kind==="crab"?crab(detail):kind==="mussel"?mussel(detail):kind==="bat"?bat(detail):plant(kind,detail);
+  let parts;
+  if (kind === "ungulate") parts = ungulateAnatomy(detail,variant);
+  else if (["canid","feline","bear"].includes(kind)) parts = carnivoreAnatomy(detail,kind==="canid"?0:kind==="feline"?1:2,{mane:kind==="feline" && variant===2});
+  else if (["bird","raptor","penguin"].includes(kind)) parts = bipedAnatomy(detail,kind==="bird"?variant:kind==="raptor"?1:2);
+  else if (["elephant","giraffe","bovine"].includes(kind)) parts = pachydermAnatomy(detail,kind==="elephant"?(variant===1?3:0):kind==="giraffe"?1:2);
+  else if (["boar","marsupial","small-mammal"].includes(kind)) parts = smallFaunaAnatomy(detail,kind==="boar"?1:kind==="marsupial"?0:2);
+  else if (kind === "human") parts = humanAnatomy(detail,variant);
+  else if (kind === "semi-aquatic") parts = semiAquaticAnatomy(detail,variant);
+  else if (kind.startsWith("fish-")) parts = fish(kind,detail,variant);
+  else if (kind === "ray") parts = ray(detail);
+  else if (kind === "octopus") parts = octopus(detail);
+  else if (kind === "jelly") parts = jelly(detail);
+  else if (kind === "crab") parts = crab(detail);
+  else if (kind === "mussel") parts = mussel(detail);
+  else if (kind === "bat") parts = bat(detail);
+  else parts = plant(kind,detail);
   const geometry=mergeGeometries(parts);for(const part of parts)part.dispose();
   geometry.computeBoundingBox();geometry.computeBoundingSphere();
   geometry.userData.anatomy={kind,quality,parts:parts.length,variant,representation:"procedural anatomical morphotype, not a scanned specimen"};

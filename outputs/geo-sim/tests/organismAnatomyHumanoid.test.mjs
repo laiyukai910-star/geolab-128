@@ -21,6 +21,19 @@ const { wildlifeProceduralKind, wildlifeOrganismVariant } = await import("../src
 const { wildlifeMorphotypeIndex, wildlifeMorphotypeCount, unassignedMorphotypeSpecies, WILDLIFE_MORPHOTYPES } =
   await import("../src/wildlifeMorphotypes.js");
 
+for (const [kind,variant,build] of [
+  ...[0,1,2,3,4].map(v=>["bird",v,()=>bipedAnatomy(18,v)]),
+  ["elephant",1,()=>pachydermAnatomy(18,3)]
+]) {
+  const actual=createOrganismGeometry(kind,"high",variant);
+  const parts=build(),expected=mergeGeometries(parts);
+  assert.deepEqual(actual.attributes.position.array,expected.attributes.position.array,`${kind}/${variant} must dispatch the selected anatomy`);
+  actual.dispose();expected.dispose();parts.forEach(p=>p.dispose());
+}
+const genericCat=createOrganismGeometry("feline","high",0),lion=createOrganismGeometry("feline","high",2);
+assert.notDeepEqual(genericCat.attributes.position.array,lion.attributes.position.array,"lion variant must include its mane");
+genericCat.dispose();lion.dispose();
+
 const { readFileSync } = await import("node:fs");
 const SOURCE = readFileSync(new URL("../src/organismAnatomyHumanoid.js", import.meta.url), "utf8");
 for (const forbidden of ["Math.random", "Date.now", "performance.now"]) {
