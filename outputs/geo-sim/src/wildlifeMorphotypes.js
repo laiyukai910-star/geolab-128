@@ -1,35 +1,14 @@
-/**
- * Wildlife morphotype selection.
- *
- * `organismGeometry.js` gives each animal anatomy a `variant` parameter, and for the terrestrial
- * anatomies that parameter selects WHICH ANIMAL is built: a deer, a moose and a zebra are three
- * variants of one quadruped anatomy rather than three separate anatomies. That makes the variant a
- * property of the SPECIES, not of where an individual happens to stand.
- *
- * This matters because the renderer's generic variant rule derives the variant from an instance's
- * position. Applied to an animal that rule would draw the same species as a deer in one place and a
- * moose in another, and would change which animal it is as the herd moves. So the organism batches
- * read the species here instead, and position keeps driving only size and colour.
- *
- * A class with a single morphotype has one entry and its value is always 0.
- */
-
-/** geometryClass -> ordered morphotype list. The index into this list is the geometry variant. */
+// Generated from src-ts/wildlifeMorphotypes.ts. Run npm run browser:build to regenerate.
 const MORPHOTYPES = Object.freeze({
   ungulate: Object.freeze(["deer", "moose", "zebra"]),
   bovine: Object.freeze(["bison", "yak"]),
   feline: Object.freeze(["felid", "lynx", "lion"]),
   canid: Object.freeze(["wolf", "fox"]),
   bear: Object.freeze(["bear", "panda"]),
-  boar: Object.freeze(["boar"]),
   bird: Object.freeze(["wading", "raptor", "penguin", "ratite", "seabird"]),
   raptor: Object.freeze(["raptor"]),
   penguin: Object.freeze(["penguin"]),
   "semi-aquatic": Object.freeze(["otter", "rodent", "pinniped"]),
-  elephant: Object.freeze(["elephant", "elephant-african"]),
-  giraffe: Object.freeze(["giraffe"]),
-  marsupial: Object.freeze(["macropod"]),
-  "small-mammal": Object.freeze(["lagomorph"]),
   human: Object.freeze(["standing", "walking", "seated"]),
   // One build each: these classes have a single defining body plan, so their morphotype list has one
   // entry and the variant is always 0.
@@ -39,43 +18,26 @@ const MORPHOTYPES = Object.freeze({
   marsupial: Object.freeze(["macropod"]),
   "small-mammal": Object.freeze(["lagomorph"])
 });
-
-/**
- * Which morphotype of its anatomy a species is. Prefers an explicit per-species morphotype and falls
- * back to the species' own position in its class, so a class never silently collapses to one animal.
- * Returns 0 for a class with a single morphotype, which is the neutral case.
- */
-export function wildlifeMorphotypeIndex(species) {
-  const morphotypes = MORPHOTYPES[species?.geometryClass];
+function wildlifeMorphotypeIndex(species) {
+  const key = species?.geometryClass ?? "";
+  const morphotypes = Object.hasOwn(MORPHOTYPES, key) ? MORPHOTYPES[key] : void 0;
   if (!morphotypes || morphotypes.length < 2) return 0;
-  const explicit = String(SPECIES_MORPHOTYPE[species?.id] || species?.morphotype || "");
+  const id = species?.id ?? "";
+  const explicit = String((Object.hasOwn(SPECIES_MORPHOTYPE, id) ? SPECIES_MORPHOTYPE[id] : void 0) || species?.morphotype || "");
   if (explicit) {
     const index = morphotypes.indexOf(explicit);
     if (index >= 0) return index;
   }
-  const declared = Number(species?.morphotypeIndex);
+  const raw = species?.morphotypeIndex;
+  const declared = raw === null || raw === void 0 || typeof raw === "string" && !raw.trim() ? NaN : Number(raw);
   if (Number.isFinite(declared) && declared >= 0) return Math.min(morphotypes.length - 1, Math.trunc(declared));
-  // A class with more than one build must say which build each species is. Silently returning the
-  // first one is how a soaring albatross ended up drawn as a long-legged wading crane, so the fallback
-  // is recorded instead of hidden: the renderer still gets a usable variant, and the caller can see
-  // that this species was never assigned one.
   UNASSIGNED_MORPHOTYPE_SPECIES.add(species?.id);
   return 0;
 }
-
-/** Species in a multi-build class that name no build. Exported so a test can assert this stays empty. */
-export const UNASSIGNED_MORPHOTYPE_SPECIES = new Set();
-
-/** Every species that resolves to no explicit build, for diagnostics. */
-export function unassignedMorphotypeSpecies() {
+const UNASSIGNED_MORPHOTYPE_SPECIES = /* @__PURE__ */ new Set();
+function unassignedMorphotypeSpecies() {
   return [...UNASSIGNED_MORPHOTYPE_SPECIES];
 }
-
-/**
- * Species that are not the first morphotype of their class, named explicitly rather than inferred from
- * list order, so moving a species in `WILDLIFE_SPECIES` cannot silently turn a moose into a deer.
- * A species absent from this table takes its class's first morphotype.
- */
 const SPECIES_MORPHOTYPE = Object.freeze({
   // ungulates: the stocky antelope-and-deer build is the default; the moose and the zebra differ enough
   // in silhouette that they are separate morphotypes rather than rescaled deer.
@@ -108,12 +70,16 @@ const SPECIES_MORPHOTYPE = Object.freeze({
   capybara: "rodent",
   arctic_seal: "pinniped"
 });
-
-export const WILDLIFE_SPECIES_MORPHOTYPE = SPECIES_MORPHOTYPE;
-
-/** How many morphotypes a species' class provides. Used to size the geometry cache. */
-export function wildlifeMorphotypeCount(geometryClass) {
-  return MORPHOTYPES[geometryClass]?.length || 1;
+const WILDLIFE_SPECIES_MORPHOTYPE = SPECIES_MORPHOTYPE;
+function wildlifeMorphotypeCount(geometryClass) {
+  return (Object.hasOwn(MORPHOTYPES, geometryClass) ? MORPHOTYPES[geometryClass]?.length : void 0) || 1;
 }
-
-export const WILDLIFE_MORPHOTYPES = MORPHOTYPES;
+const WILDLIFE_MORPHOTYPES = MORPHOTYPES;
+export {
+  UNASSIGNED_MORPHOTYPE_SPECIES,
+  WILDLIFE_MORPHOTYPES,
+  WILDLIFE_SPECIES_MORPHOTYPE,
+  unassignedMorphotypeSpecies,
+  wildlifeMorphotypeCount,
+  wildlifeMorphotypeIndex
+};

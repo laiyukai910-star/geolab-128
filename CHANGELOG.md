@@ -4,6 +4,8 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Migrated wildlife morphotype selection to strict TypeScript with a single generated browser module. Removed duplicate classification keys while preserving their previously effective values, and made empty/null indices report missing assignments instead of silently becoming zero.
+
 - Added recessed perimeter window frames and lintels to five building families, plus open roof-edge collection channels, downpipes and wall brackets. These are visual construction details and do not add simulated drainage capacity.
 
 ### Rendering and Asset Lifecycle Repairs

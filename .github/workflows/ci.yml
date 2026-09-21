@@ -48,6 +48,7 @@ jobs:
         run: |
           npm run typecheck --prefix outputs/geo-sim-desktop
           npm run browser:build --prefix outputs/geo-sim-desktop
+          git diff --exit-code -- outputs/geo-sim/src/wildlifeMorphotypes.js
           npm run wasm:build --prefix outputs/geo-sim-desktop
 
       - name: Check JavaScript syntax
@@ -69,6 +70,7 @@ jobs:
           node outputs/geo-sim/tests/facilityIndustrialDetails.test.mjs
           node outputs/geo-sim/tests/facilityCivilDetails.test.mjs
           node outputs/geo-sim/tests/humanPresence.test.mjs
+          node outputs/geo-sim/tests/wildlifeMorphotypes.test.mjs
           node outputs/geo-sim/tests/organismAnatomyUngulate.test.mjs
           node outputs/geo-sim/tests/organismAnatomyCarnivore.test.mjs
           node outputs/geo-sim/tests/organismAnatomyHumanoid.test.mjs
