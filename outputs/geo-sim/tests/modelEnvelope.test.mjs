@@ -4,6 +4,21 @@ registerHooks({resolve(s,c,next){return next(s==='three'?new URL('../vendor/thre
 const THREE=await import('three');
 const {createFacilityGeometry}=await import('../src/facilityGeometry.js');
 const {createFoliageGeometry}=await import('../src/foliageGeometry.js');
+for(const conifer of [false,true]) for(const quality of ['high','ultra','exhaustive']) {
+  const tree=createFoliageGeometry(conifer,quality,3,true);
+  assert.equal(tree.userData.foliage.completeTree,true);
+  assert.ok(tree.userData.foliage.leafCount>500);
+  for(const axis of ['x','y','z']) {
+    assert.ok(Math.abs(tree.boundingBox.min[axis]+0.5)<1e-6);
+    assert.ok(Math.abs(tree.boundingBox.max[axis]-0.5)<1e-6);
+  }
+  for(const attribute of Object.values(tree.attributes)) assert.ok(attribute.array.every(Number.isFinite));
+  const colors=tree.attributes.color.array;
+  let bark=false,leaf=false;
+  for(let i=0;i<colors.length;i+=3){bark ||= colors[i]>colors[i+1];leaf ||= colors[i+1]>colors[i]*1.5;}
+  assert.ok(bark&&leaf,'complete-tree wood and leaves must keep separate colours');
+  tree.dispose();
+}
 const {createSiteFoundation}=await import('../src/siteFoundation.js');
 const terrain={n:5,sizeKm:1,height:Float32Array.from({length:25},(_,i)=>100+(i%5)*10)};
 const original=terrain.height.slice();

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 // Render-only botanical structure. Branch/leaf counts do not represent biomass.
-export function createFoliageGeometry(conifer, quality, variant = 0) {
+export function createFoliageGeometry(conifer, quality, variant = 0, completeTree = false) {
   const distant = quality === "distant";
   const tier = quality === "exhaustive" ? 2 : quality === "ultra" ? 1 : 0;
   let seed = (1937 + variant * 65537 + (conifer ? 971 : 0)) >>> 0;
@@ -10,7 +10,7 @@ export function createFoliageGeometry(conifer, quality, variant = 0) {
     return seed / 4294967296;
   };
   const positions = [], colors = [], indices = [];
-  let branchCount = 0, leafCount = 0;
+  let branchCount = 0, leafCount = 0, leafSurface = false;
   const up = new THREE.Vector3(0, 1, 0);
   const frame = direction => {
     const axis = direction.clone().normalize();
@@ -19,20 +19,21 @@ export function createFoliageGeometry(conifer, quality, variant = 0) {
   };
   const vertex = (point, color) => {
     positions.push(point.x, point.y, point.z);
-    colors.push(...color);
+    colors.push(...(completeTree && leafSurface ? color.map((v,i)=>v*[0.22,0.48,0.13][i]) : color));
     return positions.length / 3 - 1;
   };
-  const branch = (a, b, radius) => {
+  const branch = (a, b, radius, taper = 0.72, bend = 1.8) => {
+    leafSurface = false;
     const [axis, side, normal] = frame(b.clone().sub(a));
     const sides = distant ? 3 : 5 + tier * 2;
     const rings = distant ? 1 : 3 + tier * 2;
     const first = positions.length / 3;
     for (let ring = 0; ring <= rings; ring++) {
       const t = ring / rings;
-      const center = a.clone().lerp(b, t).addScaledVector(normal, Math.sin(t * Math.PI) * radius * 1.8);
+      const center = a.clone().lerp(b, t).addScaledVector(normal, Math.sin(t * Math.PI) * radius * bend);
       for (let i = 0; i < sides; i++) {
         const angle = i / sides * Math.PI * 2;
-        const r = radius * (1 - t * 0.72) * (1 + 0.08 * Math.cos(i * 3) + (distant?0:0.035*Math.sin(angle*5+t*4)));
+        const r = radius * (1 - t * taper) * (1 + 0.08 * Math.cos(i * 3) + (distant?0:0.035*Math.sin(angle*5+t*4)));
         const bark = distant ? 1 : 0.88 + 0.12 * Math.cos(angle * 3 + t * 0.8);
         vertex(center.clone().addScaledVector(side, Math.cos(angle) * r).addScaledVector(normal, Math.sin(angle) * r), [0.42 * bark, 0.31 * bark, 0.2 * bark]);
       }
@@ -50,6 +51,7 @@ export function createFoliageGeometry(conifer, quality, variant = 0) {
     branchCount++;
   };
   const leaf = (origin, direction, length, width) => {
+    leafSurface = true;
     const [axis, side, normal] = frame(direction);
     const roll = random() * Math.PI * 2;
     const lateral = side.clone().multiplyScalar(Math.cos(roll)).addScaledVector(normal, Math.sin(roll));
@@ -129,12 +131,28 @@ export function createFoliageGeometry(conifer, quality, variant = 0) {
       }
     }
   }
+  if (completeTree) {
+    // Keep the canopy and trunk in one local envelope; the base is shared by every detail tier.
+    for (let i=1;i<positions.length;i+=3) positions[i]=positions[i]*0.7+0.15;
+    branch(new THREE.Vector3(0,-0.5,0),new THREE.Vector3(0,-0.15,0),0.038,0.36,0.08);
+    for(let i=0;i<5;i++) {
+      const a=i*Math.PI*2/5;
+      branch(new THREE.Vector3(Math.cos(a)*0.09,-0.49,Math.sin(a)*0.09),new THREE.Vector3(0,-0.39,0),0.013,0.3,0.4);
+    }
+  }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  if (completeTree) {
+    geometry.computeBoundingBox();
+    const size=geometry.boundingBox.getSize(new THREE.Vector3()),center=geometry.boundingBox.getCenter(new THREE.Vector3());
+    geometry.translate(-center.x,-center.y,-center.z);
+    geometry.scale(1/size.x,1/size.y,1/size.z);
+    geometry.computeBoundingBox();
+  }
   geometry.computeBoundingSphere();
-  geometry.userData.foliage = { branchCount, leafCount, representation: "procedural-branches-and-folded-leaves", scientificState: false };
+  geometry.userData.foliage = { branchCount, leafCount, completeTree, representation: "procedural-branches-and-folded-leaves", scientificState: false };
   return geometry;
 }

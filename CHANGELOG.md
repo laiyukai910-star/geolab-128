@@ -4,6 +4,8 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Added bounded close-range whole-tree geometry with individual curved leaves, branching, bark relief and root flares. Distant trees retain lightweight bundled meshes; both representations share the same normalized placement envelope. Procedural detail is illustrative, not measured species anatomy.
+
 ### Asset Loading Repairs
 
 - Resolve bundled model URLs relative to their module, not the active page, and allow manifest requests to recover after failure.
