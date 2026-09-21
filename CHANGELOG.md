@@ -4,6 +4,8 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Added recessed perimeter window frames and lintels to five building families, plus open roof-edge collection channels, downpipes and wall brackets. These are visual construction details and do not add simulated drainage capacity.
+
 ### Rendering and Asset Lifecycle Repairs
 
 - Use a lightweight branched whole-tree proxy at distance instead of switching detailed foliage to a solid crown block; retain a hysteresis band around the detail threshold.

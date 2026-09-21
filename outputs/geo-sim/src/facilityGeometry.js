@@ -18,7 +18,7 @@ export function createFacilityGeometry(kind, quality = "ultra") {
   if (!REBUILT_FACILITY_KINDS.includes(kind)) return null;
   const tier = quality === "exhaustive" ? 2 : quality === "ultra" ? 1 : 0;
   const radial = [16, 28, 44][tier], parts = [];
-  let windowOpenings=0,entrances=0;
+  let windowOpenings=0,entrances=0,windowFrames=0,drainRuns=0;
   const wall = 0xe7e4dc, trim = 0xf4f1e9, glass = 0x6d9cab, metal = 0x9eacb0;
   const put = (geometry, color, position = [0, 0, 0], rotation = [0, 0, 0], sink = parts) => {
     geometry.rotateX(rotation[0]); geometry.rotateY(rotation[1]); geometry.rotateZ(rotation[2]);
@@ -75,6 +75,16 @@ export function createFacilityGeometry(kind, quality = "ultra") {
         box(mullion, alongX ? [0.007, hh, 0.012] : [0.012, hh, 0.007], metal, 0.001);
         const transom=[...position];transom[1]+=hh*0.15;
         box(transom,alongX?[ww,0.006,0.009]:[0.009,0.006,ww],metal,0.001);
+        const frameDepth = thickness * 0.8;
+        const faceAxis = alongX ? 2 : 0, spanAxis = alongX ? 0 : 2;
+        const frame = [...position];frame[faceAxis] += sign * thickness * 0.35;
+        for (const side of [-1,1]) {
+          const jamb=[...frame];jamb[spanAxis]+=side*(ww/2-0.002);
+          put(new THREE.BoxGeometry(...(alongX?[0.004,hh,frameDepth]:[frameDepth,hh,0.004])),metal,jamb);
+        }
+        const lintel=[...frame];lintel[1]+=hh/2-0.002;
+        put(new THREE.BoxGeometry(...(alongX?[ww,0.004,frameDepth]:[frameDepth,0.004,ww])),metal,lintel);
+        windowFrames++;
       }
       const panel=new THREE.ExtrudeGeometry(shape,{depth:thickness,steps:1,bevelEnabled:false});
       panel.translate(0,0,-thickness);
@@ -82,6 +92,19 @@ export function createFacilityGeometry(kind, quality = "ultra") {
       put(panel,wall,alongX?[x,y,z+sign*d/2]:[x+sign*w/2,y,z],[0,rotation,0]);
     }
     box([x, y + h / 2 + 0.009, z], [w + 0.025, 0.018, d + 0.025], trim);
+    // Open channels below the roof edge connect to downpipes on the narrow end faces.
+    for (const sign of [-1,1]) {
+      const gx=x+sign*(w/2+0.004),gy=y+h/2-0.008;
+      box([gx,gy-0.004,z],[0.012,0.003,d],metal,0.0004);
+      for(const lip of [-1,1])box([gx+lip*0.005,gy,z],[0.002,0.009,d],metal,0.0003);
+      const dz=z+d/2-0.02;
+      tube([[gx,gy,dz],[gx,y-h/2+0.025,dz],[gx+sign*0.006,y-h/2+0.009,dz]],0.003,metal);
+      for(let bracket=1;bracket<=2+tier;bracket++) {
+        const by=y-h/2+bracket*h/(3+tier);
+        box([gx-sign*0.002,by,dz],[0.007,0.004,0.009],trim,0.0004);
+      }
+      drainRuns++;
+    }
   };
   const roof = (x, y, z, w, h, d) => {
     const vertices = [[-w/2,0,-d/2],[w/2,0,-d/2],[w/2,0,d/2],[-w/2,0,d/2],[0,h,-d*0.25],[0,h,d*0.25]];
@@ -359,7 +382,7 @@ export function createFacilityGeometry(kind, quality = "ultra") {
   geometry.computeBoundingBox();
   const size = geometry.boundingBox.getSize(new THREE.Vector3()), center = geometry.boundingBox.getCenter(new THREE.Vector3());
   geometry.translate(-center.x,-center.y,-center.z); geometry.scale(1/size.x,1/size.y,1/size.z);
-  geometry.userData.facilityRebuild = { version:2, kind, detailTier:tier, windowOpenings, entrances,
+  geometry.userData.facilityRebuild = { version:3, kind, detailTier:tier, windowOpenings, windowFrames, drainRuns, entrances,
     normalization:{center:center.toArray(),size:size.toArray()},representation:"perforated building envelopes and construction assemblies; not a structural design" };
   return geometry;
 }

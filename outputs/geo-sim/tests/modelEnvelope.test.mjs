@@ -44,6 +44,8 @@ for(const [tier,quality] of ['high','ultra','exhaustive'].entries()){
   const geometry=createFacilityGeometry('setback-tower',quality);
   const {normalization,windowOpenings,entrances}=geometry.userData.facilityRebuild;
   assert.ok(windowOpenings>50);assert.ok(entrances>0);
+  assert.equal(geometry.userData.facilityRebuild.windowFrames,windowOpenings,'each opening must have a perimeter frame');
+  assert.equal(geometry.userData.facilityRebuild.drainRuns,6,'each tower setback has two connected drainage runs');
   const rows=3+tier,width=0.94,ww=width/rows*0.64;
   const x=(0.5/rows-0.5)*width+ww*0.2,y=-0.5+0.6*0.36/rows;
   const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));mesh.updateMatrixWorld();
