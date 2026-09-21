@@ -7374,8 +7374,9 @@ function addInstancedAsset(group, name, transforms, fallbackColor, options, prim
     ensureGeometryColors(geometry);
     if (geometry.userData.cc0 && (semanticKind === "broadleaf-canopy" || semanticKind === "layered-conifer")) {
       const detail = sharedGeometry(group, `${cacheKey}:complete-detail`, () => createFoliageGeometry(semanticKind === "layered-conifer", assetQuality, variant, true));
+      const proxy = sharedGeometry(group, `${cacheKey}:complete-proxy`, () => createFoliageGeometry(semanticKind === "layered-conifer", "distant", variant, true));
       const profile = foliageDetailProfile(assetQuality);
-      const lod = new FoliageInstances(detail, geometry, material, variantTransforms, 0xffffff, profile.maximumDetail, Math.max(80, profile.pixelThreshold));
+      const lod = new FoliageInstances(detail, proxy, material, variantTransforms, 0xffffff, profile.maximumDetail, Math.max(80, profile.pixelThreshold));
       lod.name = `${name} complete-tree LOD`;
       for (const mesh of [lod.near,lod.far]) mesh.userData.assetKind = semanticKind;
       group.add(lod);meshes.push(lod.near,lod.far);return;

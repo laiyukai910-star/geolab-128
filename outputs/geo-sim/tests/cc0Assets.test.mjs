@@ -134,6 +134,19 @@ await assert.rejects(loadCc0Manifest(), /503/);
 // ---------------------------------------------------------------- failures are reported, not swallowed
 
 {
+  const [a,b] = await Promise.all([loadCc0Geometry("tree_default"),loadCc0Geometry("tree_default")]);
+  assert.equal(a,b,"concurrent requests must share one decoded model");
+  disposeCc0Cache();
+  const loading=loadCc0Geometry("tree_default");
+  disposeCc0Cache();
+  await assert.rejects(loading,/cancelled/);
+  assert.equal(cc0Diagnostics().cachedCount,0,"late loads must not repopulate a disposed cache");
+  await loadCc0Geometry("tree_default");
+  assert.equal(cc0Diagnostics().cachedCount,1,"a cancelled load must not poison retries");
+  disposeCc0Cache();
+}
+
+{
   await assert.rejects(() => loadCc0Geometry("no_such_model"), /Unknown CC0 model/,
     "an unknown model must raise rather than return undefined");
 }

@@ -26,16 +26,20 @@ for(const angle of [0,0.7,Math.PI/2]) {
   const site=createSiteFoundation(terrain,{x:0,z:0,sx:0.2,sz:0.3,ry:angle},2);
   assert.ok(site && Number.isFinite(site.top));
   const p=site.geometry.attributes.position;
-  for(let i=0;i<p.count;i+=2) {
-    assert.ok(Math.abs(p.getY(i)-site.top)<1e-6);
-    assert.ok(p.getY(i)>p.getY(i+1));
+  for(let i=0;i<p.count;i++) {
     const expected=(120+p.getX(i)*40)*2/1000-0.0003;
-    assert.ok(Math.abs(p.getY(i+1)-expected)<1e-6,'foundation skirt follows rotated footprint terrain');
+    assert.ok(Math.abs(p.getY(i)-site.top)<1e-6 || Math.abs(p.getY(i)-expected)<1e-6,'vertices lie on bearing plane or sampled ground');
+  }
+  for(let i=0;i<p.count;i+=3) {
+    if([0,1,2].every(j=>Math.abs(p.getY(i+j)-site.top)<1e-6)) {
+      for(let j=0;j<3;j++) assert.ok(site.geometry.attributes.normal.getY(i+j)>0.999,'bearing surface must have vertical normals');
+    }
   }
   site.geometry.dispose();
 }
 assert.deepEqual(terrain.height,original,'render foundations must not alter terrain');
 assert.equal(createSiteFoundation(terrain,{x:2,z:0,sx:0.2,sz:0.3,ry:0},1),null);
+assert.equal(createSiteFoundation(terrain,{x:0,z:0,sx:0.2,sz:0.3,ry:0},NaN),null);
 for(const [tier,quality] of ['high','ultra','exhaustive'].entries()){
   const geometry=createFacilityGeometry('setback-tower',quality);
   const {normalization,windowOpenings,entrances}=geometry.userData.facilityRebuild;

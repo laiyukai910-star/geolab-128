@@ -7,7 +7,8 @@ export class FoliageInstances extends THREE.LOD {
     this.type = "GeoLabFoliageInstances";
     this.sources = transforms;
     this.pixelThreshold = pixelThreshold;
-    this.capacity = Math.min(transforms.length, maximumDetail);
+    this.capacity = Math.min(transforms.length, Number.isFinite(maximumDetail) ? Math.max(0, Math.floor(maximumDetail)) : 128);
+    this.selected = new Set();
     this.near = new THREE.InstancedMesh(geometry, material, this.capacity);
     this.far = new THREE.InstancedMesh(distantGeometry, material, transforms.length);
     this.near.count = 0;
@@ -42,6 +43,7 @@ export class FoliageInstances extends THREE.LOD {
     const viewportHeight = globalThis.innerHeight || 900;
     const signature = [...camera.matrixWorld.elements, ...camera.projectionMatrix.elements, ...this.matrixWorld.elements, viewportHeight].join(",");
     if (signature === this.previousView) return;
+    const partitionReusable = this.previousView !== "";
     this.previousView = signature;
     const cameraPosition = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
     const projection = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -53,10 +55,14 @@ export class FoliageInstances extends THREE.LOD {
       sphere.center.set(source.x, source.y, source.z).applyMatrix4(this.matrixWorld);
       sphere.radius = Math.max(source.sx, source.sy, source.sz) * groupScale * 0.8;
       const pixels = 2 * sphere.radius * projectedScale / (camera.isOrthographicCamera ? 1 : Math.max(camera.near, sphere.center.distanceTo(cameraPosition)));
-      if (pixels >= this.pixelThreshold && frustum.intersectsSphere(sphere)) candidates.push({ index, pixels });
+      const threshold = this.pixelThreshold * (this.selected.has(index) ? 0.8 : 1);
+      if (pixels >= threshold && frustum.intersectsSphere(sphere)) candidates.push({ index, pixels });
     });
     candidates.sort((a, b) => b.pixels - a.pixels || a.index - b.index);
     const near = new Set(candidates.slice(0, this.capacity).map(item => item.index));
+    if (!this.sources.length) return;
+    if (partitionReusable && near.size === this.selected.size && [...near].every(index => this.selected.has(index))) return;
+    this.selected = near;
     let nearCount = 0, farCount = 0;
     this.sources.forEach((_, index) => {
       const mesh = near.has(index) ? this.near : this.far;

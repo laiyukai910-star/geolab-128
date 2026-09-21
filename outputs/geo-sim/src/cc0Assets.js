@@ -39,6 +39,8 @@ export const CC0_ATTRIBUTION_TEXT = `${CC0_COLLECTION.name} by ${CC0_COLLECTION.
 
 let manifestPromise = null;
 const geometryCache = new Map();
+const pendingLoads = new Map();
+let cacheGeneration = 0;
 
 /**
  * The collection manifest: which models are bundled, what each is, and its provenance.
@@ -79,6 +81,18 @@ export async function cc0ModelsByCategory(category) {
 export async function loadCc0Geometry(id) {
   const key = String(id);
   if (geometryCache.has(key)) return geometryCache.get(key);
+  if (pendingLoads.has(key)) return pendingLoads.get(key);
+  const generation = cacheGeneration;
+  const promise = loadCc0Entry(key, generation);
+  pendingLoads.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    if (pendingLoads.get(key) === promise) pendingLoads.delete(key);
+  }
+}
+
+async function loadCc0Entry(key, generation) {
   const models = await cc0ModelList();
   const entry = models.find(model => model.id === key);
   if (!entry) throw new Error(`Unknown CC0 model: ${key}`);
@@ -152,6 +166,10 @@ export async function loadCc0Geometry(id) {
       attributionRequired: CC0_COLLECTION.attributionRequired
     }
   };
+  if (generation !== cacheGeneration) {
+    for (const part of parts) part.dispose();
+    throw new Error("CC0 load cancelled by cache disposal");
+  }
   geometryCache.set(key, result);
   return result;
 }
@@ -194,7 +212,8 @@ export async function preloadCc0Collection({ concurrency = 4 } = {}) {
   const models = await cc0ModelList();
   const loaded = [], failed = [];
   const queue = [...models];
-  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, queue.length)) }, async () => {
+  const workerCount = Number.isFinite(concurrency) ? Math.max(1, Math.min(Math.floor(concurrency), queue.length)) : Math.min(4, queue.length);
+  const workers = Array.from({ length: workerCount }, async () => {
     while (queue.length) {
       const model = queue.shift();
       try {
@@ -222,6 +241,8 @@ export function cc0GeometriesByCategory(category) {
 
 /** Free every cached geometry. Callers own the geometries they were handed. */
 export function disposeCc0Cache() {
+  cacheGeneration++;
+  pendingLoads.clear();
   for (const entry of geometryCache.values()) {
     entry.merged?.dispose();
     for (const part of entry.parts) part.dispose();

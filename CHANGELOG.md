@@ -4,6 +4,13 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+### Rendering and Asset Lifecycle Repairs
+
+- Use a lightweight branched whole-tree proxy at distance instead of switching detailed foliage to a solid crown block; retain a hysteresis band around the detail threshold.
+- Avoid redundant instance-buffer uploads while retaining mandatory refreshes after asynchronous scanned-asset replacement.
+- Coalesce concurrent requests for the same bundled model and prevent late requests from resurrecting disposed caches; cancelled requests remain retryable.
+- Keep building-foundation bearing planes flat-shaded independently of retaining faces, and reject invalid placement dimensions/scales.
+
 - Added bounded close-range whole-tree geometry with individual curved leaves, branching, bark relief and root flares. Distant trees retain lightweight bundled meshes; both representations share the same normalized placement envelope. Procedural detail is illustrative, not measured species anatomy.
 
 ### Asset Loading Repairs

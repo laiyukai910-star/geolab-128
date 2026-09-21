@@ -3,6 +3,7 @@ import { sampleTerrainHeight } from "./terrainVolume.js";
 
 // A render-only foundation: level bearing surface over a sampled terrain skirt.
 export function createSiteFoundation(model, transform, verticalScale) {
+  if (![transform.x, transform.z, transform.sx, transform.sz, transform.ry, verticalScale].every(Number.isFinite) || transform.sx <= 0 || transform.sz <= 0 || verticalScale <= 0) return null;
   const points = [], segments = 4;
   const c = Math.cos(transform.ry), s = Math.sin(transform.ry);
   for (let z = 0; z <= segments; z++) for (let x = 0; x <= segments; x++) {
@@ -25,7 +26,11 @@ export function createSiteFoundation(model, transform, verticalScale) {
   for(let i=0;i<segments;i++) { edge(i,i+1);edge(20+i+1,20+i);edge((i+1)*5,i*5);edge(i*5+4,(i+1)*5+4); }
   const geometry=new THREE.BufferGeometry();
   geometry.setAttribute("position",new THREE.Float32BufferAttribute(positions,3));
-  geometry.setIndex(indices);geometry.computeVertexNormals();geometry.computeBoundingSphere();
-  geometry.userData.siteFoundation={sampleCount:points.length,renderOnly:true};
-  return {geometry,top};
+  geometry.setIndex(indices);
+  // Separate bearing-surface normals from retaining faces; averaging them rounds the platform visually.
+  const surface = geometry.toNonIndexed();
+  geometry.dispose();
+  surface.computeVertexNormals();surface.computeBoundingSphere();
+  surface.userData.siteFoundation={sampleCount:points.length,renderOnly:true};
+  return {geometry:surface,top};
 }
