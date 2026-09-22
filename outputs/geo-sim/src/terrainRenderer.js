@@ -1579,6 +1579,8 @@ export class TerrainRenderer {
     const model = this.model;
     const params = this.params;
     const geometry = buildRiverGeometry(model,params);
+    this.river3DStats = { ...geometry.userData.riverNetwork, representation: geometry.userData.representation };
+    globalThis.__geoLabRiver3DStats = this.river3DStats;
     const material = createRiverMaterial();
     this.rivers = new THREE.Mesh(geometry, material);
     this.rivers.renderOrder = 3;

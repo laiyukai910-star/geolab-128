@@ -4,6 +4,9 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Rebuilt river display profiles around endpoint stages instead of draping water over intermediate terrain. Added first-dry-bank clipping, terrain-checked bend fallback and explicit blocked-reach diagnostics without changing modeled routing or discharge.
+- Separated rising water-surface and rising total-head diagnostics, including velocity head. Documented the boundary between Manning normal-depth estimates and an unimplemented backwater solution in `docs/RIVER_RECONSTRUCTION.md`.
+
 - Fixed anatomy dispatch ignoring bird morphotype indices, missing the lion mane option, and making the African elephant body inaccessible. Regression tests now compare selected bird/elephant meshes against their intended anatomy builders rather than only checking that a mesh exists.
 
 - Migrated wildlife morphotype selection to strict TypeScript with a single generated browser module. Removed duplicate classification keys while preserving their previously effective values, and made empty/null indices report missing assignments instead of silently becoming zero.
