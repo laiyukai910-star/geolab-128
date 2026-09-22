@@ -158,13 +158,15 @@ export function humanPresence(model, options = {}) {
     builtFraction[index] = fraction;
     if (fraction > 0) { builtCellCount += 1; builtAreaTotal += fraction * areaKm2; }
   }
+  // Guarded on the total area, not just the cell count: a model with no cell size divides by zero and
+  // reports a NaN mean, which then propagates into anything that reads it as a density.
   const regionAreaKm2 = areaKm2 * len;
   const builtAreaFraction = regionAreaKm2 > 0 ? builtAreaTotal / regionAreaKm2 : 0;
 
   // Relative concentration: a cell's share of built land against the mean built share across the
   // region. A cell at the regional mean reads 1, a cell twice as built-up reads 2, and a cell with no
   // built land reads 0. This is a shape, not a head count.
-  const meanBuiltFraction = len > 0 ? builtAreaTotal / (areaKm2 * len) : 0;
+  const meanBuiltFraction = regionAreaKm2 > 0 ? builtAreaTotal / regionAreaKm2 : 0;
   let peak = 0;
   for (let index = 0; index < len; index += 1) {
     const value = meanBuiltFraction > 0 ? builtFraction[index] / meanBuiltFraction : 0;

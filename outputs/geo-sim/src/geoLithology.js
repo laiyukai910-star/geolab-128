@@ -408,23 +408,38 @@ export function lateralThicknessFactor(model, columnIndex, options = {}) {
   // region is neither systematically thinned nor systematically thickened.
   const reference = Number.isFinite(Number(options.referenceBedrockDepthM))
     ? Number(options.referenceBedrockDepthM)
-    : medianBedrockDepthM(bedrockDepth);
+    : medianBedrockDepthM(model, bedrockDepth);
   if (!Number.isFinite(reference) || reference <= 0) return 1;
   return value / reference;
 }
 
 /**
- * Median of a per-column field. Memoised per field array, because it is a property of the region and
- * not of a column: a 512 km model holds a quarter of a million columns, and sorting the field once per
- * column would take the profile from milliseconds to minutes. Keyed weakly on the array itself, so a
- * rebuilt volume cannot read a stale median. Sorting, not selection, because with the memo only one
- * call ever pays for it and an adversarial sorted input cannot then degrade it.
+ * Median of a per-column field, memoised.
+ *
+ * A median is a property of the whole region and not of one column, and the region can hold a quarter
+ * of a million columns, so sorting it once per column would take the profile from milliseconds to
+ * minutes are not acceptable. It is cached instead.
+ *
+ * The cache is keyed on the MODEL and not on the array, and it stores the array it was computed from
+ * together with a version. Keying on the array alone was a real defect: the array is a typed array
+ * that callers mutate in place, so the same object can describe a different region, and a cache that
+ * looked only at the object and its length happily returned the median of the region it used to be.
+ * Measured, that produced a thickness factor of 5.0 where the correct value was 1.0, which scales
+ * every layer of a column five times too thick.
+ *
+ * The version is the model's own edit counter, which the terrain brush increments on every stroke and
+ * which any in-place rebuild of the arrays also advances. A value with no version at all is not
+ * cached, so a caller that hands over a bare field still gets a correct answer.
  */
 const BEDROCK_MEDIAN_CACHE = new WeakMap();
 
-function medianBedrockDepthM(values) {
-  const cached = BEDROCK_MEDIAN_CACHE.get(values);
-  if (cached && cached.length === values.length) return cached.value;
+function medianBedrockDepthM(model, values) {
+  const version = Number(model?.brushStamp);
+  const hasVersion = Number.isFinite(version);
+  const cached = hasVersion ? BEDROCK_MEDIAN_CACHE.get(model) : undefined;
+  if (cached && cached.field === values && cached.length === values.length && cached.version === version) {
+    return cached.value;
+  }
   const finiteValues = [];
   for (let index = 0; index < values.length; index += 1) {
     const value = Number(values[index]);
@@ -435,7 +450,7 @@ function medianBedrockDepthM(values) {
     finiteValues.sort((a, b) => a - b);
     value = finiteValues[Math.floor(finiteValues.length / 2)];
   }
-  BEDROCK_MEDIAN_CACHE.set(values, { length: values.length, value });
+  if (hasVersion) BEDROCK_MEDIAN_CACHE.set(model, { field: values, length: values.length, version, value });
   return value;
 }
 

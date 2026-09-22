@@ -187,6 +187,35 @@ function builtModel({ side = 24, impervious = null, mapped = null, sizeKm = 96 }
   for (const value of presence.builtFraction) assert.ok(value >= 0 && value <= 1, "built fraction must be clamped to [0,1]");
 }
 
+// ---------------------------------------------------------------- no derived number is ever NaN
+
+// A model with no cell size made the mean built density 0/0 and reported NaN, which then flowed into
+// anything that read it as a density. Every number the layer publishes must be finite for every input,
+// including the degenerate ones.
+{
+  const degenerate = [
+    ["zero map size", { n: 4, sizeKm: 0, surface: { imperviousFraction: new Float32Array(16).fill(0.5) } }],
+    ["absent map size", { n: 4, surface: { imperviousFraction: new Float32Array(16).fill(0.5) } }],
+    ["zero cell area", { n: 3, sizeKm: 9, cellSupportAreaKm2: 0, surface: { imperviousFraction: new Float32Array(9).fill(0.5) } }],
+    ["absent cell area", { n: 3, sizeKm: 9, cellSupportAreaKm2: null, infrastructureInfluence: { imperviousFraction: new Float32Array(9).fill(0.7) } }],
+    ["single cell", { n: 1, sizeKm: 10, surface: { imperviousFraction: Float32Array.from([0.9]) } }],
+    ["no built land", { n: 4, sizeKm: 10, surface: { imperviousFraction: new Float32Array(16) } }],
+    ["nothing at all", { n: 2 }]
+  ];
+  for (const [label, model] of degenerate) {
+    const presence = humanPresence(model);
+    for (const key of ["cellCount", "builtCellCount", "builtAreaKm2", "builtAreaFraction", "meanBuiltDensity", "maxDensityIndex"]) {
+      assert.ok(Number.isFinite(presence[key]),
+        `${label}: ${key} must be finite, got ${presence[key]}`);
+    }
+    assert.ok(Number.isFinite(presence.builtAreaKm2) && presence.builtAreaKm2 >= 0,
+      `${label}: built area must be a finite non-negative number`);
+    if (presence.absolutePopulation !== null) {
+      assert.ok(Number.isFinite(presence.absolutePopulation), `${label}: a claimed population must be finite`);
+    }
+  }
+}
+
 // ---------------------------------------------------------------- attachment and determinism
 
 {

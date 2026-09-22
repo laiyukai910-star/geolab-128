@@ -482,6 +482,47 @@ assert.ok(karstHostScore(carbonate({ porosity: 0.5, densityKgM3: 2400 }))
   assert.equal(lateralThicknessFactor(lateralModel, -1), 1, 'an out-of-range column must read as the reference thickness');
 }
 
+// ================================================== memoised region median follows edits
+
+// The region's median bedrock depth is memoised because it is a property of the region and not of a
+// column. The field is a typed array that callers mutate in place, so a cache keyed only on the array
+// object and its length kept returning the median of the region it used to be: measured, that gave a
+// thickness factor of 5.0 where the correct value was 1.0, scaling every layer of a column five times
+// too thick. The cache is versioned on the model's own edit counter, which the terrain brush advances.
+{
+  const side = 4, count = side * side;
+  const field = new Float32Array(count).fill(40);
+  const model = {
+    n: side, brushStamp: 0, sizeKm: 32, cellSizeKm: 32 / (side - 1),
+    height: new Float32Array(count).fill(300), slope: new Float32Array(count).fill(5),
+    temperature: new Float32Array(count).fill(10), precipitation: new Float32Array(count).fill(900),
+    wetnessIndex: new Float32Array(count).fill(5),
+    surface: { vegetation: new Float32Array(count).fill(0.2), imperviousFraction: new Float32Array(count).fill(0) },
+    hydraulics: { erosionRisk: new Float32Array(count).fill(0.4), depositionRisk: new Float32Array(count).fill(0.1) },
+    terrainDiagnostics: { curvature: new Float32Array(count), tpi: new Float32Array(count) },
+    stats: { maxElevation: 300 },
+    subsurface: {
+      gridN: side, columnCellCount: count, layerCount: 3,
+      depthEdgesM: new Float32Array([0, 10, 30, 60]), columnBedrockDepthM: field,
+      lithologyCode: Uint8Array.from({ length: count * 3 }, (_, i) => (Math.floor(i / count) === 0 ? 7 : 5))
+    }
+  };
+  // A uniform field is its own median, so every factor is exactly 1.
+  assert.equal(lateralThicknessFactor(model, 0), 1, "a uniform field must give the neutral factor");
+  // Mutate the same array in place, the way a rebuild or a brush edit does, and say so with the version.
+  for (let index = 0; index < count; index += 1) field[index] = 200;
+  assert.equal(lateralThicknessFactor(model, 0), 5,
+    "until the model reports an edit, the cached median is still the one it stated");
+  model.brushStamp += 1;
+  assert.equal(lateralThicknessFactor(model, 0), 1,
+    "once the model reports the edit, the median must be recomputed: a uniform field is its own median again");
+  // And the recomputed value must equal what a brand-new model would give, which is the real contract.
+  const fresh = { ...model, subsurface: { ...model.subsurface, columnBedrockDepthM: Float32Array.from(field) } };
+  fresh.brushStamp = 99;
+  assert.equal(lateralThicknessFactor(model, 0), lateralThicknessFactor(fresh, 0),
+    "a recomputed median must equal the one a fresh model of the same field gives");
+}
+
 // ================================================================ column stratigraphy
 
 // One column, three layers, three different materials, and a second column that is bedrock all the
