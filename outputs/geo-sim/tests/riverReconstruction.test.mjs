@@ -47,17 +47,48 @@ banks.riverSegments=[{from:11,to:13}];
 for(let i=0;i<25;i++)banks.height[i]=20+Math.abs(Math.floor(i/5)-2)*20;
 const fitted=buildRiverGeometry(banks,params);
 assert.ok(fitted.userData.riverNetwork.bankClippedSections>0);
+assert.ok(fitted.attributes.riverData.getY(0)<0.002,'bank optical depth must approach zero at the terrain intersection');
+assert.ok(Math.abs(fitted.attributes.riverData.getY(2)-1)<1e-6,'center optical depth must equal stage minus terrain');
 for(let i=0;i<fitted.attributes.position.count;i++) {
   assert.ok(Math.abs(fitted.attributes.position.getZ(i))<=0.001251,'water must stop at first dry bank');
   assert.ok(Math.abs(fitted.attributes.position.getY(i)-0.02102)<1e-7,'cross-section water level is horizontal');
 }
 const ridge=structuredClone(model);ridge.riverSegments=[{from:6,to:8}];ridge.height[7]=100;
+const saddle=structuredClone(model);saddle.riverSegments=[{from:6,to:12}];saddle.height[7]=100;saddle.height[11]=100;
+const saddleGeometry=buildRiverGeometry(saddle,params);
+assert.equal(saddleGeometry.userData.riverNetwork.terrainBlockedEdges,0,'a diagonal drainage link must not intersect an artificial triangulation ridge');
+assert.ok(saddleGeometry.index.count>0);
+saddleGeometry.dispose();
 const blocked=buildRiverGeometry(ridge,params);
 assert.equal(blocked.userData.riverNetwork.terrainBlockedEdges,1);
 assert.equal(blocked.index.count,0,'a conflicting reach must not be draped up an intervening ridge');
 const coast=buildRiverGeometry({...model,height:new Float32Array(25).fill(-2)},params);
 assert.equal(coast.index.count,0,'submerged river reaches belong to the receiving water surface');
 for(const g of [fitted,blocked,coast])g.dispose();
+for(const seaLevel of [-10,0,10]){
+  const mouth=structuredClone(model);mouth.riverSegments=[{from:11,to:12}];
+  for(let i=0;i<25;i++)mouth.height[i]=seaLevel+20-(i%5-1)*40;
+  mouth.hydraulics.channelWidthM[12]=0;mouth.hydraulics.channelDepthM[12]=0;mouth.hydraulics.flowVelocity[12]=0;
+  const snapshot=structuredClone(mouth);
+  const g=buildRiverGeometry(mouth,{...params,seaLevel,verticalScale:2});
+  assert.equal(g.userData.riverNetwork.coastalEdges,1);
+  assert.equal(g.userData.riverNetwork.terrainBlockedEdges,0);
+  let shoreFound=false,faded=false;
+  for(let i=0;i<g.attributes.position.count;i++){
+    assert.ok(Math.abs(g.attributes.riverMetric.getY(i)-2)<1e-6,'zero-filled sea hydraulics must not pinch a four-metre mouth');
+    const x=g.attributes.position.getX(i);
+    if(x>=-0.0125+1e-7)assert.ok(Math.abs(g.attributes.position.getY(i)-(seaLevel+0.02)*0.002)<1e-7,'river must join sea level at the shoreline, not at the far sea grid node');
+    if(x>=-0.0045+1e-7)assert.equal(g.attributes.riverCoverage.getX(i),0,'river overlay must disappear within two channel widths beyond the shore');
+    if(Math.abs(x+0.0125)<1e-7)shoreFound=true;
+    if(g.attributes.riverCoverage.getX(i)===0)faded=true;
+  }
+  assert.ok(shoreFound&&faded,'coastline intersection and receiving-water blend must be explicit');
+  assert.deepEqual(mouth,snapshot,'sea boundary reconstruction must not invent scientific hydraulics');
+  g.dispose();
+  mouth.hydraulics.channelDepthM[11]=0;
+  const dryMouth=buildRiverGeometry(mouth,{...params,seaLevel});
+  assert.equal(dryMouth.index.count,0,'sea depth must not turn a dry inflow into a flowing river');dryMouth.dispose();
+}
 const backwater=structuredClone(model);backwater.riverSegments=[{from:6,to:7}];
 backwater.hydraulics.channelDepthM[7]=1.1;
 backwater.hydraulics.flowVelocity[6]=2;
@@ -89,5 +120,15 @@ for(let i=0;i<scenario.height.length;i++)if(scenario.hydraulics.channelMask[i]){
   const q=scenario.discharge[i]/31557600*2.35;
   const computed=scenario.hydraulics.channelWidthM[i]*scenario.hydraulics.channelDepthM[i]*scenario.hydraulics.flowVelocity[i];
   assert.ok(Math.abs(computed-q)<=Math.max(1e-7,q*3e-7),'stored width/depth/velocity must conserve modeled channel discharge');
+}
+for(const flowRouting of ['d8','mfd','dinf'])for(const seed of [17,83,291]){
+  const p={...createDefaultParams(),resolution:32,mapSizeKm:32,landscapeBlockGrid:8,wildlifeMaxAgents:10,riverThreshold:2,seed,flowRouting};
+  const m=buildModel(p),g=buildRiverGeometry(m,p),stats=g.userData.riverNetwork;
+  assert.ok(stats.edges>0);
+  assert.equal(stats.terrainBlockedEdges,0,`${flowRouting}/${seed}: generated drainage must remain visible`);
+  assert.equal(stats.terrainConflictSections,0);
+  for(const attribute of Object.values(g.attributes))assert.ok(attribute.array.every(Number.isFinite));
+  assert.equal(g.attributes.riverCoverage.count,g.attributes.position.count);
+  g.dispose();
 }
 console.log('Normal-depth inversion, continuity, dry/limited flow, connected river topology and process-conditioned detail tests passed');

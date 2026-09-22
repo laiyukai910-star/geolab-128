@@ -6,15 +6,15 @@ export function createRiverMaterial() {
   const uniforms = {riverTime:{value:0}};
   material.userData.riverUniforms = uniforms;
   material.userData.representation = "Directional surface animation driven by modeled mean velocity, not a fluid solver";
-  material.customProgramCacheKey = () => "geolab-river-surface-v2";
+  material.customProgramCacheKey = () => "geolab-river-surface-v3";
   material.forceSinglePass = true;
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms,uniforms);
-    const varying = "varying vec3 riverPoint; varying vec3 riverState; varying vec2 riverFlow; varying vec2 riverCoordinates;";
+    const varying = "varying vec3 riverPoint; varying vec3 riverState; varying vec2 riverFlow; varying vec2 riverCoordinates; varying float riverOpacity;";
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>",`#include <common>\n${varying}\nattribute vec3 riverData; attribute vec2 riverDirection; attribute vec2 riverMetric;`)
+      .replace("#include <common>",`#include <common>\n${varying}\nattribute vec3 riverData; attribute vec2 riverDirection; attribute vec2 riverMetric; attribute float riverCoverage;`)
       .replace("#include <begin_vertex>",`#include <begin_vertex>
-        riverPoint=(modelMatrix*vec4(position,1.0)).xyz*1000.0;riverState=riverData;riverFlow=riverDirection;riverCoordinates=riverMetric;`);
+        riverPoint=(modelMatrix*vec4(position,1.0)).xyz*1000.0;riverState=riverData;riverFlow=riverDirection;riverCoordinates=riverMetric;riverOpacity=riverCoverage;`);
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>",`#include <common>\n${varying}\nuniform float riverTime;`)
       .replace("#include <color_fragment>",`#include <color_fragment>
@@ -29,7 +29,7 @@ export function createRiverMaterial() {
         float depthShade=1.0-exp(-max(0.0,riverState.y)/0.9);
         float bankFade=1.0-smoothstep(0.78,1.0,abs(riverState.x));
         diffuseColor.rgb*=mix(1.1,0.78,depthShade)+wave*0.035;
-        diffuseColor.a*=mix(0.48,1.0,depthShade)*bankFade;
+        diffuseColor.a*=mix(0.48,1.0,depthShade)*bankFade*riverOpacity;
       `)
       .replace("#include <normal_fragment_maps>",`#include <normal_fragment_maps>
         float rippleHeight=sin(phase)*waveFade*0.014+sin(crossPhase)*capillaryFade*0.0008;

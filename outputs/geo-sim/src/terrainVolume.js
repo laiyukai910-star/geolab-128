@@ -215,12 +215,22 @@ export function buildTerrainVolume(model, config) {
   return { solid: solid.finish(), waterSides: water.finish(), baseY, boundarySamples: rim.length, modeledLayerCount: edges.length - 1 };
 }
 
+// Preserve the lower saddle diagonal instead of inserting a ridge across it.
+// Rendering and collision/water sampling must use the same reconstruction.
+export function terrainMainDiagonal(height, i, n) {
+  return height[i] + height[i + n + 1] < height[i + 1] + height[i + n];
+}
+
 export function sampleTerrainHeight(model, xKm, zKm) {
   const sizeKm = Number(model.sizeKm) || 128, n = model.n;
   const gx = (xKm / sizeKm + 0.5) * (n - 1), gy = (zKm / sizeKm + 0.5) * (n - 1);
   if (gx < 0 || gy < 0 || gx > n - 1 || gy > n - 1) return null;
   const x = Math.min(n - 2, Math.floor(gx)), y = Math.min(n - 2, Math.floor(gy));
   const fx = gx - x, fy = gy - y, i = y * n + x, h = model.height;
+  if (terrainMainDiagonal(h, i, n)) {
+    return fy <= fx ? h[i] + fx * (h[i + 1] - h[i]) + fy * (h[i + n + 1] - h[i + 1])
+      : h[i] + fy * (h[i + n] - h[i]) + fx * (h[i + n + 1] - h[i + n]);
+  }
   return fx + fy <= 1 ? h[i] + fx * (h[i + 1] - h[i]) + fy * (h[i + n] - h[i])
     : h[i + n + 1] + (1 - fx) * (h[i + n] - h[i + n + 1]) + (1 - fy) * (h[i + 1] - h[i + n + 1]);
 }

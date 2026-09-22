@@ -16,7 +16,7 @@ import { SceneVolume } from "./sceneVolume.js";
 import { ORGANISM_KINDS, createOrganismMaterial } from "./organismGeometry.js";
 import { OrganismInspector } from "./organismInspector.js";
 import { buildRiverGeometry } from "./riverGeometry.js";
-import { sampleTerrainHeight } from "./terrainVolume.js";
+import { sampleTerrainHeight, terrainMainDiagonal } from "./terrainVolume.js";
 import { createSiteFoundation } from "./siteFoundation.js";
 import {
   buildAdaptiveInfrastructurePlacementPlan,
@@ -4303,6 +4303,21 @@ function updateTerrainTileMesh(tile, model, params, viewMode, options = {}) {
     }
   }
   if (updateHeights) {
+    const index = geometry.getIndex(), stride = tile.segX + 1;
+    let offset = 0;
+    for (let ly = 0; ly < tile.segY; ly++) for (let lx = 0; lx < tile.segX; lx++) {
+      const a = ly * stride + lx, b = a + 1, c = a + stride, d = c + 1;
+      const main = terrainMainDiagonal(model.height, (tile.y0 + ly) * n + tile.x0 + lx, n);
+      // Clockwise in grid coordinates, upward-facing in world X/Z coordinates.
+      index.array[offset] = a;
+      index.array[offset + 1] = c;
+      index.array[offset + 2] = main ? d : b;
+      index.array[offset + 3] = main ? a : c;
+      index.array[offset + 4] = d;
+      index.array[offset + 5] = b;
+      offset += 6;
+    }
+    index.needsUpdate = true;
     positions.clearUpdateRanges?.();
     positions.addUpdateRange?.(0, positions.count * 3);
     positions.needsUpdate = true;

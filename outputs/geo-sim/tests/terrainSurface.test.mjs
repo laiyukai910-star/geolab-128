@@ -124,4 +124,29 @@ const actualColor = left.mesh.geometry.getAttribute("color");
 expectedColor.forEach((value, channel) => assert.ok(Math.abs(actualColor.array[channel] - value / 255) < 1e-7));
 assert.deepEqual(renderer.model, scientificBefore);
 for (const tile of renderer.terrainTiles) { tile.mesh.geometry.dispose(); tile.mesh.material.dispose(); }
+{
+  const { sampleTerrainHeight } = await import('../src/terrainVolume.js');
+  const r = Object.create(TerrainRenderer.prototype);
+  r.model = { n: 2, sizeKm: 0.1, cellSizeKm: 0.1, height: new Float32Array([10, 80, 90, 20]), slope: new Float32Array(4) };
+  r.params = { seaLevel: 0, verticalScale: 2 };
+  r.scene = new THREE.Scene(); r.terrainTiles = []; r.viewMode = 'landscape';
+  const verify = () => {
+    r.scene.updateMatrixWorld(true);
+    for (const [x, z] of [[0, 0], [-0.025, 0.015], [0.025, -0.015], [-0.02, -0.01]]) {
+      const ray = new THREE.Raycaster(new THREE.Vector3(x, 1, z), new THREE.Vector3(0, -1, 0));
+      const hits = ray.intersectObject(r.terrainTileGroup, true);
+      assert.ok(hits.length, 'triangles must face upward');
+      assert.ok(Math.abs(hits[0].point.y - sampleTerrainHeight(r.model, x, z) * 0.002) < 1e-7,
+        'rendered surface, river sampling and camera collision must agree');
+    }
+  };
+  r.buildTerrainMesh(); verify();
+  assert.equal(sampleTerrainHeight(r.model, 0, 0), 15);
+  const oldIndex = r.terrainTiles[0].mesh.geometry.index.array.slice();
+  r.model.height.set([100, 10, 20, 100]);
+  r.buildTerrainMesh({ x0: 0, y0: 0, x1: 1, y1: 1 }); verify();
+  assert.equal(sampleTerrainHeight(r.model, 0, 0), 15);
+  assert.notDeepEqual(r.terrainTiles[0].mesh.geometry.index.array, oldIndex, 'height edits must retriangulate existing tiles');
+  for (const tile of r.terrainTiles) { tile.mesh.geometry.dispose(); tile.mesh.material.dispose(); }
+}
 console.log("Terrain appearance, shared tile normals, dirty updates, analytical isolation and packed buffer tests passed");
