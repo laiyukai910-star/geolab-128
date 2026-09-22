@@ -12,11 +12,13 @@ registerHooks({
 });
 
 const {
-  floodDepthFromDischarge, floodVelocityFromDepth, manningRoughness,
+  floodDepthFromDischarge, floodVelocityFromDepth, manningRoughness, computeHazardQuantities,
+  relativeHumidityFromVpd,
   slopeFactorOfSafety, fineFuelEquilibriumMoisture, climaticWaterDeficitMm,
   rootCohesionPa, frictionAngleForLithology, effectiveCohesionForLithology,
   HAZARD_METHODS
 } = await import("../src/hazardQuantities.js");
+const { buildModel, createDefaultParams } = await import("../src/geoEngine.js");
 
 const { readFileSync } = await import("node:fs");
 const SOURCE = readFileSync(new URL("../src/hazardQuantities.js", import.meta.url), "utf8");
@@ -213,6 +215,80 @@ for (const forbidden of ["Math.random", "Date.now", "performance.now"]) {
     assert.ok(phi >= 5 && phi <= 55, `friction angle for class ${code} must be physical, got ${phi}`);
     assert.ok(c >= 0 && c <= 30000, `cohesion for class ${code} must be physical, got ${c}`);
   }
+}
+
+// ---------------------------------------------------------------- the model-level derivation
+
+const modelled = buildModel({ ...createDefaultParams(), resolution: 64, mapSizeKm: 128 });
+const quantities = computeHazardQuantities(modelled);
+{
+  assert.ok(quantities.computedCells > 0, "a real scenario must produce quantities");
+  assert.equal(quantities.floodDepthM.length, modelled.height.length, "every field must cover the grid");
+
+  // THE DISCHARGE UNIT BUG. model.discharge is an annual runoff VOLUME in cubic metres. Treated as a
+  // rate it peaks near 3.6e8 m3/s in a default scenario, which is orders of magnitude beyond any river
+  // on Earth, and it drove the flood depth into its ceiling. The conversion has to be the engine's own,
+  // and the resulting depth has to be the order of a real flood.
+  const peakAnnualM3 = Math.max(...Array.from(modelled.discharge));
+  assert.ok(peakAnnualM3 > 1e6, "the fixture must exercise the annual-volume case, or this proves nothing");
+  const peakRateM3s = peakAnnualM3 / (365.25 * 24 * 3600);
+  assert.ok(peakRateM3s < 1e5,
+    "converted to a rate the peak must be plausible, got " + peakRateM3s.toFixed(1) + " m3/s");
+  const deepest = quantities.summary.floodDepthM.max;
+  assert.ok(deepest > 0 && deepest < 8,
+    "flood depth must be the order of a real flood, got " + deepest + " m; a value pinned at a ceiling means the discharge unit is wrong");
+  const fastest = quantities.summary.floodVelocityMs.max;
+  assert.ok(fastest > 0 && fastest < 8, "flood velocity must be physically possible, got " + fastest + " m/s");
+
+  // THE NOT-COMPUTED BUG. A cell with no soil cannot have a factor of safety. Leaving the array at its
+  // initialiser of 0 made 416 of 4085 land cells report as maximally unstable, so a value is published
+  // only where one was computed and the mask says which those are.
+  let noSoil = 0, computedWithoutSoil = 0;
+  for (let index = 0; index < modelled.height.length; index += 1) {
+    if (Number(modelled.surface?.rootDepthM?.[index]) > 0) continue;
+    noSoil += 1;
+    if (quantities.factorOfSafetyComputed[index]) computedWithoutSoil += 1;
+    assert.equal(quantities.factorOfSafety[index], 0,
+      "a cell with no soil must carry no factor rather than an initialiser that reads as unstable");
+  }
+  assert.ok(noSoil > 0, "the fixture must contain soil-free cells, or this proves nothing");
+  assert.equal(computedWithoutSoil, 0, "no cell without soil may claim a computed factor");
+  assert.ok(quantities.summary.factorOfSafety.min > 1,
+    "the reported factor must exclude the not-computed cells, got " + quantities.summary.factorOfSafety.min);
+  assert.equal(quantities.summary.factorOfSafety.cells, quantities.summary.factorOfSafetyComputedCells,
+    "the reported range must count exactly the cells that carry a value");
+
+  // The scenarios must order correctly on the water balance, which is what shows the deficit is a real
+  // balance rather than a re-scaled index.
+  const arid = computeHazardQuantities(buildModel({ ...createDefaultParams(), resolution: 48, mapSizeKm: 128, precipitationScale: 0.25 }));
+  const wet = computeHazardQuantities(buildModel({ ...createDefaultParams(), resolution: 48, mapSizeKm: 128, precipitationScale: 2.2 }));
+  assert.ok(arid.summary.waterDeficitMm.min < wet.summary.waterDeficitMm.min,
+    "a drier scenario must have the larger deficit");
+  assert.ok(arid.summary.waterDeficitMm.max < wet.summary.waterDeficitMm.max,
+    "a wetter scenario must have the larger surplus");
+
+  // Units are stated, so a consumer cannot mistake a depth for an index.
+  for (const [field, unit] of Object.entries(quantities.units)) {
+    assert.ok(typeof unit === "string" && unit.length > 0, field + " must state its unit");
+  }
+  assert.equal(quantities.units.floodDepthM, "m");
+  assert.equal(quantities.units.factorOfSafety, "dimensionless ratio");
+
+  // Humidity from VPD must follow the Magnus relation and stay inside a screen-height band.
+  const humid = relativeHumidityFromVpd({ temperatureC: 20, vaporPressureDeficitKPa: 0 });
+  assert.ok(Math.abs(humid - 100) < 1e-6, "no deficit is saturated air");
+  const dry = relativeHumidityFromVpd({ temperatureC: 30, vaporPressureDeficitKPa: 3 });
+  assert.ok(dry < 30, "a 3 kPa deficit in 30 degree air must be arid, got " + dry.toFixed(1) + " percent");
+  for (const [t, v] of [[-30, 0.1], [45, 6], [NaN, NaN], [20, -5]]) {
+    const rh = relativeHumidityFromVpd({ temperatureC: t, vaporPressureDeficitKPa: v });
+    assert.ok(Number.isFinite(rh) && rh >= 5 && rh <= 100,
+      "humidity must stay in band for (" + t + ", " + v + "), got " + rh);
+  }
+
+  // A model with nothing in it must produce empty fields rather than throw.
+  const empty = computeHazardQuantities(null);
+  assert.equal(empty.cellCount, 0);
+  assert.equal(empty.floodDepthM.length, 0);
 }
 
 // ---------------------------------------------------------------- methods are named, not implied

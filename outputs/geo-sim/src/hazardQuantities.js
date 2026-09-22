@@ -1,4 +1,5 @@
 import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
+import { solveRectangularNormalDepth } from "./channelHydraulics.js";
 
 /*
  * Dimensional hazard quantities.
@@ -26,6 +27,14 @@ import { SUBSURFACE_LITHOLOGY } from "./lithologyTable.js";
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 const clamp01 = value => clamp(Number(value) || 0, 0, 1);
 const finite = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+
+/** Seconds in a Julian year. The model's discharge fields are annual volumes, so a rate needs this. */
+const SECONDS_PER_YEAR = 365.25 * 24 * 3600;
+/** CALIBRATED: the channel design factor and overland factor the engine's own hydraulics already use,
+ * restated here so this module converts an annual volume into a design discharge the same way rather
+ * than a second, subtly different way. */
+const CHANNEL_DESIGN_FACTOR = 2.35;
+const OVERLAND_RUNOFF_FACTOR = 0.42;
 
 /** Standard gravity, m/s^2. */
 const GRAVITY = 9.81;
@@ -242,3 +251,203 @@ export const HAZARD_METHODS = Object.freeze({
   waterDeficit: "Precipitation minus potential evapotranspiration, in millimetres",
   rootCohesion: "Wu and Waldron root reinforcement, collapsed to a screening coefficient"
 });
+
+/**
+ * Relative humidity from a vapour pressure deficit, in percent.
+ *
+ * VPD = e_s(T) * (1 - RH/100), so RH = 100 * (1 - VPD / e_s(T)). The saturation vapour pressure is the
+ * Magnus form, e_s = 0.6108 * exp(17.27 T / (T + 237.3)) kPa (Allen et al. 1998, FAO-56, the same
+ * relation the model's own evapotranspiration already rests on). CALIBRATED: the clamping band, which
+ * keeps the result inside the range a screen-height humidity can occupy.
+ */
+export function relativeHumidityFromVpd({ temperatureC, vaporPressureDeficitKPa }) {
+  const T = clamp(finite(temperatureC, 20), -60, 60);
+  const vpd = Math.max(0, finite(vaporPressureDeficitKPa, 0));
+  const saturation = 0.6108 * Math.exp((17.27 * T) / (T + 237.3));
+  if (!(saturation > 0)) return 50;
+  return clamp(100 * (1 - vpd / saturation), 5, 100);
+}
+
+/**
+ * The dimensional hazard quantities for a whole model.
+ *
+ * This computes a depth in metres, a velocity in metres per second, a factor of safety, a water
+ * deficit in millimetres and a fuel moisture as a fraction of oven-dry mass, cell by cell, from the
+ * model's own arrays. It writes nothing: the result is returned, so a caller decides what to publish
+ * and the existing fields keep whatever contract they already had.
+ *
+ * Missing input is treated as absent rather than defaulted into a plausible-looking number. A cell
+ * with no discharge gets no flood depth, and a cell with no slope gets no factor of safety, so an
+ * empty quantity can be told apart from a real one.
+ */
+export function computeHazardQuantities(model, options = {}) {
+  const n = Math.max(0, Math.trunc(finite(model?.n, 0)));
+  const len = n * n;
+  const empty = new Float32Array(0);
+  if (!len || !model?.height) {
+    return {
+      cellCount: 0, summary: { method: HAZARD_METHODS, computedCells: 0 },
+      floodDepthM: empty, floodVelocityMs: empty, slopeFactorOfSafety: empty,
+      waterDeficitMm: empty, fineFuelMoisture: empty, relativeHumidityPercent: empty,
+      landslideSusceptibleCells: 0, floodedCells: 0
+    };
+  }
+  const seaLevel = finite(options.seaLevel ?? model.stats?.seaLevel, 0);
+  const floodDepthM = new Float32Array(len);
+  const floodVelocityMs = new Float32Array(len);
+  const factorOfSafety = new Float32Array(len);
+  // Which cells actually have a factor of safety. Without this, a cell with no soil keeps the array's
+  // initialiser of 0, which reads downstream as "maximally unstable" when it means "not computed" -
+  // measured, 416 of 4085 land cells in a default scenario had no soil and were reported as unstable.
+  const factorOfSafetyComputed = new Uint8Array(len);
+  const waterDeficitMm = new Float32Array(len);
+  const fineFuelMoisture = new Float32Array(len);
+  const relativeHumidityPercent = new Float32Array(len);
+  const lithology = model.subsurface?.lithologyCode;
+  const columnCellCount = Math.max(0, Math.trunc(finite(model.subsurface?.columnCellCount, 0)));
+  const layerCount = Math.max(0, Math.trunc(finite(model.subsurface?.layerCount, 0)));
+
+  let landslideSusceptibleCells = 0, floodedCells = 0, computedCells = 0;
+  for (let index = 0; index < len; index += 1) {
+    if (!(Number(model.height[index]) > seaLevel)) continue;
+    computedCells += 1;
+    // FLOOD DEPTH. `model.discharge` is an ANNUAL RUNOFF VOLUME in cubic metres, not a rate, which
+    // is easy to get wrong and produces absurd depths if it is treated as one: the field peaks around
+    // 3.6e8 m3 in a default 128 km scenario, and the Amazon is about 2e5 m3/s. The engine's own
+    // channel hydraulics divides by the seconds in a year and applies a design factor of 2.35 for a
+    // channel, so the same conversion is applied here rather than a second one being invented.
+    const annualDischargeM3 = Number(model.discharge?.[index]);
+    const isChannel = model.hydraulics?.channelMask?.[index] === 1;
+    if (Number.isFinite(annualDischargeM3) && annualDischargeM3 > 0) {
+      const meanDischargeM3s = annualDischargeM3 / SECONDS_PER_YEAR;
+      const localRunoffM3s = Math.max(0, Number(model.localRunoffAnnualM3?.[index]) / SECONDS_PER_YEAR);
+      const designDischargeM3s = isChannel
+        ? meanDischargeM3s * CHANNEL_DESIGN_FACTOR
+        : Math.max(1e-6, localRunoffM3s * OVERLAND_RUNOFF_FACTOR);
+      const channelWidth = Number(model.hydraulics?.channelWidthM?.[index]);
+      const widthM = isChannel && Number.isFinite(channelWidth) && channelWidth > 0
+        ? channelWidth
+        : Math.max(1, finite(model.cellSizeKm, 1) * 1000);
+      const slopeRadians = Math.tan((Math.max(0, finite(model.slope?.[index], 0)) * Math.PI) / 180);
+      const energySlope = clamp(slopeRadians, 1e-5, 0.35);
+      // The same roughness the engine's own channel solver uses, so the two agree on the channel.
+      const roughness = clamp(
+        0.028 + finite(model.surface?.roughness?.[index], 0.05) * 0.035 +
+        clamp01(model.surface?.vegetation?.[index]) * 0.028 +
+        Math.min(0.018, finite(model.surface?.leafAreaIndex?.[index], 0) * 0.0025) -
+        clamp01(model.surface?.imperviousFraction?.[index]) * 0.006,
+        0.022, 0.14);
+      // The flow depth at design discharge, from the same normal-depth solver the channel hydraulics
+      // use, then the depth ABOVE the bankfull stage is what inundates.
+      const design = isChannel
+        ? solveRectangularNormalDepth(designDischargeM3s, widthM, energySlope, roughness)
+        : null;
+      const flowDepthM = design?.depthM ?? Math.pow(
+        (designDischargeM3s * roughness) / Math.max(1e-6, widthM * Math.sqrt(energySlope)), 0.6);
+      const bankfullM = Math.max(0, finite(model.hydraulics?.channelDepthM?.[index], 0));
+      const inundationM = Math.max(0, flowDepthM - bankfullM);
+      floodDepthM[index] = clamp(inundationM, 0, 40);
+      // Velocity from the same section, so depth and velocity cannot disagree about the discharge.
+      floodVelocityMs[index] = design?.velocityMps
+        ?? floodVelocityFromDepth({ depthM: flowDepthM, slope: slopeRadians, roughness });
+      if (floodDepthM[index] > 0.05) floodedCells += 1;
+    }
+
+    // Slope stability, from the column's own material and the model's own soil thickness and roots.
+    const soilThickness = Number(model.surface?.rootDepthM?.[index]);
+    if (Number.isFinite(soilThickness) && soilThickness > 0 && Number.isFinite(Number(model.slope?.[index]))) {
+      const surfaceColumn = index;
+      const columnIndex = columnCellCount === len ? surfaceColumn
+        : (() => {
+            const grid = Math.max(1, Math.trunc(finite(model.subsurface?.gridN, 0)));
+            const x = surfaceColumn % n, y = Math.floor(surfaceColumn / n);
+            const gx = Math.min(grid - 1, Math.round((x / Math.max(1, n - 1)) * (grid - 1)));
+            const gy = Math.min(grid - 1, Math.round((y / Math.max(1, n - 1)) * (grid - 1)));
+            return gy * grid + gx;
+          })();
+      const code = layerCount > 0 && lithology && columnIndex >= 0 && columnIndex < columnCellCount
+        ? lithology[columnIndex] : -1;
+      const saturation = clamp01(model.subsurface?.groundwaterSaturation?.[columnIndex]);
+      const fs = slopeFactorOfSafety({
+        slopeDeg: Number(model.slope[index]),
+        soilThicknessM: soilThickness,
+        effectiveCohesionPa: effectiveCohesionForLithology(code),
+        rootCohesionPa: rootCohesionPa(model.surface?.rootCohesion?.[index]),
+        frictionAngleDeg: frictionAngleForLithology(code),
+        saturatedFraction: saturation,
+        bulkDensityKgM3: 1600,
+        porosityFraction: 0.32
+      });
+      // Infinity is a real answer for a level surface but cannot be stored, so it is recorded as the
+      // largest representable value rather than as a small number that would read as unstable.
+      factorOfSafety[index] = Number.isFinite(fs) ? fs : 999;
+      factorOfSafetyComputed[index] = 1;
+      if (Number.isFinite(fs) && fs < 1) landslideSusceptibleCells += 1;
+    }
+    const precipitation = Number(model.precipitation?.[index]);
+    const pet = Number(model.surface?.potentialEvapotranspiration?.[index]);
+    if (Number.isFinite(precipitation) || Number.isFinite(pet)) {
+      waterDeficitMm[index] = climaticWaterDeficitMm({ precipitationMm: precipitation, potentialEvapotranspirationMm: pet });
+    }
+    const humidity = relativeHumidityFromVpd({
+      temperatureC: Number(model.temperature?.[index]),
+      vaporPressureDeficitKPa: Number(model.surface?.vaporPressureDeficitKPa?.[index])
+    });
+    relativeHumidityPercent[index] = humidity;
+    // The moisture is damped toward equilibrium rather than set to it: a fine fuel does not reach
+    // equilibrium within a day, and the damping is what carries yesterday's rain forward.
+    const equilibrium = fineFuelEquilibriumMoisture({ relativeHumidityPercent: humidity, temperatureC: Number(model.temperature?.[index]) });
+    const previous = Number(options.previousMoisture?.[index]);
+    // CALIBRATED: the 0.35 daily approach to equilibrium.
+    fineFuelMoisture[index] = Number.isFinite(previous)
+      ? previous + (equilibrium - previous) * 0.35
+      : equilibrium;
+  }
+
+  const range = array => {
+    let low = Infinity, high = -Infinity, finiteCount = 0;
+    for (let index = 0; index < array.length; index += 1) {
+      const value = array[index];
+      if (!Number.isFinite(value)) continue;
+      // Zeroes are included, so a range describes the whole field rather than only its active cells.
+      if (value < low) low = value;
+      if (value > high) high = value;
+      finiteCount += 1;
+    }
+    return finiteCount ? { min: low, max: high } : { min: null, max: null };
+  };
+
+  const rangeWhere = (array, mask) => {
+    let low = Infinity, high = -Infinity, count = 0;
+    for (let index = 0; index < array.length; index += 1) {
+      if (!mask[index]) continue;
+      const value = array[index];
+      if (!Number.isFinite(value)) continue;
+      if (value < low) low = value;
+      if (value > high) high = value;
+      count += 1;
+    }
+    return count ? { min: low, max: high, cells: count } : { min: null, max: null, cells: 0 };
+  };
+
+  return {
+    cellCount: len,
+    computedCells,
+    floodDepthM, floodVelocityMs, factorOfSafety, factorOfSafetyComputed, waterDeficitMm, fineFuelMoisture, relativeHumidityPercent,
+    floodedCells, landslideSusceptibleCells,
+    units: Object.freeze({
+      floodDepthM: "m", floodVelocityMs: "m/s", factorOfSafety: "dimensionless ratio",
+      waterDeficitMm: "mm", fineFuelMoisture: "fraction of oven-dry mass", relativeHumidityPercent: "%"
+    }),
+    summary: {
+      method: HAZARD_METHODS,
+      computedCells, floodedCells, landslideSusceptibleCells,
+      floodDepthM: range(floodDepthM),
+      floodVelocityMs: range(floodVelocityMs),
+      factorOfSafety: rangeWhere(factorOfSafety, factorOfSafetyComputed),
+      factorOfSafetyComputedCells: factorOfSafetyComputed.reduce((sum, flag) => sum + flag, 0),
+      waterDeficitMm: range(waterDeficitMm),
+      fineFuelMoisture: range(fineFuelMoisture)
+    }
+  };
+}
