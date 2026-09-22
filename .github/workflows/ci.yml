@@ -75,6 +75,7 @@ jobs:
           node outputs/geo-sim/tests/organismAnatomyCarnivore.test.mjs
           node outputs/geo-sim/tests/organismAnatomyHumanoid.test.mjs
           node outputs/geo-sim/tests/cc0Assets.test.mjs
+          node outputs/geo-sim/tests/hazardQuantities.test.mjs
           node outputs/geo-sim/tests/scannedAssets.test.mjs
           node outputs/geo-sim/tests/riverReconstruction.test.mjs
           node outputs/geo-sim/tests/modelEnvelope.test.mjs
@@ -117,6 +118,7 @@ jobs:
           test -f outputs/geo-sim/src/organismAnatomyCarnivore.js
           test -f outputs/geo-sim/src/organismAnatomyHumanoid.js
           test -f outputs/geo-sim/src/cc0Assets.js
+          test -f outputs/geo-sim/src/hazardQuantities.js
           test -f outputs/geo-sim/vendor/cc0/nature-kit/manifest.json
           test -f outputs/geo-sim/vendor/cc0/nature-kit/KENNEY-LICENSE.txt
           test -f outputs/geo-sim/src/lithologyTable.js
