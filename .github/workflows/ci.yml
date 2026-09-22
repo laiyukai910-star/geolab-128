@@ -76,6 +76,7 @@ jobs:
           node outputs/geo-sim/tests/organismAnatomyHumanoid.test.mjs
           node outputs/geo-sim/tests/cc0Assets.test.mjs
           node outputs/geo-sim/tests/hazardQuantities.test.mjs
+          node outputs/geo-sim/tests/hazardEngineWiring.test.mjs
           node outputs/geo-sim/tests/scannedAssets.test.mjs
           node outputs/geo-sim/tests/riverReconstruction.test.mjs
           node outputs/geo-sim/tests/modelEnvelope.test.mjs

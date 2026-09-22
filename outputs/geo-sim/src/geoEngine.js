@@ -1,6 +1,7 @@
 import { naturalTerrainColor } from "./terrainAppearance.js";
 import { SUBSURFACE_LITHOLOGY as LITHOLOGY_REFERENCE } from "./lithologyTable.js";
 import { solveRectangularNormalDepth } from "./channelHydraulics.js";
+import { computeHazardQuantities } from "./hazardQuantities.js";
 import {
   buildEcologicalIntegrityReport,
   buildLandscapeBlockNetwork,
@@ -17426,10 +17427,27 @@ function computeTimeHazards(model, params) {
     highWildfireAreaKm2: highWildfireCells * cellAreaKm2,
     highLandslideAreaKm2: highLandslideCells * cellAreaKm2,
     highCompositeHazardAreaKm2: highCompositeCells * cellAreaKm2,
-    currentHighCompositeHazardAreaKm2: currentHighCompositeCells * cellAreaKm2
+  currentHighCompositeHazardAreaKm2: currentHighCompositeCells * cellAreaKm2
   };
+
+  // Dimensional quantities, computed from the same state. A scenario that cannot support them still
+  // produces its composites, so a failure here is recorded rather than thrown.
+  let dimensionalHazards = null;
+  try {
+    dimensionalHazards = computeHazardQuantities(model, { seaLevel: Number(params.seaLevel) || 0 });
+  } catch (error) {
+    dimensionalHazards = { cellCount: 0, error: String(error?.message || error), units: null };
+  }
   return {
     type: "geolab-time-hazard-scenario",
+    // The dimensional quantities, computed from the same model state and published BESIDE the composite
+    // fields rather than replacing them. The composites are dimensionless weighted sums whose values
+    // cannot be checked against a real event; these are a depth in metres, a velocity in metres per
+    // second, a factor of safety, a deficit in millimetres and a fuel moisture as a fraction of
+    // oven-dry mass, each with the method that produced it. Both sets are kept so a consumer can move
+    // across deliberately.
+    dimensional: dimensionalHazards,
+    dimensionalAttached: Boolean(dimensionalHazards && dimensionalHazards.cellCount > 0 && !dimensionalHazards.error),
     mode,
     years,
     currentYear,
