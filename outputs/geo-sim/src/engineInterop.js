@@ -292,7 +292,7 @@ function buildLayerDefinitions(model) {
       },
       {
         id: "water-deficit",
-        role: "climatic water deficit in millimetres per year, positive a surplus and negative a deficit, encoded against -800 to +800 mm/yr",
+        role: "atmospheric water deficit in millimetres per year (PET minus precipitation); positive a deficit and negative a surplus, encoded against -800 to +800 mm/yr",
         unit: "mm/yr",
         rangeM: [-800, 800],
         sample: (i) => clamp((finite(model.hazards?.dimensional?.waterDeficitMm?.[i], 0) + 800) / 1600, 0, 1)

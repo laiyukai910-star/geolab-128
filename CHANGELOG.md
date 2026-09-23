@@ -6,6 +6,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 - Fixed artificial terrain ridges blocking diagonal drainage: terrain meshes, river sampling and camera collision now share the same lower-saddle triangulation, including after terrain edits.
 - Fixed pinched sea outlets and water ribbons extending above the sea. River mouths retain incoming width, meet the shoreline at sea level and blend over a width-based distance. Shallow-bank appearance now uses local terrain depth.
+- Corrected atmospheric water-deficit sign to PET minus precipitation, so dry scenarios report a positive deficit and wet scenarios a negative surplus. Corrected the dimensional flood-marker height conversion by removing an erroneous 40x multiplier.
 
 - Rebuilt river display profiles around endpoint stages instead of draping water over intermediate terrain. Added first-dry-bank clipping, terrain-checked bend fallback and explicit blocked-reach diagnostics without changing modeled routing or discharge.
 - Separated rising water-surface and rising total-head diagnostics, including velocity head. Documented the boundary between Manning normal-depth estimates and an unimplemented backwater solution in `docs/RIVER_RECONSTRUCTION.md`.

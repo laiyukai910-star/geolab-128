@@ -198,8 +198,8 @@ for (const forbidden of ["Math.random", "Date.now", "performance.now"]) {
 // ---------------------------------------------------------------- water deficit and reinforcements
 
 {
-  assert.equal(climaticWaterDeficitMm({ precipitationMm: 800, potentialEvapotranspirationMm: 600 }), 200);
-  assert.equal(climaticWaterDeficitMm({ precipitationMm: 300, potentialEvapotranspirationMm: 900 }), -600);
+  assert.equal(climaticWaterDeficitMm({ precipitationMm: 800, potentialEvapotranspirationMm: 600 }), -200);
+  assert.equal(climaticWaterDeficitMm({ precipitationMm: 300, potentialEvapotranspirationMm: 900 }), 600);
   assert.equal(climaticWaterDeficitMm({}), 0, "absent terms must read as no deficit, not as NaN");
 
   assert.equal(rootCohesionPa(0), 0, "no roots is no reinforcement");
@@ -258,14 +258,13 @@ const quantities = computeHazardQuantities(modelled);
   assert.equal(quantities.summary.factorOfSafety.cells, quantities.summary.factorOfSafetyComputedCells,
     "the reported range must count exactly the cells that carry a value");
 
-  // The scenarios must order correctly on the water balance, which is what shows the deficit is a real
-  // balance rather than a re-scaled index.
+  // Drier scenarios must have greater PET-minus-precipitation deficit than wetter ones.
   const arid = computeHazardQuantities(buildModel({ ...createDefaultParams(), resolution: 48, mapSizeKm: 128, precipitationScale: 0.25 }));
   const wet = computeHazardQuantities(buildModel({ ...createDefaultParams(), resolution: 48, mapSizeKm: 128, precipitationScale: 2.2 }));
-  assert.ok(arid.summary.waterDeficitMm.min < wet.summary.waterDeficitMm.min,
+  assert.ok(arid.summary.waterDeficitMm.min > wet.summary.waterDeficitMm.min,
     "a drier scenario must have the larger deficit");
-  assert.ok(arid.summary.waterDeficitMm.max < wet.summary.waterDeficitMm.max,
-    "a wetter scenario must have the larger surplus");
+  assert.ok(arid.summary.waterDeficitMm.max > wet.summary.waterDeficitMm.max,
+    "a drier scenario must have the larger deficit");
 
   // Units are stated, so a consumer cannot mistake a depth for an index.
   for (const [field, unit] of Object.entries(quantities.units)) {

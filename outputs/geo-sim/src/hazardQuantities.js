@@ -180,18 +180,16 @@ export function fineFuelEquilibriumMoisture({ relativeHumidityPercent, temperatu
 }
 
 /**
- * Climatic water deficit in millimetres: precipitation minus potential evapotranspiration over the
- * stated period.
+ * Atmospheric water deficit in millimetres: potential evapotranspiration minus precipitation over
+ * the stated period. Positive values mark an unmet atmospheric water demand; negative values mark a
+ * precipitation surplus. This is a climatic demand-balance proxy, not the USGS ecosystem climatic
+ * water deficit (PET minus actual ET), because this function does not model storage depletion here.
  *
- * This is the water-balance term from which a drought index such as SPEI is built, and it is reported
- * as a depth so it can be compared with a known deficit. It is deliberately NOT called a drought
- * index: SPEI standardises that deficit against a long-term reference distribution
- * (Vicente-Serrano et al. 2010, Journal of Climate 23(7)), and this model has no multi-decade record
- * to standardise against. Reporting the deficit in millimetres is honest; reporting a standardised
- * index from a single year would not be.
+ * This annual difference is not a standardized drought index and does not represent soil-water
+ * depletion. It uses potential evapotranspiration as a simple atmospheric-demand proxy.
  */
 export function climaticWaterDeficitMm({ precipitationMm, potentialEvapotranspirationMm }) {
-  return finite(precipitationMm, 0) - finite(potentialEvapotranspirationMm, 0);
+  return finite(potentialEvapotranspirationMm, 0) - finite(precipitationMm, 0);
 }
 
 /**
@@ -248,7 +246,7 @@ export const HAZARD_METHODS = Object.freeze({
   floodVelocity: "Manning velocity for the same section",
   slopeStability: "Infinite slope with root reinforcement and a piezometric pore pressure ratio",
   fineFuelMoisture: "Van Wagner equilibrium moisture content, as a fraction of oven-dry mass",
-  waterDeficit: "Precipitation minus potential evapotranspiration, in millimetres",
+  waterDeficit: "Potential evapotranspiration minus precipitation, in millimetres; positive means unmet atmospheric demand",
   rootCohesion: "Wu and Waldron root reinforcement, collapsed to a screening coefficient"
 });
 

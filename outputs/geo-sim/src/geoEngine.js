@@ -4789,7 +4789,8 @@ export function makeGridCSV(model) {
       "# deposition_risk, sediment_transport_index, infiltration_capacity, aquifer_potential,",
       "# fracture_risk, liquefaction_risk, discharge_index, wetness_index.",
       "# flood_depth_dimensional_m carries a depth in metres and exists precisely because flood_depth_m",
-      "# does not. slope_factor_of_safety is dimensionless, and 1 is the threshold between stable and not."
+      "# does not. slope_factor_of_safety is dimensionless, and 1 is the threshold between stable and not.",
+      "# water_deficit_mm is PET minus precipitation; positive means unmet atmospheric demand, not soil depletion."
     ].join("\n"),
     "x_km,y_km,elevation_m,slope_deg,aspect_deg,curvature_1km,tpi_m,roughness_m,wetness_index,precip_mm_yr,temp_c,wind_speed_ms,wind_from_deg,wind_exposure,data_confidence,observed_source_count,data_source_mask,customized_support,climate,landcover,soil_hsg,vegetation_fraction,canopy_height_m,lai,vegetation_type,vegetation_resilience,biomass_carbon_kg_m2,canopy_roughness_m,ksat_mm_hr,awc_mm,root_depth_m,impervious_fraction,infiltration_capacity,root_cohesion,actual_et_mm_yr,water_balance_mm_yr,curve_number,runoff_coefficient,flow_acc_km2,discharge_index,flow_routing,flow_divergence,flow_velocity_ms,channel_width_m,channel_depth_m,shear_stress_pa,stream_power_w_m2,sediment_transport_index,erosion_risk,deposition_risk,flood_hazard,flood_depth_m,drought_stress,wildfire_risk,landslide_risk,hazard_index,cumulative_erosion_m,projected_vegetation_fraction,water_table_depth_m,bedrock_depth_m,aquifer_potential,fracture_risk,liquefaction_risk,subsurface_storage_mm,flood_depth_dimensional_m,flood_velocity_dimensional_ms,slope_factor_of_safety,water_deficit_mm,fine_fuel_moisture_fraction"
   ];
