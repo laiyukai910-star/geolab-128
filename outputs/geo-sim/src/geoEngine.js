@@ -4773,6 +4773,24 @@ function intersectionBounds(boundsList) {
 
 export function makeGridCSV(model) {
   const lines = [
+    // The legend travels with the file because several columns are named as though they carried a unit
+    // while holding a dimensionless screening value. Renaming them would break every consumer that
+    // reads them by position or by name, so they are declared here rather than left to mislead. A
+    // column listed as a screening index is not a measurement and cannot be compared with a real event.
+    [
+      "# GeoLab 128 grid export",
+      "# Measured, named with a unit: elevation_m, slope_deg, precipitation_mm_yr, temp_c, wind_speed_ms,",
+      "# channel_width_m, channel_depth_m, shear_stress_pa, water_table_depth_m, bedrock_depth_m,",
+      "# cumulative_erosion_m, water_balance_mm_yr, root_depth_m, awc_mm, ksat_mm_hr, and the",
+      "# flood_depth_dimensional_m, flood_velocity_dimensional_ms, slope_factor_of_safety,",
+      "# water_deficit_mm and fine_fuel_moisture_fraction columns below.",
+      "# Screening indices, NOT measurements despite their names: flood_hazard, flood_depth_m,",
+      "# drought_stress, wildfire_risk, landslide_risk, hazard_index, runoff_coefficient, erosion_risk,",
+      "# deposition_risk, sediment_transport_index, infiltration_capacity, aquifer_potential,",
+      "# fracture_risk, liquefaction_risk, discharge_index, wetness_index.",
+      "# flood_depth_dimensional_m carries a depth in metres and exists precisely because flood_depth_m",
+      "# does not. slope_factor_of_safety is dimensionless, and 1 is the threshold between stable and not."
+    ].join("\n"),
     "x_km,y_km,elevation_m,slope_deg,aspect_deg,curvature_1km,tpi_m,roughness_m,wetness_index,precip_mm_yr,temp_c,wind_speed_ms,wind_from_deg,wind_exposure,data_confidence,observed_source_count,data_source_mask,customized_support,climate,landcover,soil_hsg,vegetation_fraction,canopy_height_m,lai,vegetation_type,vegetation_resilience,biomass_carbon_kg_m2,canopy_roughness_m,ksat_mm_hr,awc_mm,root_depth_m,impervious_fraction,infiltration_capacity,root_cohesion,actual_et_mm_yr,water_balance_mm_yr,curve_number,runoff_coefficient,flow_acc_km2,discharge_index,flow_routing,flow_divergence,flow_velocity_ms,channel_width_m,channel_depth_m,shear_stress_pa,stream_power_w_m2,sediment_transport_index,erosion_risk,deposition_risk,flood_hazard,flood_depth_m,drought_stress,wildfire_risk,landslide_risk,hazard_index,cumulative_erosion_m,projected_vegetation_fraction,water_table_depth_m,bedrock_depth_m,aquifer_potential,fracture_risk,liquefaction_risk,subsurface_storage_mm,flood_depth_dimensional_m,flood_velocity_dimensional_ms,slope_factor_of_safety,water_deficit_mm,fine_fuel_moisture_fraction"
   ];
   for (let y = 0; y < model.n; y += 1) {

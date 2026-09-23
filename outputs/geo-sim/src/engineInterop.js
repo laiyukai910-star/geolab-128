@@ -43,7 +43,10 @@ export function buildEngineScenePackage(model, params = {}, options = {}) {
       path: `layers/${layer.id}.${extension}`,
       bytes: engine === "unity" ? encodeGrayscaleTga(pixels, resolution, resolution) : pixels,
       role: layer.role,
-      range: [0, 1],
+      // The range the 8-bit values are encoded against, and the unit they recover to. A layer without a
+      // stated range is not decodable, so every layer now states one.
+      range: layer.rangeM || [0, 1],
+      ...(layer.unit ? { unit: layer.unit } : {}),
       encoding: engine === "unity" ? "8-bit grayscale TGA" : "8-bit unsigned raw"
     };
   });
@@ -180,6 +183,9 @@ function buildManifest(input) {
       path: entry.path,
       role: entry.role,
       range: entry.range,
+      // The unit the encoded range recovers to. Absent for a dimensionless screening index, which is
+      // itself information: a layer with no unit is an index, and one with a unit can be measured.
+      ...(entry.unit ? { unit: entry.unit } : {}),
       encoding: entry.encoding,
       resolution: [input.resolution, input.resolution],
       rowOrder: "south-to-north"
@@ -241,12 +247,56 @@ function buildEngineReadme(manifest) {
   ].join("\r\n");
 }
 
+/**
+ * The infinite-slope factor of safety for a cohesionless dry slope at a given angle: tan(phi)/tan(beta).
+ *
+ * A closed form is used for the export layer rather than the full relation with cohesion, roots and
+ * pore pressure, because the layer encodes a normalised index and the full relation needs per-cell
+ * material properties that vary with the subsurface grid. The exported layer therefore describes the
+ * SLOPE component of stability, and its role string says so. The full factor of safety, with cohesion,
+ * roots and saturation, is published per cell under \`hazards.dimensional.factorOfSafety\`.
+ */
+function cohesionlessFactorOfSafety(slopeDeg, frictionAngleDeg = 33) {
+  const beta = Math.max(0, finite(slopeDeg, 0)) * Math.PI / 180;
+  const phi = Math.max(1, finite(frictionAngleDeg, 33)) * Math.PI / 180;
+  if (beta < 1e-4) return Infinity;
+  return Math.tan(phi) / Math.tan(beta);
+}
+
 function buildLayerDefinitions(model) {
   return [
     { id: "vegetation", role: "vegetation cover fraction", sample: (i) => finite(model.surface?.vegetation?.[i], 0) },
     { id: "wetness", role: "topographic wetness screening", sample: (i) => clamp(finite(model.wetnessIndex?.[i], 0) / 24, 0, 1) },
     { id: "impervious", role: "impervious surface fraction", sample: (i) => finite(model.surface?.imperviousFraction?.[i], 0) },
     { id: "erosion", role: "erosion-risk screening", sample: (i) => finite(model.hydraulics?.erosionRisk?.[i], 0) },
+      // The dimensional quantities, exported as their own layers with the range and the unit they are
+      // encoded against. Without the range a consumer cannot recover the value, because a normalised
+      // image of metres is not metres - which is the defect this whole change exists to remove.
+      {
+        id: "flood-depth-dimensional",
+        role: "flood depth above bankfull stage, in metres, encoded against 0 to 3 m",
+        unit: "m",
+        rangeM: [0, 3],
+        sample: (i) => clamp(finite(model.hazards?.dimensional?.floodDepthM?.[i], 0) / 3, 0, 1)
+      },
+      {
+        id: "slope-failure",
+        role: "slope failure potential, 1 - min(FS, 3) / 3 so 1 is least stable; the FS is that of a cohesionless dry slope, while the per-cell factor with cohesion, roots and saturation is published under hazards.dimensional",
+        unit: "index from a dimensionless factor of safety over 0 to 3",
+        rangeM: [0, 3],
+        sample: (i) => {
+          const fs = cohesionlessFactorOfSafety(model.slope?.[i]);
+          if (!Number.isFinite(fs)) return 0;
+          return clamp(1 - Math.min(fs, 3) / 3, 0, 1);
+        }
+      },
+      {
+        id: "water-deficit",
+        role: "climatic water deficit in millimetres per year, positive a surplus and negative a deficit, encoded against -800 to +800 mm/yr",
+        unit: "mm/yr",
+        rangeM: [-800, 800],
+        sample: (i) => clamp((finite(model.hazards?.dimensional?.waterDeficitMm?.[i], 0) + 800) / 1600, 0, 1)
+      },
     { id: "flood", role: "current flood-hazard screening", sample: (i) => finite(model.hazards?.currentFloodHazard?.[i] ?? model.hazards?.floodHazard?.[i], 0) }
   ];
 }
