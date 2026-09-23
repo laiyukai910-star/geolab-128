@@ -2674,7 +2674,10 @@ export class TerrainRenderer {
         if (flood > 0.45) {
           buckets.floodSheets.push({
             x: base.x,
-            y: base.y + 0.018 + Math.min(0.18, (hazards.floodDepthM?.[i] ?? 0) * 0.015),
+            // The sheet sits at the modelled flood depth, converted with the same metres-to-world factor every
+      // other height in this file uses, rather than at an arbitrary lift from a screening index. Capped
+      // because a marker taller than the terrain it sits on stops reading as water.
+      y: base.y + 0.018 + Math.min(0.18, ((hazards.dimensional?.floodDepthM?.[i] ?? 0) / 1000) * Number(this.params.verticalScale || 1) * 40),
             z: base.z,
             sx: size,
             sy: 0.012,
