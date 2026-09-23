@@ -1123,6 +1123,8 @@ function refreshRenderDetailControls() {
 async function loadExternalDataLayers() {
   const specs = [
     ["demFile", "dem"],
+    ["bathymetryFile", "bathymetry"],
+    ["groundwaterFile", "groundwater"],
     ["soilFile", "soil"],
     ["subsurfaceFile", "subsurface"],
     ["landCoverFile", "landCover"],
@@ -2482,6 +2484,8 @@ function updateReadout(event) {
     `${Math.round(sample.elevation)} m · 坡度 ${format(sample.slope, 1)}° · 坡向 ${format(sample.aspect, 0)}° · ${cell.climate.code} ${cell.climate.name}`,
     `${Math.round(sample.precipitation)} mm/yr · ${format(sample.temperature, 1)} °C · 风 ${format(sample.windSpeed, 1)} m/s @ ${format(sample.windDirection, 0)}°`,
     `数据可信 ${format(cell.dataConfidence?.observedSupport || 0, 2)} · 来源 ${cell.dataConfidence?.sourceCount || 0} · ${cell.dataConfidence?.sources?.join("/") || "推断"} · 自定义 ${format(cell.dataConfidence?.customizedSupport || 0, 2)}`,
+    cell.observedBathymetryDepthM !== null ? `导入海底水深 ${format(cell.observedBathymetryDepthM, 1)} m` : "",
+    cell.observedWaterTableDepthM !== null ? `导入地下水埋深 ${format(cell.observedWaterTableDepthM, 1)} m` : "",
     `${cell.landCover.code} · 土壤 ${cell.soilGroup.code} · 植被 ${format(sample.vegetation * 100, 0)}% · LAI ${format(sample.leafAreaIndex, 1)} · 冠层 ${format(sample.canopyHeight, 1)} m`,
     `${cell.vegetationType?.name || "植被"} · 韧性 ${format(cell.vegetationResilience || 0, 2)} · 碳储量 ${format(cell.biomassCarbonKgM2 || 0, 1)} kg/m2 · 冠层粗糙 ${format(cell.canopyRoughnessLengthM || 0, 2)} m`,
     ecology

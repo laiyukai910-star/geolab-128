@@ -245,6 +245,22 @@
               </div>
             </div>
             <div class="file-field">
+              <label for="bathymetryFile">海底水深 m，可多选</label>
+              <div class="file-picker">
+                <input id="bathymetryFile" class="file-picker-input" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
+                <button type="button" data-file-picker-for="bathymetryFile">选择文件</button>
+                <span class="file-picker-status" data-file-status-for="bathymetryFile" aria-live="polite">未选择文件</span>
+              </div>
+            </div>
+            <div class="file-field">
+              <label for="groundwaterFile">地下水埋深 m，可多选</label>
+              <div class="file-picker">
+                <input id="groundwaterFile" class="file-picker-input" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />
+                <button type="button" data-file-picker-for="groundwaterFile">选择文件</button>
+                <span class="file-picker-status" data-file-status-for="groundwaterFile" aria-live="polite">未选择文件</span>
+              </div>
+            </div>
+            <div class="file-field">
               <label for="soilFile">土壤 HSG/属性，可多选</label>
               <div class="file-picker">
                 <input id="soilFile" class="file-picker-input" type="file" accept=".tif,.tiff,.csv,.json,.geojson" multiple />

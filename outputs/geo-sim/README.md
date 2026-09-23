@@ -73,6 +73,7 @@ The 3D asset pipeline is also a reviewed TypeScript boundary. It controls monoto
 Supported local inputs include:
 
 - DEM GeoTIFF, CSV, or JSON;
+- bathymetric depth and depth-to-water rasters (GeoTIFF, CSV, JSON, or gridded GeoJSON), in metres below the active sea level and local ground surface respectively;
 - hydrologic soil group, saturated conductivity, available water capacity, and root depth;
 - land cover, vegetation fraction, canopy height, leaf-area index, and imperviousness;
 - gridded or time-series precipitation, temperature, wind speed, and wind direction;
@@ -80,6 +81,8 @@ Supported local inputs include:
 - discharge calibration metadata and dated observations.
 
 Raster adapters preserve source bounds, units, scale/offset metadata, NoData coverage, fill operations, and resampling method. Categorical layers use majority behavior where appropriate; continuous layers use window averaging when downsampled; wind direction uses circular averaging. Imported evidence remains distinguishable from modeled or gap-filled support.
+
+Positive bathymetric depths set the seabed elevation to `sea level - depth`; dry DEM elevations take precedence where both layers overlap. Groundwater depth constrains the subsurface water table within the modeled depth interval, with local borehole observations applied afterward. Zero depth is valid for groundwater; missing cells retain the model inference. Use a consistent vertical datum and aligned CRS/bounds when combining sources. The cell inspector, source-coverage report, and grid CSV expose the imported values separately from modeled results.
 
 ## Exports
 

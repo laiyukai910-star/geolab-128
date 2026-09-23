@@ -2,6 +2,8 @@ const NUMERIC_FIELDS = new Set([
   "dem",
   "elevation",
   "elevation_m",
+  "bathymetry_depth_m",
+  "water_table_depth_m",
   "value",
   "data",
   "precipitation",
@@ -202,6 +204,8 @@ export function mergeLayerBundle(target, parsed) {
     sources: [...(target?.sources || [])]
   };
   if (parsed.dem) next.dem = parsed.dem;
+  if (parsed.bathymetryDepth) next.bathymetryDepth = parsed.bathymetryDepth;
+  if (parsed.waterTableDepth) next.waterTableDepth = parsed.waterTableDepth;
   if (parsed.landCover) next.landCover = parsed.landCover;
   if (parsed.soilGroup) next.soilGroup = parsed.soilGroup;
   if (parsed.soilHydraulicConductivity) next.soilHydraulicConductivity = parsed.soilHydraulicConductivity;
@@ -231,6 +235,8 @@ export function summarizeLayerBundle(bundle) {
   }
   const layers = [];
   if (bundle.dem) layers.push("DEM");
+  if (bundle.bathymetryDepth) layers.push("海底水深");
+  if (bundle.waterTableDepth) layers.push("地下水位");
   if (bundle.soilHydraulicConductivity || bundle.availableWaterCapacity || bundle.rootDepth) layers.push("土壤水文");
   if (bundle.imperviousFraction) layers.push("不透水面");
   if (bundle.soilGroup) layers.push("土壤");
@@ -276,6 +282,8 @@ function normalizeLayerObject(input, role, sourceName) {
 
   const layerSpecs = [
     ["dem", ["dem", "elevation", "elevation_m"], Float32Array],
+    ["bathymetryDepth", ["bathymetryDepth", "bathymetry_depth_m", "bathymetry_depth", "water_depth_m"], Float32Array],
+    ["waterTableDepth", ["waterTableDepth", "water_table_depth_m", "water_table_depth", "groundwater_depth_m"], Float32Array],
     ["landCover", ["landCover", "land_cover", "landcover", "nlcd", "nlcd_class", "classvalue", "gridcode"], Uint16Array],
     ["soilGroup", ["soilGroup", "soil_group", "hydrologic_soil_group", "hydrologic_group", "hsg", "hydgrp", "hydgrpdcd", "soil"], Uint8Array],
     ["soilHydraulicConductivity", ["soilHydraulicConductivity", "soil_hydraulic_conductivity", "ksat_mm_hr", "hydraulic_conductivity_mm_hr"], Float32Array],
@@ -363,6 +371,8 @@ function parseLayerCSV(text, role, sourceName) {
   const parsed = { sources: [sourceName] };
   const layerColumns = [
     ["dem", ["dem", "elevation", "elevation_m"], Float32Array],
+    ["bathymetryDepth", ["bathymetry_depth_m", "bathymetry_depth", "water_depth_m"], Float32Array],
+    ["waterTableDepth", ["water_table_depth_m", "water_table_depth", "groundwater_depth_m"], Float32Array],
     ["landCover", ["landcover", "land_cover", "nlcd", "nlcd_class", "classvalue", "gridcode"], Uint16Array],
     ["soilGroup", ["soil", "soil_group", "hydrologic_soil_group", "hydrologic_group", "hsg", "hydgrp", "hydgrpdcd"], Uint8Array],
     ["soilHydraulicConductivity", ["soil_hydraulic_conductivity", "ksat_mm_hr", "hydraulic_conductivity_mm_hr"], Float32Array],
@@ -428,7 +438,8 @@ async function parseGeoTiff(buffer, role, sourceName) {
   const height = image.getHeight();
   const samples = Number(image.getSamplesPerPixel?.() || image.fileDirectory?.SamplesPerPixel || 1);
   const rasters = await image.readRasters({ interleave: true });
-  const noData = Number(image.getGDALNoData());
+  const declaredNoData = image.getGDALNoData();
+  const noData = declaredNoData == null ? Number.NaN : Number(declaredNoData);
   const meta = makeGeoTiffMeta(image, noData);
   const parsed = { sources: [sourceName] };
   const layerKey = inferGeoTiffLayerKey(role, sourceName);
@@ -514,6 +525,8 @@ function makeGeoTiffMeta(image, noData) {
 
 function inferGeoTiffLayerKey(role, sourceName) {
   const name = sourceName.toLowerCase();
+  if (role === "bathymetry") return "bathymetryDepth";
+  if (role === "groundwater") return "waterTableDepth";
   if (role === "soil") {
     if (/(ksat|hydraulic[_-]?conductivity|conductivity)/.test(name)) return "soilHydraulicConductivity";
     if (/(awc|available[_-]?water|plant[_-]?available[_-]?water)/.test(name)) return "availableWaterCapacity";
@@ -557,7 +570,7 @@ function makeRasterLayer(value, width, height, Type, meta, sourceName, semanticK
     width: inferred.width,
     height: inferred.height,
     data,
-    noData: Number.isFinite(Number(meta.noData)) ? Number(meta.noData) : Number.NaN,
+    noData: meta.noData == null ? Number.NaN : Number(meta.noData),
     sourceName,
     boundsKm: meta.boundsKm || meta.bounds_km ? normalizeBounds(meta.boundsKm || meta.bounds_km) : null,
     bounds: normalizeBounds(meta.bounds || meta.boundsKm || meta.bounds_km || DEFAULT_BOUNDS_KM),
@@ -587,7 +600,7 @@ function makeRasterLayer(value, width, height, Type, meta, sourceName, semanticK
 
 function normalizeRasterValues(value, semanticKey, meta = {}, Type = Float32Array) {
   const key = String(semanticKey || "");
-  const noData = Number(meta.noData);
+  const noData = meta.noData == null ? Number.NaN : Number(meta.noData);
   const raw = Array.from(value || [], (item) => {
     const parsed = parseCellValue(item, key);
     if (Number.isFinite(noData) && Number(parsed) === noData) return Number.NaN;
@@ -649,7 +662,7 @@ function rasterValueUnit(key, meta = {}) {
 function unitTransformForLayer(key, unit) {
   const text = String(unit || "").trim().toLowerCase();
   if (!text) return null;
-  if (["dem", "canopyHeight", "rootDepth"].includes(key)) return lengthToMetersTransform(text);
+  if (["dem", "bathymetryDepth", "waterTableDepth", "canopyHeight", "rootDepth"].includes(key)) return lengthToMetersTransform(text);
   if (["precipitation", "availableWaterCapacity"].includes(key)) return depthToMillimetersTransform(text);
   if (key === "soilHydraulicConductivity") return hydraulicConductivityToMmHrTransform(text);
   if (key === "temperature") return temperatureToCelsiusTransform(text);
@@ -720,6 +733,8 @@ function unitTransform(factor, offset, normalizedUnit, description) {
 function needsKnownUnit(key) {
   return [
     "dem",
+    "bathymetryDepth",
+    "waterTableDepth",
     "canopyHeight",
     "rootDepth",
     "precipitation",
@@ -734,7 +749,7 @@ function needsKnownUnit(key) {
 }
 
 function defaultModelUnit(key) {
-  if (["dem", "canopyHeight", "rootDepth"].includes(key)) return "m";
+  if (["dem", "bathymetryDepth", "waterTableDepth", "canopyHeight", "rootDepth"].includes(key)) return "m";
   if (["precipitation", "availableWaterCapacity"].includes(key)) return "mm";
   if (key === "soilHydraulicConductivity") return "mm/hr";
   if (key === "temperature") return "C";
@@ -810,7 +825,7 @@ function parseCellValue(value, key = "") {
   if (value == null || value === "" || String(value).toLowerCase() === "nodata") return Number.NaN;
   if (key === "soilGroup") return soilGroupToNumber(value);
   const n = Number(value);
-  return Number.isFinite(n) ? n : soilGroupToNumber(value);
+  return Number.isFinite(n) ? n : Number.NaN;
 }
 
 function parseMeteorologyTimeSeries(body, idx, sourceName) {
@@ -2353,6 +2368,8 @@ function medianSpacing(values) {
 function hasRasterLayer(parsed) {
   return Boolean(
     parsed.dem ||
+      parsed.bathymetryDepth ||
+      parsed.waterTableDepth ||
       parsed.landCover ||
       parsed.soilGroup ||
       parsed.soilHydraulicConductivity ||
@@ -2370,6 +2387,8 @@ function hasRasterLayer(parsed) {
 }
 
 function defaultLayerKeyForRole(role, sourceName) {
+  if (role === "bathymetry") return "bathymetryDepth";
+  if (role === "groundwater") return "waterTableDepth";
   if (role === "soil") return inferGeoTiffLayerKey(role, sourceName);
   if (role === "landCover") return inferGeoTiffLayerKey(role, sourceName);
   if (role === "met") {

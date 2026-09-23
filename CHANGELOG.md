@@ -4,6 +4,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Added local bathymetry and groundwater-depth raster inputs. Bathymetry informs seabed geometry, groundwater depth constrains the subsurface water table, and both are traceable in cell inspection, coverage reports, and grid exports. Fixed missing NoData metadata incorrectly masking valid zero-valued raster cells.
 - Fixed artificial terrain ridges blocking diagonal drainage: terrain meshes, river sampling and camera collision now share the same lower-saddle triangulation, including after terrain edits.
 - Fixed pinched sea outlets and water ribbons extending above the sea. River mouths retain incoming width, meet the shoreline at sea level and blend over a width-based distance. Shallow-bank appearance now uses local terrain depth.
 - Corrected atmospheric water-deficit sign to PET minus precipitation, so dry scenarios report a positive deficit and wet scenarios a negative surplus. Corrected the dimensional flood-marker height conversion by removing an erroneous 40x multiplier.

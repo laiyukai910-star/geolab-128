@@ -229,7 +229,9 @@ export const DATA_SOURCE_FLAGS = {
   calibration: 64,
   infrastructure: 128,
   subsurface: 256,
-  surfacePatches: 512
+  surfacePatches: 512,
+  bathymetry: 1024,
+  groundwater: 2048
 };
 
 export const SUBSURFACE_LITHOLOGY = LITHOLOGY_REFERENCE;
@@ -244,7 +246,8 @@ export const SUBSURFACE_EVIDENCE_FLAGS = Object.freeze({
   boreholeLithology: 64,
   boreholeHydraulicProperties: 128,
   hazardCoupling: 256,
-  infrastructureFeedback: 512
+  infrastructureFeedback: 512,
+  waterTableRaster: 1024
 });
 
 export const SUBSURFACE_MATERIAL_CLASSES = Object.freeze([
@@ -2416,6 +2419,10 @@ export function getCell(model, x, y) {
     y: gy,
     index: i,
     elevation: model.height[i],
+    observedBathymetryDepthM: Number.isFinite(model.externalResampled?.bathymetryDepth?.[i]) && model.externalResampled.bathymetryDepth[i] > 0
+      ? model.externalResampled.bathymetryDepth[i] : null,
+    observedWaterTableDepthM: Number.isFinite(model.externalResampled?.waterTableDepth?.[i]) && model.externalResampled.waterTableDepth[i] >= 0
+      ? model.externalResampled.waterTableDepth[i] : null,
     slope: model.slope[i],
     aspect: model.aspect?.[i] ?? 0,
     curvature: model.terrainDiagnostics?.curvature?.[i] ?? 0,
@@ -4792,7 +4799,7 @@ export function makeGridCSV(model) {
       "# does not. slope_factor_of_safety is dimensionless, and 1 is the threshold between stable and not.",
       "# water_deficit_mm is PET minus precipitation; positive means unmet atmospheric demand, not soil depletion."
     ].join("\n"),
-    "x_km,y_km,elevation_m,slope_deg,aspect_deg,curvature_1km,tpi_m,roughness_m,wetness_index,precip_mm_yr,temp_c,wind_speed_ms,wind_from_deg,wind_exposure,data_confidence,observed_source_count,data_source_mask,customized_support,climate,landcover,soil_hsg,vegetation_fraction,canopy_height_m,lai,vegetation_type,vegetation_resilience,biomass_carbon_kg_m2,canopy_roughness_m,ksat_mm_hr,awc_mm,root_depth_m,impervious_fraction,infiltration_capacity,root_cohesion,actual_et_mm_yr,water_balance_mm_yr,curve_number,runoff_coefficient,flow_acc_km2,discharge_index,flow_routing,flow_divergence,flow_velocity_ms,channel_width_m,channel_depth_m,shear_stress_pa,stream_power_w_m2,sediment_transport_index,erosion_risk,deposition_risk,flood_hazard,flood_depth_m,drought_stress,wildfire_risk,landslide_risk,hazard_index,cumulative_erosion_m,projected_vegetation_fraction,water_table_depth_m,bedrock_depth_m,aquifer_potential,fracture_risk,liquefaction_risk,subsurface_storage_mm,flood_depth_dimensional_m,flood_velocity_dimensional_ms,slope_factor_of_safety,water_deficit_mm,fine_fuel_moisture_fraction"
+    "x_km,y_km,elevation_m,slope_deg,aspect_deg,curvature_1km,tpi_m,roughness_m,wetness_index,precip_mm_yr,temp_c,wind_speed_ms,wind_from_deg,wind_exposure,data_confidence,observed_source_count,data_source_mask,customized_support,climate,landcover,soil_hsg,vegetation_fraction,canopy_height_m,lai,vegetation_type,vegetation_resilience,biomass_carbon_kg_m2,canopy_roughness_m,ksat_mm_hr,awc_mm,root_depth_m,impervious_fraction,infiltration_capacity,root_cohesion,actual_et_mm_yr,water_balance_mm_yr,curve_number,runoff_coefficient,flow_acc_km2,discharge_index,flow_routing,flow_divergence,flow_velocity_ms,channel_width_m,channel_depth_m,shear_stress_pa,stream_power_w_m2,sediment_transport_index,erosion_risk,deposition_risk,flood_hazard,flood_depth_m,drought_stress,wildfire_risk,landslide_risk,hazard_index,cumulative_erosion_m,projected_vegetation_fraction,water_table_depth_m,bedrock_depth_m,aquifer_potential,fracture_risk,liquefaction_risk,subsurface_storage_mm,flood_depth_dimensional_m,flood_velocity_dimensional_ms,slope_factor_of_safety,water_deficit_mm,fine_fuel_moisture_fraction,observed_bathymetry_depth_m,observed_water_table_depth_m"
   ];
   for (let y = 0; y < model.n; y += 1) {
     for (let x = 0; x < model.n; x += 1) {
@@ -4868,6 +4875,10 @@ export function makeGridCSV(model) {
           round(model.hazards?.dimensional?.factorOfSafety?.[i] ?? 0, 3),
           round(model.hazards?.dimensional?.waterDeficitMm?.[i] ?? 0, 1),
           round(model.hazards?.dimensional?.fineFuelMoisture?.[i] ?? 0, 4),
+          Number.isFinite(model.externalResampled?.bathymetryDepth?.[i]) && model.externalResampled.bathymetryDepth[i] > 0
+            ? round(model.externalResampled.bathymetryDepth[i], 3) : "",
+          Number.isFinite(model.externalResampled?.waterTableDepth?.[i]) && model.externalResampled.waterTableDepth[i] >= 0
+            ? round(model.externalResampled.waterTableDepth[i], 3) : "",
         ].join(",")
       );
     }
@@ -7481,12 +7492,19 @@ function createHeightField(n, params) {
   const externalDem = params.externalLayers?.dem
     ? resampleRaster(params.externalLayers.dem, n, Number.NaN, true, params.targetBounds, params.spatialContext)
     : null;
-  if (!externalDem) return procedural;
+  const bathymetryDepth = params.externalLayers?.bathymetryDepth
+    ? resampleRaster(params.externalLayers.bathymetryDepth, n, Number.NaN, "continuous", params.targetBounds, params.spatialContext, false)
+    : null;
+  if (!externalDem && !bathymetryDepth) return procedural;
 
   const height = new Float32Array(procedural.length);
   const weight = clamp(Number(params.externalDataWeight ?? 1), 0, 1);
+  const seaLevel = Number(params.seaLevel) || 0;
   for (let i = 0; i < height.length; i += 1) {
-    const real = externalDem[i];
+    const dem = externalDem?.[i];
+    const depth = bathymetryDepth?.[i];
+    const hasBathymetry = Number.isFinite(depth) && depth > 0 && (!Number.isFinite(dem) || dem <= seaLevel);
+    const real = hasBathymetry ? seaLevel - depth : dem;
     const synthetic = procedural[i];
     height[i] = Number.isFinite(real) ? lerp(synthetic, real, weight) : synthetic;
   }
@@ -8027,9 +8045,11 @@ function prepareExternalLayers(model, params) {
   model.externalStamp = stamp;
   model.externalResolution = model.n;
   const spatialContext = params.spatialContext || model.spatialContext || getSpatialContext(params);
-  const sample = (layer, fallback, mode) => resampleRaster(layer, model.n, fallback, mode, params.targetBounds, spatialContext);
+  const sample = (layer, fallback, mode, fillGaps = true) => resampleRaster(layer, model.n, fallback, mode, params.targetBounds, spatialContext, fillGaps);
   model.externalResampled = {
     dem: layers.dem ? sample(layers.dem, Number.NaN, "continuous") : null,
+    bathymetryDepth: layers.bathymetryDepth ? sample(layers.bathymetryDepth, Number.NaN, "continuous", false) : null,
+    waterTableDepth: layers.waterTableDepth ? sample(layers.waterTableDepth, Number.NaN, "continuous", false) : null,
     landCover: layers.landCover ? sample(layers.landCover, 0, "majority") : null,
     soilGroup: layers.soilGroup ? sample(layers.soilGroup, 0, "majority") : null,
     soilHydraulicConductivity: layers.soilHydraulicConductivity ? sample(layers.soilHydraulicConductivity, Number.NaN, "continuous") : null,
@@ -17956,6 +17976,7 @@ function computeSubsurfaceVolume(model, params = {}) {
   const columnLiquefactionRisk = new Float32Array(columnCellCount);
   const columnStorageMm = new Float32Array(columnCellCount);
   const columnExternalObserved = new Uint8Array(columnCellCount);
+  const columnBoreholeObserved = new Uint8Array(columnCellCount);
   const columnVoxelObservedSupport = new Float32Array(columnCellCount);
   const columnInferenceReliability = new Float32Array(columnCellCount);
   const columnEngineeringRisk = new Float32Array(columnCellCount);
@@ -18032,13 +18053,16 @@ function computeSubsurfaceVolume(model, params = {}) {
       const valleyFill = clamp(wetnessNorm * 0.45 + flowNorm * 0.35 + (1 - slopeNorm) * 0.18, 0, 1);
       const builtMask = model.infrastructureInfluence?.mask?.[sourceIndex] ? 1 : 0;
       const controlProximity = nearestSubsurfaceControlProximity(controlPoints, gx, gy, gridN, model.sizeKm || MAP_SIZE_KM);
+      const rasterWaterTableDepth = model.externalResampled?.waterTableDepth?.[sourceIndex];
+      const hasRasterWaterTable = Number.isFinite(rasterWaterTableDepth) && rasterWaterTableDepth >= 0 && rasterWaterTableDepth <= depthM;
       const baseEvidenceMask =
         SUBSURFACE_EVIDENCE_FLAGS.terrainMorphology |
         SUBSURFACE_EVIDENCE_FLAGS.surfaceHydrology |
         SUBSURFACE_EVIDENCE_FLAGS.soilHydraulic |
         SUBSURFACE_EVIDENCE_FLAGS.metRecharge |
         (Number(params.disasterIntensity ?? 0) > 0 ? SUBSURFACE_EVIDENCE_FLAGS.hazardCoupling : 0) |
-        (builtMask ? SUBSURFACE_EVIDENCE_FLAGS.infrastructureFeedback : 0);
+        (builtMask ? SUBSURFACE_EVIDENCE_FLAGS.infrastructureFeedback : 0) |
+        (hasRasterWaterTable ? SUBSURFACE_EVIDENCE_FLAGS.waterTableRaster : 0);
       const surfaceInputSupport =
         (params.externalLayers?.dem ? 0.055 : 0) +
         (params.externalLayers?.soil ? 0.045 : 0) +
@@ -18062,9 +18086,14 @@ function computeSubsurfaceVolume(model, params = {}) {
         0.35,
         depthM * 0.94
       );
+      if (hasRasterWaterTable) {
+        waterTableDepth = blendObservedScalar(waterTableDepth, rasterWaterTableDepth, depthM, 0.88);
+        columnExternalObserved[columnIndex] = 1;
+      }
       const columnControl = externalControl.byColumn.get(columnIndex);
       if (columnControl) {
         columnExternalObserved[columnIndex] = 1;
+        columnBoreholeObserved[columnIndex] = 1;
         externalControl.stats.affectedColumnCount += 1;
         if (Number.isFinite(columnControl.waterTableDepthM)) {
           externalControl.stats.waterTableResidualSumM += Math.abs(waterTableDepth - columnControl.waterTableDepthM);
@@ -18133,7 +18162,7 @@ function computeSubsurfaceVolume(model, params = {}) {
         const aquifer = clamp(saturation * layerPorosity * clamp(Math.log1p(layerPermeability) / Math.log1p(28), 0, 1.2), 0, 1);
         const voxelIndex = layer * columnCellCount + columnIndex;
         let evidenceMask = baseEvidenceMask;
-        let observedSupport = surfaceInputSupport + controlProximity * 0.22;
+        let observedSupport = surfaceInputSupport + controlProximity * 0.22 + (hasRasterWaterTable ? 0.16 : 0);
         if (Number.isFinite(columnControl?.waterTableDepthM)) {
           evidenceMask |= SUBSURFACE_EVIDENCE_FLAGS.boreholeWaterTable;
           observedSupport += 0.16;
@@ -18327,6 +18356,7 @@ function computeSubsurfaceVolume(model, params = {}) {
     columnLiquefactionRisk,
     columnStorageMm,
     columnExternalObserved,
+    columnBoreholeObserved,
     columnVoxelObservedSupport,
     columnInferenceReliability,
     columnEngineeringRisk,
@@ -18898,7 +18928,14 @@ function computeDataConfidence(model, params = {}) {
 
   for (let i = 0; i < len; i += 1) {
     if (model.height[i] <= Number(params.seaLevel)) {
-      inferredFraction[i] = 1;
+      const depth = external.bathymetryDepth?.[i];
+      if (Number.isFinite(depth) && depth > 0) {
+        sourceMask[i] = DATA_SOURCE_FLAGS.bathymetry;
+        sourceCount[i] = 1;
+        observedSupport[i] = 0.2;
+        inferredFraction[i] = 0.8;
+        domainCounts.bathymetry += 1;
+      } else inferredFraction[i] = 1;
       continue;
     }
     landCells += 1;
@@ -18915,6 +18952,7 @@ function computeDataConfidence(model, params = {}) {
     };
 
     if (Number.isFinite(external.dem?.[i])) add("dem", 0.2);
+    if (Number.isFinite(external.waterTableDepth?.[i]) && external.waterTableDepth[i] >= 0 && external.waterTableDepth[i] <= model.subsurface?.depthM) add("groundwater", 0.07);
     if ((external.soilGroup?.[i] ?? 0) > 0 || Number.isFinite(external.soilHydraulicConductivity?.[i]) || Number.isFinite(external.availableWaterCapacity?.[i]) || Number.isFinite(external.rootDepth?.[i])) {
       const soilDetail =
         ((external.soilGroup?.[i] ?? 0) > 0 ? 0.05 : 0) +
@@ -18942,7 +18980,7 @@ function computeDataConfidence(model, params = {}) {
     if (model.hydrologyConstraint?.mask?.[i]) add("flowlines", 0.08);
     if (hasCalibration) add("calibration", 0.045 + flowNorm * 0.045);
     if (model.infrastructureInfluence?.mask?.[i]) add("infrastructure", 0.06);
-    if (subsurfaceColumnValue(model, "columnExternalObserved", i, 0) > 0) add("subsurface", 0.04);
+    if (subsurfaceColumnValue(model, "columnBoreholeObserved", i, 0) > 0) add("subsurface", 0.04);
     if (model.surfacePatchInfluence?.mask?.[i]) {
       mask |= DATA_SOURCE_FLAGS.surfacePatches;
       custom += 0.52;
@@ -19556,7 +19594,7 @@ function resolveMapSizeKm(params = {}) {
   return clamp(raw, Math.min(...SUPPORTED_MAP_SIZES_KM), Math.max(...SUPPORTED_MAP_SIZES_KM));
 }
 
-function resampleRaster(layer, n, fallback, mode = "bilinear", targetBounds = [0, 0, MAP_SIZE_KM, MAP_SIZE_KM], spatialContext = null) {
+function resampleRaster(layer, n, fallback, mode = "bilinear", targetBounds = [0, 0, MAP_SIZE_KM, MAP_SIZE_KM], spatialContext = null, fillGaps = true) {
   if (!layer?.data || !layer.width || !layer.height) return null;
   const out = new Float32Array(n * n);
   const requestedMode = mode === true ? "bilinear" : mode === false ? "nearest" : String(mode || "bilinear");
@@ -19598,7 +19636,17 @@ function resampleRaster(layer, n, fallback, mode = "bilinear", targetBounds = [0
       }
     }
   }
-  const gapDiagnostics = fillNearestRasterGaps(out, n, fallback, actualMode);
+  const unfilledCoverage = fillGaps ? null : finiteCoverage(out);
+  const gapDiagnostics = fillGaps
+    ? fillNearestRasterGaps(out, n, fallback, actualMode)
+    : {
+        method: "none",
+        rawCoverage: unfilledCoverage,
+        effectiveCoverage: unfilledCoverage,
+        filledCellCount: 0,
+        unfilledGapCellCount: out.length - Math.round(unfilledCoverage * out.length),
+        maxDistanceCells: 0
+      };
   out.resamplingMethod = actualMode;
   out.rawCoverage = gapDiagnostics.rawCoverage;
   out.effectiveCoverage = gapDiagnostics.effectiveCoverage;
@@ -19917,6 +19965,8 @@ function buildExternalQualityReport(layers, resampled, targetBounds, n, spatialC
   const report = [];
   const specs = [
     ["dem", layers.dem, resampled.dem],
+    ["bathymetryDepth", layers.bathymetryDepth, resampled.bathymetryDepth],
+    ["waterTableDepth", layers.waterTableDepth, resampled.waterTableDepth],
     ["landCover", layers.landCover, resampled.landCover],
     ["soilGroup", layers.soilGroup, resampled.soilGroup],
     ["soilHydraulicConductivity", layers.soilHydraulicConductivity, resampled.soilHydraulicConductivity],

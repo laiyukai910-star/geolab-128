@@ -144,7 +144,7 @@ const hazards = model.hazards;
     "every header column must have exactly one row value, or the export is misaligned: header " +
     header.length + " against " + nonEmpty.length + " values");
 
-  // The dimensional columns are present, at the end, and each is wired to its own quantity.
+  // The dimensional columns retain their established positions as a contiguous block.
   const dimensionalColumns = [
     ["flood_depth_dimensional_m", "dimensional?.floodDepthM"],
     ["flood_velocity_dimensional_ms", "dimensional?.floodVelocityMs"],
@@ -152,11 +152,12 @@ const hazards = model.hazards;
     ["water_deficit_mm", "dimensional?.waterDeficitMm"],
     ["fine_fuel_moisture_fraction", "dimensional?.fineFuelMoisture"]
   ];
-  for (const [name, expression] of dimensionalColumns) {
+  const dimensionalStart = header.indexOf(dimensionalColumns[0][0]);
+  for (const [offset, [name, expression]] of dimensionalColumns.entries()) {
     const index = header.indexOf(name);
     assert.ok(index >= 0, name + " must be exported");
-    assert.ok(index >= header.length - dimensionalColumns.length,
-      name + " must be appended at the end, so no existing column moves");
+    assert.equal(index, dimensionalStart + offset,
+      name + " must retain its position in the dimensional block");
     assert.ok(nonEmpty[index].includes(expression),
       name + " must be wired to " + expression + ", got " + nonEmpty[index].slice(0, 60));
   }
