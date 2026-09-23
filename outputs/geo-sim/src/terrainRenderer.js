@@ -2040,6 +2040,8 @@ export class TerrainRenderer {
       roofs: [],
       industrial: [],
       civic: [],
+      evacuationShelters: [],
+      riverHatcheries: [],
       caps: [],
       facadeBands: [],
       facadeVerticals: [],
@@ -2228,6 +2230,7 @@ export class TerrainRenderer {
           });
         }
 
+        if (type === "evacuation_shelter" || type === "river_hatchery") continue;
         if (buildingBudget <= 0 || !isBuildingType(type, density, heightM, landmarkHeightM)) continue;
         const instanceCount = buildingInstancesFor(type, density, x, y, seed);
         for (let k = 0; k < instanceCount && buildingBudget > 0; k += 1) {
@@ -2426,6 +2429,8 @@ export class TerrainRenderer {
     addInstancedBox(this.infrastructureGroup, "错落低层住宅", buckets.lowrise, 0xc2aa8a, { geometryFactory: (variant) => createAssetGeometry("l-plan-lowrise", budgetPlan.quality, variant), roughness: 0.82, metalness: 0.01 });
     addInstancedBox(this.infrastructureGroup, "锯齿顶工业厂房", buckets.industrial, 0x9c9a91, { geometryFactory: (variant) => createAssetGeometry("sawtooth-industrial", budgetPlan.quality, variant), roughness: 0.78, metalness: 0.04 });
     addInstancedBox(this.infrastructureGroup, "多翼公共设施", buckets.civic, 0xc8bc96, { geometryFactory: (variant) => createAssetGeometry("cross-plan-civic", budgetPlan.quality, variant), roughness: 0.72, metalness: 0.02 });
+    addInstancedBox(this.infrastructureGroup, "应急避难中心", buckets.evacuationShelters, 0xcbd4ce, { roughness: 0.66, metalness: 0.04 });
+    addInstancedBox(this.infrastructureGroup, "河流育苗设施", buckets.riverHatcheries, 0xa9c5c2, { roughness: 0.62, metalness: 0.04 });
     addInstancedBox(this.infrastructureGroup, "四坡脊屋顶", buckets.roofs, 0x875d43, { geometryFactory: (variant) => createAssetGeometry("hipped-roof", budgetPlan.quality, variant), roughness: 0.88 });
     addInstancedBox(this.infrastructureGroup, "塔楼顶冠", buckets.caps, 0xd7dfdf, { roughness: 0.48, metalness: 0.08 });
     addInstancedBox(this.infrastructureGroup, "立面横带", buckets.facadeBands, 0x66808e, { roughness: 0.56, metalness: 0.14 });
@@ -2880,6 +2885,17 @@ function addFacilityCell(buckets, cellInfo) {
     suitability,
     environment
   });
+  if (type === "evacuation_shelter" || type === "river_hatchery") {
+    const shelter = type === "evacuation_shelter";
+    const height = visualBuildingHeight(Math.max(heightM || 0, shelter ? 14 : 9), scaledVertical);
+    const width = Math.max(0.045, Math.min(cell * (shelter ? 0.2 : 0.22), shelter ? 0.11 : 0.12));
+    (shelter ? buckets.evacuationShelters : buckets.riverHatcheries).push({
+      x: base.x, y: base.y + height / 2, z: base.z,
+      sx: width, sy: height, sz: width * (shelter ? 0.9 : 1.05),
+      ry: angle, color: shelter ? 0xcbd4ce : 0xa9c5c2
+    });
+    return used + 1;
+  }
   if (type === "reservoir") {
     buckets.reservoirs.push({
       x: base.x,

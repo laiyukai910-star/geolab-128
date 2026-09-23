@@ -44,11 +44,13 @@ const MIN_TRIANGLES = Object.freeze({
   "greenhouse-bay": 1110,      // measured 1480
   "stadium-bowl": 2769,        // measured 9620
   "observatory-dome": 2397,    // measured 3132
-  "crane-boom": 4752           // measured 6336
+  "crane-boom": 4752,          // measured 6336
+  "evacuation-shelter": 13770, // measured 18360
+  "river-hatchery": 9655      // measured 12874
 });
 
-assert.equal(REBUILT_FACILITY_KINDS.length, 21, "21 rebuilt facility kinds");
-assert.equal(new Set(REBUILT_FACILITY_KINDS).size, 21, "facility kinds must be unique");
+assert.equal(REBUILT_FACILITY_KINDS.length, 23, "23 rebuilt facility kinds");
+assert.equal(new Set(REBUILT_FACILITY_KINDS).size, 23, "facility kinds must be unique");
 assert.deepEqual(Object.keys(MIN_TRIANGLES).sort(), [...REBUILT_FACILITY_KINDS].sort(), "every kind needs a measured triangle floor");
 
 const coordinateBytes = geometry => {

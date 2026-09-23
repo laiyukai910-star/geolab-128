@@ -10,7 +10,8 @@ export const REBUILT_FACILITY_KINDS = Object.freeze([
   "cross-plan-civic", "hipped-roof", "tapered-landmark", "process-tank",
   "water-tower-tank", "tunnel-portal", "utility-gallery", "buttress-dam",
   "stepped-spillway", "bridge-pier", "crowned-road", "solar-panel-frame",
-  "turbine-blade", "greenhouse-bay", "stadium-bowl", "observatory-dome", "crane-boom"
+  "turbine-blade", "greenhouse-bay", "stadium-bowl", "observatory-dome", "crane-boom",
+  "evacuation-shelter", "river-hatchery"
 ]);
 
 // Normalized display envelopes retain existing placement transforms and pivots.
@@ -25,7 +26,7 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     geometry.translate(...position);
     const rgb = new THREE.Color(color), values = new Float32Array(geometry.attributes.position.count * 3);
     const response = new Float32Array(geometry.attributes.position.count * 2);
-    const glazed = [glass,0x679aaa,0x94bdb1,0xaccdc0].includes(color);
+    const glazed = [glass,0x679aaa,0x94bdb1,0xaccdc0,0x78b8ba].includes(color);
     const metallic = color === metal;
     for(let i=0;i<response.length;i+=2){response[i]=glazed?0.18:metallic?0.40:0.86;response[i+1]=metallic?0.55:0;}
     for (let i = 0; i < values.length; i += 3) rgb.toArray(values, i);
@@ -171,6 +172,51 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     // Rainwater butt and downpipe on the flank.
     cylinder([-w / 2 - 0.04, -0.40, 0.14], 0.045, 0.16, 0x7f8a86);
     tube([[-w / 2 + 0.01, -0.30, 0.20], [-w / 2 - 0.04, -0.34, 0.17]], 0.008, metal);
+  } else if (kind === "evacuation-shelter") {
+    // Accessible raised floor, sheltered entrance, backup storage and a working roof silhouette.
+    box([0,-0.46,0],[0.98,0.08,0.88],0x9ba6a0,0.012);
+    block([0,-0.12,-0.04],[0.90,0.64,0.72],2,4+tier);
+    roof(0,0.21,-0.04,0.96,0.13,0.78);
+    box([0,-0.34,0.35],[0.36,0.025,0.20],0xd1d4c7);
+    for(const x of [-0.16,0.16])cylinder([x,-0.30,0.43],0.012,0.20,metal);
+    put(new THREE.BoxGeometry(0.36,0.025,0.25),0xb8c2bd,[0,-0.42,0.48],[-0.35,0,0]);
+    for(const x of [-0.18,0.18])tube([[x,-0.34,0.42],[x,-0.40,0.48],[x,-0.43,0.56]],0.006,metal);
+    for(const x of [-0.32,0.32]){
+      box([x,0.275,-0.29],[0.07,0.045,0.07],metal,0.002);
+      cylinder([x,0.36,-0.29],0.060,0.13,0x8fa8ac);
+      ring(0.061,0.005,[x,0.42,-0.29],trim);
+      tube([[x,0.29,-0.23],[x,0.18,-0.23],[x+0.04,0.13,-0.23]],0.009,metal);
+    }
+    for(const side of [-1,1])for(let col=0;col<2+tier;col++){
+      const x=side*(0.12+col*0.17/(1+tier));
+      const roofY=0.21+0.13*(1-Math.abs(x)/0.48);
+      const pitch=-side*Math.atan2(0.13,0.48);
+      put(new THREE.BoxGeometry(0.11,0.008,0.18),0x679aaa,[x,roofY+0.012,0.07],[0,0,pitch]);
+      for(const z of [-0.02,0.16])put(new THREE.BoxGeometry(0.11,0.004,0.005),metal,[x,roofY+0.017,z],[0,0,pitch]);
+    }
+  } else if (kind === "river-hatchery") {
+    // Open raceways are modeled as separate walls and a recessed water plane, not solid blue blocks.
+    box([0,-0.47,0],[0.98,0.06,0.96],0x9aa7a2,0.006);
+    block([-0.31,-0.21,-0.08],[0.34,0.48,0.72],1,2+tier);
+    roof(-0.31,0.05,-0.08,0.38,0.13,0.78);
+    const lanes=3+tier;
+    for(let lane=0;lane<lanes;lane++){
+      const x=0.02+lane*0.42/(lanes-1),width=0.32/lanes;
+      box([x,-0.43,0],[width,0.025,0.75],0xcbd2cd,0.002);
+      for(const side of [-1,1])box([x+side*width*0.49,-0.36,0],[0.012,0.16,0.77],0xd1d4cf,0.001);
+      for(const z of [-0.38,0.38])box([x,-0.36,z],[width,0.16,0.012],0xd1d4cf,0.001);
+      box([x,-0.305,0],[width-0.024,0.012,0.72],0x348fa3,0.001);
+      for(const z of [-0.22,0.02,0.25])box([x,-0.296,z],[width-0.034,0.002,0.007],0x9dcbd0,0.0004);
+      tube([[x,-0.21,-0.43],[x,-0.29,-0.43],[x,-0.29,-0.31]],0.009,metal);
+      for(let aerator=0;aerator<2+tier;aerator++){
+        const z=-0.26+aerator*0.52/(1+tier);
+        cylinder([x,-0.33,z],0.015,0.035,trim);
+        ring(0.02,0.003,[x,-0.31,z],metal);
+      }
+    }
+    box([0.24,-0.26,0.42],[0.43,0.025,0.08],0xabbab7,0.002);
+    for(const x of [0.02,0.44])cylinder([x,-0.37,0.43],0.009,0.2,metal);
+    tube([[-0.18,-0.16,-0.34],[-0.02,-0.16,-0.34],[0.44,-0.16,-0.34]],0.018,0x7c979c);
   } else if (kind === "tapered-landmark") {
     const points = Array.from({length:17},(_,i)=>new THREE.Vector2(0.38*(1-i/22)+0.055*Math.sin(i/16*Math.PI*2),i/16-0.5));
     put(new THREE.LatheGeometry(points,radial*2),glass);

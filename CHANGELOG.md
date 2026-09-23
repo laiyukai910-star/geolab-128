@@ -4,6 +4,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Added evacuation shelters and river hatcheries as selectable, environment-screened facilities with separate 3D assemblies, ecosystem roles, and site-impact defaults. Added dedicated presets for six existing specialized facilities whose UI previously used generic values.
 - Added local bathymetry and groundwater-depth raster inputs. Bathymetry informs seabed geometry, groundwater depth constrains the subsurface water table, and both are traceable in cell inspection, coverage reports, and grid exports. Fixed missing NoData metadata incorrectly masking valid zero-valued raster cells.
 - Fixed artificial terrain ridges blocking diagonal drainage: terrain meshes, river sampling and camera collision now share the same lower-saddle triangulation, including after terrain edits.
 - Fixed pinched sea outlets and water ribbons extending above the sea. River mouths retain incoming width, meet the shoreline at sea level and blend over a width-based distance. Shallow-bank appearance now uses local terrain depth.

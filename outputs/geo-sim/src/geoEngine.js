@@ -157,7 +157,9 @@ export const INFRASTRUCTURE_TYPE_CODES = Object.freeze({
   water_treatment_plant: 59,
   mountain_refuge: 60,
   ferry_terminal: 61,
-  fire_watch_tower: 62
+  fire_watch_tower: 62,
+  evacuation_shelter: 63,
+  river_hatchery: 64
 });
 
 export const INFRASTRUCTURE_CODE_TYPES = Object.freeze(
@@ -918,7 +920,9 @@ const INFRASTRUCTURE_TYPE_LABELS_ZH = Object.freeze({
   water_treatment_plant: "净水厂",
   mountain_refuge: "山地避难所",
   ferry_terminal: "渡轮码头",
-  fire_watch_tower: "森林火情瞭望塔"
+  fire_watch_tower: "森林火情瞭望塔",
+  evacuation_shelter: "应急避难中心",
+  river_hatchery: "河流育苗设施"
 });
 
 export const GEOMORPHOLOGY_PRESETS = Object.freeze([
@@ -9618,6 +9622,36 @@ function infrastructureDefaults(type) {
       floorCount: 2,
       landmarkHeightM: 38
     },
+    evacuation_shelter: {
+      radiusKm: 0.58,
+      lineRadiusKm: 0.17,
+      imperviousFraction: 0.32,
+      runoffDelta: 0.05,
+      roughnessDelta: 0.05,
+      temperatureDeltaC: 0.28,
+      storageMm: 80,
+      flowRetention: 0.08,
+      waterDemandMm: 65,
+      vegetationDelta: -0.05,
+      buildingDensity: 0.18,
+      buildingHeightM: 14,
+      floorCount: 2
+    },
+    river_hatchery: {
+      radiusKm: 0.54,
+      lineRadiusKm: 0.17,
+      imperviousFraction: 0.26,
+      runoffDelta: 0.035,
+      roughnessDelta: 0.035,
+      temperatureDeltaC: 0.12,
+      storageMm: 55,
+      flowRetention: 0.09,
+      waterDemandMm: 85,
+      vegetationDelta: -0.05,
+      buildingDensity: 0.13,
+      buildingHeightM: 9,
+      floorCount: 1
+    },
     visitor_center: {
       radiusKm: 0.72,
       lineRadiusKm: 0.18,
@@ -9808,6 +9842,62 @@ function infrastructureEnvironmentalRequirements(type, impact = {}) {
     neighborhoodCapSensitivity: 0.44,
     requirementSummary: "balanced terrain, drainage, hazard, vegetation, and existing surface suitability"
   };
+
+  if (key === "evacuation_shelter") {
+    return {
+      ...base,
+      className: "emergency-civic",
+      minSuitability: 0.42,
+      coverageFraction: 0.22,
+      blockCoverageFraction: 0.12,
+      maximumChance: 0.48,
+      slopeIdealDeg: 3,
+      slopeLimitDeg: 14,
+      wetnessTarget: 0.18,
+      wetnessTolerance: 0.3,
+      flowTarget: 0.12,
+      flowTolerance: 0.34,
+      elevationTargetM: 280,
+      elevationToleranceM: 1600,
+      elevationWeight: 0.08,
+      imperviousTarget: 0.26,
+      imperviousTolerance: 0.44,
+      floodSensitivity: 0.9,
+      landslideSensitivity: 0.84,
+      wildfireSensitivity: 0.46,
+      buildingAdaptationPenalty: 0.58,
+      structureSelectivity: 0.78,
+      neighborhoodCapSensitivity: 0.7,
+      requirementSummary: "accessible stable ground above local flood exposure, low landslide risk, and emergency water storage"
+    };
+  }
+  if (key === "river_hatchery") {
+    return {
+      ...base,
+      className: "river-hatchery",
+      minSuitability: 0.38,
+      coverageFraction: 0.24,
+      blockCoverageFraction: 0.13,
+      maximumChance: 0.5,
+      slopeIdealDeg: 2,
+      slopeLimitDeg: 11,
+      wetnessTarget: 0.68,
+      wetnessTolerance: 0.34,
+      flowTarget: 0.72,
+      flowTolerance: 0.35,
+      vegetationTarget: 0.38,
+      vegetationTolerance: 0.5,
+      imperviousTarget: 0.16,
+      imperviousTolerance: 0.42,
+      floodSensitivity: 0.78,
+      landslideSensitivity: 0.58,
+      droughtSensitivity: 0.48,
+      buildingAdaptationPenalty: 0.38,
+      structureSelectivity: 0.72,
+      neighborhoodCapSensitivity: 0.58,
+      requirementSummary: "flowing freshwater access on a low-slope, flood-protected land pad; water quality is not verified by this model"
+    };
+  }
 
   if (["highrise", "commercial", "landmark", "hospital", "office_tower"].includes(key)) {
     return {
@@ -11082,6 +11172,14 @@ function infrastructureRequirementAssessment(input) {
   if (type === "fire_watch_tower") {
     add("fire-watch-visibility-ridge-too-weak", Math.max(0.34 - input.roughness, 0.28 - (input.components?.elevationScore ?? 1), input.wetness - 0.48), 0.05);
     add("fire-watch-smoke-or-slope-exposure", Math.max(input.wildfire - 0.68, input.landslide - 0.62, input.flood - 0.46), 0.08);
+  }
+  if (type === "evacuation_shelter") {
+    add("shelter-flood-or-landslide-exposure", Math.max(input.flood - 0.24, input.landslide - 0.32), 0.06);
+    add("shelter-access-pad-too-steep", input.slope / Math.max(1, slopeLimit) - 0.62, 0.08);
+  }
+  if (type === "river_hatchery") {
+    add("hatchery-flow-access-too-weak", Math.max(0.4 - input.flow, 0.34 - input.wetness), 0.06);
+    add("hatchery-flood-or-drought-exposure", Math.max(input.flood - 0.4, input.drought - 0.64), 0.08);
   }
   if (type === "visitor_center") {
     add("visitor-center-access-shelf-required", Math.max(input.slope / Math.max(1, slopeLimit) - 0.66, input.flood - 0.38, input.landslide - 0.48), 0.08);
@@ -12392,6 +12490,9 @@ function infrastructureFacilitySubsurfaceDemand(type, profile = {}) {
   if (key === "water_treatment_plant" || className === "water-treatment-intake-control") {
     return { foundation: 0.54, excavation: 0.28, aquiferProtection: 0.72, monitoringBenefit: 0.18 };
   }
+  if (key === "river_hatchery") {
+    return { foundation: 0.46, excavation: 0.18, aquiferProtection: 0.58, monitoringBenefit: 0.08 };
+  }
   if (key === "ferry_terminal" || className === "shoreline-ferry-access") {
     return { foundation: 0.42, excavation: 0.28, aquiferProtection: 0.22, monitoringBenefit: 0.04 };
   }
@@ -12419,6 +12520,12 @@ function infrastructureFacilitySubsurfaceDemand(type, profile = {}) {
 function infrastructureFacilityProcessFit(type, profile, state) {
   const openDry = clamp((1 - state.wetness) * 0.36 + (1 - state.vegetation) * 0.34 + state.slopeScore * 0.3, 0, 1);
   const stableFoundation = clamp(state.foundation * 0.34 + state.subsurfaceScore * 0.22 + state.capacity * 0.24 + state.slopeScore * 0.14 + state.hazardScore * 0.06, 0, 1);
+  if (type === "evacuation_shelter") {
+    return clamp(stableFoundation * 0.42 + state.capacity * 0.2 + (1 - state.flood) * 0.22 + state.slopeScore * 0.16, 0, 1);
+  }
+  if (type === "river_hatchery") {
+    return clamp(state.flowScore * 0.3 + state.wetnessScore * 0.2 + (1 - state.flood) * 0.18 + state.slopeScore * 0.16 + state.subsurfaceScore * 0.16, 0, 1);
+  }
   if (profile.className === "high-clear-sky-research") {
     return clamp((state.elevationScore ?? 1) * 0.34 + (1 - state.wetness) * 0.2 + (1 - state.vegetation) * 0.18 + state.roughness * 0.12 + state.windScore * 0.08 + state.hazardScore * 0.08, 0, 1);
   }
@@ -12507,7 +12614,7 @@ function infrastructureFacilityProcessMultiplier(profile, processFit) {
   const fit = clamp(Number(processFit) || 0, 0, 1);
   if (profile.className === "hydraulic-control") return 0.28 + fit * 0.72;
   if (profile.className === "distributed-water-storage") return 0.4 + fit * 0.6;
-  if (["high-clear-sky-research", "ridge-access-station", "floodplain-pumping-control", "coastal-water-production", "hydropower-head-control", "geothermal-fracture-production", "water-treatment-intake-control", "alpine-refuge-safety", "shoreline-ferry-access", "high-visibility-fire-watch", "visitor-access-hub", "scenic-viewpoint", "low-impact-trail-access", "conservation-management", "hydrometric-monitoring"].includes(profile.className)) return 0.34 + fit * 0.66;
+  if (["high-clear-sky-research", "ridge-access-station", "floodplain-pumping-control", "coastal-water-production", "hydropower-head-control", "geothermal-fracture-production", "water-treatment-intake-control", "alpine-refuge-safety", "shoreline-ferry-access", "high-visibility-fire-watch", "visitor-access-hub", "scenic-viewpoint", "low-impact-trail-access", "conservation-management", "hydrometric-monitoring", "river-hatchery"].includes(profile.className)) return 0.34 + fit * 0.66;
   if (profile.className === "renewable-field") return 0.38 + fit * 0.62;
   if (profile.className === "large-flat-utility" || profile.className === "compact-critical-built") return 0.44 + fit * 0.56;
   if (profile.className === "agricultural-service") return 0.42 + fit * 0.58;
@@ -12691,6 +12798,8 @@ function infrastructureAdaptationProfileClass(type, profile = {}) {
     mountain_refuge: "alpine-refuge-safety-node",
     ferry_terminal: "shoreline-ferry-terminal",
     fire_watch_tower: "high-visibility-fire-watch-tower",
+    evacuation_shelter: "emergency-shelter-dry-access",
+    river_hatchery: "freshwater-hatchery-protected-intake",
     flood_pump_station: "wet-corridor-hydraulic-control",
     dam: "wet-corridor-hydraulic-control",
     canal: "wet-corridor-hydraulic-control",
@@ -12764,6 +12873,8 @@ function infrastructureAdaptationHardConstraints(type, profile = {}) {
   if (key === "mountain_refuge") constraints.push("weather-shelter", "emergency-access-redundancy");
   if (key === "ferry_terminal") constraints.push("grade-controlled-berth", "water-adjacent-compatible");
   if (key === "fire_watch_tower") constraints.push("visibility-ridge", "weather-shelter");
+  if (key === "evacuation_shelter") constraints.push("dry-emergency-access", "stable-foundation", "backup-water-storage");
+  if (key === "river_hatchery") constraints.push("freshwater-flow-access", "flood-protected-raceways", "water-quality-field-check");
   if (["desalination_plant", "port", "wastewater", "powerplant", "ferry_terminal", "water_treatment_plant"].includes(key) || profile.allowsWater) constraints.push("water-adjacent-compatible");
   if (key === "wind_farm") constraints.push("spacing-buffer", "wind-exposure");
   if (key === "solar_farm") constraints.push("solar-exposure", "low-shading-buffer");
@@ -12793,6 +12904,8 @@ function infrastructureAdaptationPositiveSitingFactors(type, profile = {}, state
   if (key === "mountain_refuge") factors.push("ridge-shelter", "emergency-access", "weather-safe-pad", "low-impact-footprint");
   if (key === "ferry_terminal") factors.push("shoreline-berth", "waterfront-access", "grade-controlled-approach", "transport-linkage");
   if (key === "fire_watch_tower") factors.push("fire-lookout", "visibility-ridge", "monitoring-coverage", "small-footprint");
+  if (key === "evacuation_shelter") factors.push("low-hazard-access-node", "dry-access", "stable-foundation", "emergency-water-storage");
+  if (key === "river_hatchery") factors.push("flowing-freshwater-access", "low-slope-pad", "flood-protected-intake");
   if (["flood_pump_station", "dam", "canal", "levee", "reservoir"].includes(key)) factors.push("wet-flow-corridor", "low-slope-outfall", "hydraulic-service-gap");
   if (["desalination_plant", "port", "wastewater", "powerplant"].includes(key)) factors.push("waterfront-intake-outfall", "service-corridor-access", "protected-pad");
   if (key === "wind_farm") factors.push("wind-exposure", "open-vegetation", "ridge-or-plain-spacing");
@@ -12820,8 +12933,8 @@ function infrastructureAdaptationRiskSensitivityFactors(type, profile = {}) {
   if (Number(profile.neighborhoodCapSensitivity) >= 0.58) factors.push("capacity-sensitive");
   if (Number(profile.buildingAdaptationPenalty) >= 0.45) factors.push("foundation-sensitive");
   if (Number(profile.hardSurfaceAdaptationPenalty) >= 0.34) factors.push("impervious-surface-sensitive");
-  if (["data_center", "substation", "hospital", "fire_station", "police_station", "clinic", "geothermal_plant", "water_treatment_plant"].includes(key)) factors.push("service-interruption-sensitive");
-  if (["flood_pump_station", "dam", "canal", "levee", "reservoir", "gauging_station", "hydropower_plant", "water_treatment_plant", "ferry_terminal"].includes(key)) factors.push("hydraulic-state-sensitive");
+  if (["data_center", "substation", "hospital", "fire_station", "police_station", "clinic", "geothermal_plant", "water_treatment_plant", "evacuation_shelter"].includes(key)) factors.push("service-interruption-sensitive");
+  if (["flood_pump_station", "dam", "canal", "levee", "reservoir", "gauging_station", "hydropower_plant", "water_treatment_plant", "ferry_terminal", "river_hatchery"].includes(key)) factors.push("hydraulic-state-sensitive");
   if (key === "geothermal_plant") factors.push("fracture-resource-sensitive");
   if (["mountain_refuge", "fire_watch_tower"].includes(key)) factors.push("weather-exposure-sensitive");
   if (["wind_farm", "solar_farm"].includes(key)) factors.push("resource-variability-sensitive");
@@ -13009,6 +13122,8 @@ function adaptiveInfrastructureEcosystemRole(type, row = {}) {
   if (key === "mountain_refuge") return "emergency-response-node";
   if (key === "ferry_terminal") return "access-corridor";
   if (key === "fire_watch_tower") return "monitoring-node";
+  if (key === "evacuation_shelter") return "emergency-response-node";
+  if (key === "river_hatchery") return "aquatic-production-node";
   if (key === "scenic_overlook") return "scenic-viewpoint";
   if (key === "trailhead") return "trail-access";
   if (key === "ranger_station") return "conservation-management";
@@ -15426,14 +15541,14 @@ function infrastructureServiceClass(type) {
   if (["commercial", "office_tower", "market", "hotel"].includes(type)) return "commercial-service";
   if (["civic", "hospital", "school", "stadium", "research_station", "library", "community_center", "visitor_center"].includes(type)) return "civic-institution";
   if (["observatory", "gauging_station", "fire_watch_tower"].includes(type)) return "research-monitoring";
-  if (["fire_station", "police_station", "clinic", "ranger_station", "mountain_refuge"].includes(type)) return "emergency-service";
+  if (["fire_station", "police_station", "clinic", "ranger_station", "mountain_refuge", "evacuation_shelter"].includes(type)) return "emergency-service";
   if (["transport", "rail", "bridge", "airport", "metro_station", "tunnel_portal", "bus_terminal", "cable_car_station", "scenic_overlook", "trailhead", "ferry_terminal"].includes(type)) return "transport-access";
   if (["industrial", "logistics", "port"].includes(type)) return "production-logistics";
   if (["powerplant", "wastewater", "data_center", "substation", "geothermal_plant"].includes(type)) return "utility-critical";
   if (["reservoir", "dam", "canal", "levee", "water_tower", "flood_pump_station", "desalination_plant", "hydropower_plant", "water_treatment_plant"].includes(type)) return "hydraulic-control";
   if (["solar_farm", "wind_farm"].includes(type)) return "renewable-energy";
   if (["park", "greenhouse"].includes(type)) return "green-blue-service";
-  if (["farmstead", "terrace_farm"].includes(type)) return "agricultural-service";
+  if (["farmstead", "terrace_farm", "river_hatchery"].includes(type)) return "agricultural-service";
   if (type === "quarry") return "extraction";
   return "custom-service";
 }

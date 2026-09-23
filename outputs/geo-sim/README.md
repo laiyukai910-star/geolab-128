@@ -59,6 +59,7 @@ The browser engine supports:
 - layered subsurface volumes, groundwater state, borehole support, cross-sections, solid/pore/water volume ledgers, and engineering-risk screening;
 - ecological blocks, resistance and functional connectivity, habitat capacity, trophic biomass, biodiversity diagnostics, wildlife agents, and screened batch releases;
 - area-first infrastructure placement with typology-specific suitability, building morphology, imperviousness, demand, storage, retention, heat, habitat, and neighboring-block feedback;
+- dedicated evacuation-shelter and river-hatchery typologies with distinct construction geometry, site screening, and local environmental impacts; hatchery siting uses flow and flood proxies and does not verify water quality;
 - multi-year vegetation, water, erosion, compound hazard, damage, and recovery scenarios;
 - source coverage, provenance, calibration, uncertainty, process gates, and interpretation boundaries.
 

@@ -318,7 +318,9 @@ Object.assign(LOCALIZED_INFRASTRUCTURE_TYPES, {
   scenic_overlook: "\u89c2\u666f\u53f0/\u77ad\u671b\u70b9",
   trailhead: "\u767b\u5c71\u53e3/\u6b65\u9053\u5165\u53e3",
   ranger_station: "\u62a4\u6797/\u666f\u533a\u7ba1\u7406\u7ad9",
-  gauging_station: "\u6c34\u6587\u6d4b\u7ad9"
+  gauging_station: "\u6c34\u6587\u6d4b\u7ad9",
+  evacuation_shelter: "应急避难中心",
+  river_hatchery: "河流育苗设施"
 });
 
 const LOCALIZED_GEOMETRY_TYPES = {
@@ -476,6 +478,14 @@ const INFRASTRUCTURE_UI_PRESETS = {
   trailhead: { radius: 0.38, impervious: 0.18, runoff: 0.025, roughness: 0.035, temp: 0.08, storage: 0, retention: 0.01, irrigation: 0, vegetation: -0.02, demand: 12, density: 0.07, height: 5, floors: 1, landmark: 0 },
   ranger_station: { radius: 0.48, impervious: 0.24, runoff: 0.04, roughness: 0.045, temp: 0.18, storage: 35, retention: 0.03, irrigation: 10, vegetation: -0.03, demand: 32, density: 0.16, height: 9, floors: 2, landmark: 24 },
   gauging_station: { radius: 0.28, impervious: 0.08, runoff: 0.005, roughness: 0.01, temp: 0.02, storage: 0, retention: 0.04, irrigation: 0, vegetation: -0.005, demand: 4, density: 0.03, height: 3, floors: 1, landmark: 16 },
+  hydropower_plant: { radius: 0.9, impervious: 0.32, runoff: 0.03, roughness: 0.07, temp: 0.35, storage: 260, retention: 0.46, irrigation: 20, vegetation: -0.12, demand: 35, density: 0.18, height: 26, floors: 4, landmark: 0 },
+  geothermal_plant: { radius: 0.82, impervious: 0.42, runoff: 0.06, roughness: 0.06, temp: 0.75, storage: 45, retention: 0.08, irrigation: 12, vegetation: -0.14, demand: 60, density: 0.22, height: 22, floors: 4, landmark: 0 },
+  water_treatment_plant: { radius: 0.78, impervious: 0.38, runoff: 0.07, roughness: 0.05, temp: 0.25, storage: 140, retention: 0.24, irrigation: 40, vegetation: -0.12, demand: 45, density: 0.2, height: 16, floors: 3, landmark: 0 },
+  mountain_refuge: { radius: 0.42, impervious: 0.16, runoff: 0.03, roughness: 0.04, temp: 0.1, storage: 30, retention: 0.03, irrigation: 6, vegetation: -0.04, demand: 25, density: 0.14, height: 8, floors: 2, landmark: 0 },
+  ferry_terminal: { radius: 0.7, impervious: 0.42, runoff: 0.08, roughness: 0.04, temp: 0.32, storage: 45, retention: 0.1, irrigation: 10, vegetation: -0.12, demand: 35, density: 0.18, height: 12, floors: 2, landmark: 0 },
+  fire_watch_tower: { radius: 0.3, impervious: 0.08, runoff: 0.015, roughness: 0.02, temp: 0.04, storage: 6, retention: 0.02, irrigation: 0, vegetation: -0.02, demand: 8, density: 0.06, height: 10, floors: 2, landmark: 38 },
+  evacuation_shelter: { radius: 0.58, impervious: 0.32, runoff: 0.05, roughness: 0.05, temp: 0.28, storage: 80, retention: 0.08, irrigation: 0, vegetation: -0.05, demand: 65, density: 0.18, height: 14, floors: 2, landmark: 0 },
+  river_hatchery: { radius: 0.54, impervious: 0.26, runoff: 0.035, roughness: 0.035, temp: 0.12, storage: 55, retention: 0.09, irrigation: 0, vegetation: -0.05, demand: 85, density: 0.13, height: 9, floors: 1, landmark: 0 },
   reservoir: { radius: 1.6, impervious: 0, runoff: -0.06, roughness: -0.03, temp: -0.25, storage: 220, retention: 0.28, irrigation: 0, vegetation: 0.04, demand: 0, density: 0, height: 0, floors: 0, landmark: 0 },
   dam: { radius: 0.75, impervious: 0.18, runoff: -0.04, roughness: 0.05, temp: 0, storage: 360, retention: 0.55, irrigation: 0, vegetation: 0, demand: 0, density: 0, height: 0, floors: 0, landmark: 0 },
   canal: { radius: 0.55, impervious: 0.04, runoff: -0.04, roughness: -0.02, temp: 0, storage: 0, retention: 0.12, irrigation: 160, vegetation: 0.12, demand: 0, density: 0, height: 0, floors: 0, landmark: 0 },

@@ -105,6 +105,8 @@ const CANONICAL_INFRASTRUCTURE_TYPES = new Set([
   "powerplant",
   "wastewater",
   "solar_farm",
+  "evacuation_shelter",
+  "river_hatchery",
   "wind_farm",
   "park",
   "greenhouse",
