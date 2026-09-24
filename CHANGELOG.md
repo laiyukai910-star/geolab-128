@@ -4,6 +4,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Added a bounded close-range vegetation stand with deterministic, land-cover-aware placement and detailed tree LODs. Terrain materials now blend continuous soil, grass and rock pigments across source-grid cells. Parks use terrain-fitted planted trees instead of raised slabs, structural adaptation works or generic buildings. These are display changes and do not alter modeled biomass or elevation.
 - The placed-facility list can now be searched by localized name or type code and filtered by manual versus generated origin, including large adaptive plans.
 - Added a per-facility list in the data drawer. Placed facilities can be located in the 3D scene or removed individually; manually added features can be reopened, edited and saved without clearing the scenario. Point, line and polygon focus uses each feature's GeoJSON bounds. The new controls follow the English/Chinese language setting.
 - Added dedicated 3D assemblies for three existing facilities: a water-treatment works with open clarifiers and pipework, a ferry terminal with a covered boarding deck and berth, and a braced fire-watch tower with an observation cabin. These replace generic building shapes in the sand table; the generic fallback remains available when the facility detail budget is exhausted.

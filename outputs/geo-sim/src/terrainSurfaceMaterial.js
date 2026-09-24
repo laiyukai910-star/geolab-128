@@ -81,6 +81,7 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   // are drawn granular, so an unclassified cell never invents bedding or blocky joints.
   float rockMass = step(0.8, vGeoStructure.w);
   float macro = geoFilteredNoise(p, 160.0, footprint);
+  float meadow = geoFilteredNoise(p + vec3(271.0, 0.0, 91.0), 48.0, footprint);
   float blocks = geoFilteredNoise(p + 37.0, 14.0, footprint);
   float chips = geoFilteredNoise(p + 71.0, 2.2, footprint);
   float grain = geoFilteredNoise(p, 0.18, footprint);
@@ -120,13 +121,22 @@ if (geoSurfaceEnabled > 0.5 && vGeoPositionM.y > geoSeaLevel) {
   float looseSoil = (1.0 - rock) * (1.0 - vegetation) * (1.0 - sealed);
   earthTone += aggregate * 0.12 + (particles - 0.5) * 0.22;
   stoneTone += (particles - 0.5) * 0.16 + (pores - 0.5) * 0.08;
-  float turfTone = 0.83 + blocks * 0.18 + chips * 0.07 + grain * 0.035;
+  float coverPatch = smoothstep(0.31, 0.68, macro * 0.57 + meadow * 0.43);
+  float turfTone = 0.73 + macro * 0.19 + meadow * 0.17 + blocks * 0.12 + chips * 0.045;
   float tone = mix(mix(earthTone, turfTone, vegetation), stoneTone, rock);
   diffuseColor.rgb *= mix(tone, 0.94 + grain * 0.1, sealed);
+  // Broad, filtered patches remain continuous across source-grid cells. Local pigment is
+  // constrained by the classified surface weights rather than inventing a new land cover.
+  vec3 grassPigment = mix(vec3(0.91, 0.97, 0.79), vec3(1.04, 1.02, 0.89), coverPatch);
+  vec3 soilPigment = mix(vec3(0.89, 0.94, 0.95), vec3(1.08, 0.98, 0.82), meadow);
+  vec3 stonePigment = mix(vec3(0.88, 0.94, 1.02), vec3(1.06, 1.02, 0.93), macro);
+  diffuseColor.rgb *= mix(mix(soilPigment, grassPigment, vegetation), stonePigment, rock)
+    * (1.0 - sealed) + vec3(sealed);
   diffuseColor.rgb += rock * (chips - 0.5) * vec3(0.022, 0.026, 0.03);
   diffuseColor.rgb += looseSoil * (grit - 0.5) * vec3(0.035, 0.021, 0.008);
   diffuseColor.rgb = max(diffuseColor.rgb, vec3(0.0));
-  geoHeight = mix(mix(0.035 * grain + 0.07 * chips + 0.008 * grit,0.007 * grain + 0.012 * chips,vegetation),
+  geoHeight = mix(mix(0.035 * grain + 0.07 * chips + 0.008 * grit,
+    0.012 * grain + 0.022 * chips + 0.018 * blocks,vegetation),
     (0.32 * blocks + 0.12 * chips + layers * 0.035 - fracture * 0.09
     + bevel * 0.07 + grain * 0.06 + grit * 0.008) * (0.55 + 0.45 * competence), rock) * (1.0 - sealed * 0.85);  geoHeight += (particles * 0.00065 + pores * 0.00012) * (1.0 - sealed)
     + looseSoil * aggregate * 0.006;
@@ -154,15 +164,15 @@ export function createTerrainSurfaceMaterial() {
     geoVerticalScale: { value: 1 }
   };
   material.userData.terrainSurface = {
-    version: 3,
+    version: 4,
     representation: "illustrative procedural surface, not surveyed microtopography",
     coordinates: "unexaggerated local metres",
-    wavelengthsM: [160, 36, 14, 2.2, 0.18, 0.045, 0.008, 0.002],
+    wavelengthsM: [160, 48, 36, 14, 2.2, 0.18, 0.045, 0.008, 0.002],
     jointSpacingSource: "lithology and bed thickness, see geoLithology.js",
     structureRangesM: { jointSpacing: [0.02, 20], bedThickness: [0.01, 50] },
     uniforms
   };
-  material.customProgramCacheKey = () => "geolab-terrain-surface-v3";
+  material.customProgramCacheKey = () => "geolab-terrain-surface-v4";
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader

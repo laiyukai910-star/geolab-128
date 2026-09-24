@@ -105,7 +105,7 @@ assert.equal(left.mesh.geometry.getAttribute("terrainStructure").array.BYTES_PER
     "writing the packed bytes straight into the array must be exact");
 }
 assert.equal(left.mesh.material.userData.terrainSurface.uniforms.geoSurfaceEnabled.value, 1);
-assert.equal(left.mesh.material.userData.terrainSurface.version, 3);
+assert.equal(left.mesh.material.userData.terrainSurface.version, 4);
 assert.ok(left.mesh.material.userData.terrainSurface.wavelengthsM.includes(0.002));
 assert.deepEqual(left.mesh.material.userData.terrainSurface.structureRangesM, { jointSpacing: [0.02, 20], bedThickness: [0.01, 50] });
 const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };

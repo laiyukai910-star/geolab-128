@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createFoliageGeometry } from "./foliageGeometry.js";
 import { FoliageInstances } from "./foliageInstances.js";
+import { planLocalVegetationStands } from "./localVegetationStands.js";
 import { applyConstructionFinish } from "./constructionMaterial.js";
 import { REBUILT_FACILITY_KINDS } from "./facilityGeometry.js";
 import { ScannedAssetLibrary } from "./scannedAssets.js";
@@ -475,6 +476,8 @@ export class TerrainRenderer {
     this.terrainTileKey = "";
     this.rivers = null;
     this.vegetation = null;
+    this.localVegetation = null;
+    this.localVegetationKey = "";
     this.vegetationVisible = true;
     this.lastTerrainRefreshStats = null;
     this.lastTerrainTileStats = null;
@@ -965,6 +968,10 @@ export class TerrainRenderer {
 
   updateTemporalState(model, params, viewMode) {
     const start = performance.now();
+    if (model?.surface !== this.model?.surface || model?.height !== this.model?.height
+      || params?.verticalScale !== this.params?.verticalScale || params?.seaLevel !== this.params?.seaLevel) {
+      this.localVegetationKey = "";
+    }
     this.model = model;
     this.params = params;
     this.viewMode = viewMode;
@@ -1232,6 +1239,7 @@ export class TerrainRenderer {
     if (!this.isDocumentVisible || this.renderContextState.status !== "ready") return;
     if(this.organismInspector?.active){this.organismInspector.render(performance.now()*0.001);return;}
     this.controls.update();
+    this.updateLocalVegetation();
     const now = performance.now();
     const t = now * 0.001;
     if (this.rivers?.material.userData.riverUniforms) this.rivers.material.userData.riverUniforms.riverTime.value = t;
@@ -1698,6 +1706,8 @@ export class TerrainRenderer {
       disposeObjectTree(this.vegetation);
       this.vegetation = null;
     }
+    this.localVegetation = null;
+    this.localVegetationKey = "";
 
     const model = this.model;
     if (!model.surface?.vegetation) {
@@ -1915,6 +1925,89 @@ export class TerrainRenderer {
     if (typeof globalThis !== "undefined") globalThis.__geoLabVegetation3DStats = this.vegetation3DStats;
   }
 
+  updateLocalVegetation() {
+    if (!this.vegetation || !this.model || !this.camera || !this.controls) return;
+    const distance = this.camera.position.distanceTo(this.controls.target);
+    const enabled = this.vegetationVisible && this.viewMode === "landscape" && distance < 8;
+    const x = Math.round(this.controls.target.x / 0.24) * 0.24;
+    const z = Math.round(this.controls.target.z / 0.24) * 0.24;
+    const key = enabled ? `${x.toFixed(2)}:${z.toFixed(2)}` : "off";
+    if (key === this.localVegetationKey) return;
+    this.localVegetationKey = key;
+    if (this.localVegetation) {
+      this.vegetation.remove(this.localVegetation);
+      disposeObjectTree(this.localVegetation);
+      this.localVegetation = null;
+    }
+    if (!enabled) return;
+
+    const stands = planLocalVegetationStands(this.model, x, z, {
+      seed: this.params.seed,
+      seaLevel: this.params.seaLevel
+    });
+    if (!stands.length) return;
+    const buckets = new Map();
+    const verticalScale = Number(this.params.verticalScale) || 1;
+    const seaLevel = Number(this.params.seaLevel) || 0;
+    for (const stand of stands) {
+      const groundM = sampleTerrainHeight(this.model, stand.x, stand.z);
+      if (groundM == null || groundM <= seaLevel) continue;
+      const tree = stand.kind === "broadleaf" || stand.kind === "conifer";
+      const height = tree
+        ? Math.max(0.004, Math.min(0.055, stand.canopyM * verticalScale * stand.scale / 1000))
+        : stand.kind === "grass" ? 0.0015 * stand.scale
+          : stand.kind === "reed" ? 0.0023 * stand.scale : 0.0035 * stand.scale;
+      const width = tree ? height * (stand.kind === "conifer" ? 0.38 : 0.55)
+        : height * (stand.kind === "reed" ? 0.28 : 1.3);
+      const bucketKey = `${stand.kind}:${stand.variant}`;
+      if (!buckets.has(bucketKey)) buckets.set(bucketKey, []);
+      buckets.get(bucketKey).push({
+        x: stand.x, y: groundM * verticalScale / 1000 + height * 0.5, z: stand.z,
+        sx: width, sy: height, sz: width, ry: stand.rotation,
+        color: stand.kind === "conifer" ? 0x8dc69c : stand.kind === "broadleaf" ? 0xa7d48f
+          : stand.kind === "reed" ? 0xc4d796 : stand.kind === "grass" ? 0xb9d27e : 0x91bc7e
+      });
+    }
+    const group = new THREE.Group();
+    group.name = "局地植被群落";
+    bindSharedGeometryCache(group, this.sharedGeometryCache);
+    const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, side: THREE.DoubleSide });
+    for (const [bucketKey, transforms] of buckets) {
+      const [kind, variantText] = bucketKey.split(":");
+      const variant = Number(variantText);
+      const tree = kind === "broadleaf" || kind === "conifer";
+      const geometry = sharedGeometry(group, `local-stand:${kind}:${variant}`, () => {
+        const asset = tree
+          ? createFoliageGeometry(kind === "conifer", "distant", variant, true)
+          : createAssetGeometry(kind === "shrub" ? "irregular-shrub" : "crossed-grass", "distant", variant);
+        ensureGeometryColors(asset);
+        return asset;
+      });
+      if (tree) {
+        const detail = sharedGeometry(group, `local-stand-detail:${kind}:${variant}`, () =>
+          createFoliageGeometry(kind === "conifer", "high", variant, true));
+        const lod = new FoliageInstances(detail, geometry, material, transforms, 0xffffff, 28, 12);
+        lod.name = `局地${kind} ${variant + 1}`;
+        for (const mesh of [lod.near, lod.far]) mesh.userData.assetKind = `local-${kind}`;
+        group.add(lod);
+        continue;
+      }
+      const mesh = new THREE.InstancedMesh(geometry, material, transforms.length);
+      mesh.name = `局地${kind} ${variant + 1}`;
+      mesh.userData.assetKind = `local-${kind}`;
+      writeInstanceTransforms(mesh, transforms);
+      group.add(mesh);
+    }
+    this.localVegetation = group;
+    this.vegetation.add(group);
+    this.sceneVolume?.applyClipping([group]);
+    this.sceneDiagnosticsDirty = true;
+    if (typeof globalThis !== "undefined") globalThis.__geoLabLocalVegetationStats = {
+      centerXKm: x, centerZKm: z, sourceCount: stands.length,
+      instanceCount: Array.from(buckets.values()).reduce((sum, entries) => sum + entries.length, 0)
+    };
+  }
+
   buildWildlife3D() {
     disposeObjectTree(this.wildlifeGroup);
     this.wildlifeRenderSets = [];
@@ -2071,6 +2164,7 @@ export class TerrainRenderer {
       landmarkTowers: [],
       landmarkSpires: [],
       slabs: [],
+      parkPlantings: [],
       roads: [],
       laneMarkings: [],
       streetLights: [],
@@ -2221,6 +2315,8 @@ export class TerrainRenderer {
         let facilityAdded = false;
         if (facilityBudget > 0) {
           const used = addFacilityCell(buckets, {
+            model,
+            seaLevel: Number(this.params.seaLevel) || 0,
             type,
             base,
             cell,
@@ -2453,6 +2549,19 @@ export class TerrainRenderer {
     addInstancedBox(this.infrastructureGroup, "屋顶机电", buckets.roofEquipment, 0x7e8582, { roughness: 0.62, metalness: 0.08 });
     addInstancedCylinder(this.infrastructureGroup, "楼顶天线", buckets.antennas, 0xd8ddd7, { radiusSegments: 6, roughness: 0.48, metalness: 0.12 });
     addInstancedBox(this.infrastructureGroup, "设施底板", buckets.slabs, 0x72736b, { roughness: 0.85, metalness: 0.02 });
+    if (buckets.parkPlantings.length) {
+      const detail = sharedGeometry(this.infrastructureGroup, `park-tree:${budgetPlan.quality}:detail`, () =>
+        createFoliageGeometry(false, budgetPlan.quality, 0, true));
+      const proxy = sharedGeometry(this.infrastructureGroup, "park-tree:proxy", () =>
+        createFoliageGeometry(false, "distant", 0, true));
+      const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, side: THREE.DoubleSide });
+      const profile = foliageDetailProfile(budgetPlan.quality);
+      const lod = new FoliageInstances(detail, proxy, material, buckets.parkPlantings, 0xffffff,
+        profile.maximumDetail, profile.pixelThreshold);
+      lod.name = "公园乔木";
+      for (const mesh of [lod.near, lod.far]) mesh.userData.assetKind = "park-tree";
+      this.infrastructureGroup.add(lod);
+    }
     addInstancedBox(this.infrastructureGroup, "道路桥面", buckets.roads, 0x59605c, { roughness: 0.9 });
     addInstancedBox(this.infrastructureGroup, "道路标线", buckets.laneMarkings, 0xd9d5bd, { roughness: 0.7 });
     addInstancedCylinder(this.infrastructureGroup, "路灯与支柱", buckets.streetLights, 0xb8b9ad, { radiusSegments: 5, roughness: 0.58, metalness: 0.08 });
@@ -2845,6 +2954,8 @@ export class TerrainRenderer {
 
 function addFacilityCell(buckets, cellInfo) {
   const {
+    model,
+    seaLevel = 0,
     type,
     base,
     cell,
@@ -2887,7 +2998,7 @@ function addFacilityCell(buckets, cellInfo) {
     });
     used += 1;
   };
-  used += pushFacilityAdaptationDetails(buckets, {
+  if (type !== "park") used += pushFacilityAdaptationDetails(buckets, {
     type,
     base,
     cell,
@@ -4001,18 +4112,27 @@ function addFacilityCell(buckets, cellInfo) {
     });
     return 2;
   }
-  if (type === "park" && impervious < 0.2) {
-    buckets.slabs.push({
-      x: base.x,
-      y: base.y + 0.008,
-      z: base.z,
-      sx: cell * 0.8,
-      sy: 0.01,
-      sz: cell * 0.8,
-      ry: angle,
-      color: 0x4f8f58
-    });
-    return 1;
+  if (type === "park") {
+    // The vegetation/soil classification carries the park surface. Structural adaptation
+    // plinths, walls and a raised slab obscure it and misrepresent a planted open space.
+    const count = Math.min(20, Math.max(0, Math.round(cell * 36 * (1 - clamp01(impervious)))));
+    for (let k = 0; k < count; k++) {
+      const radius = Math.sqrt(hash01(x + k * 7, y - k * 11, seed + 5101)) * cell * 0.32;
+      const bearing = hash01(x - k * 13, y + k * 17, seed + 5107) * Math.PI * 2;
+      const wx = base.x + Math.cos(bearing) * radius;
+      const wz = base.z + Math.sin(bearing) * radius;
+      const elevationM = sampleTerrainHeight(model, wx, wz);
+      if (elevationM == null || elevationM <= seaLevel) continue;
+      const height = (0.008 + hash01(x + k, y - k, seed + 5113) * 0.006) * scaledVertical;
+      const crown = height * (0.42 + hash01(x - k, y + k, seed + 5119) * 0.12);
+      buckets.parkPlantings.push({
+        x: wx, y: elevationM * scaledVertical / 1000 + height / 2, z: wz,
+        sx: crown, sy: height, sz: crown,
+        ry: bearing, color: 0xffffff
+      });
+      used += 1;
+    }
+    return used;
   }
   if (type === "quarry") {
     buckets.slabs.push({
@@ -4189,6 +4309,7 @@ function pushFacilityAdaptationDetails(buckets, input) {
 }
 
 function isBuildingType(type, density, heightM, landmarkHeightM) {
+  if (type === "park") return false;
   if (landmarkHeightM > 1) return true;
   if (density > 0.04 && heightM > 1) return true;
   return Object.prototype.hasOwnProperty.call(BUILDING_DEFAULTS, type) && !LINEAR_INFRA_TYPES.has(type);
