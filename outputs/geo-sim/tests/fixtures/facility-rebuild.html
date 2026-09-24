@@ -33,7 +33,9 @@ function show(kind){
      const scale=({'stadium-bowl':[1,0.28,1],'solar-panel-frame':[1,0.08,0.75],'crowned-road':[1,0.07,0.65],'hipped-roof':[1,0.35,0.8],'turbine-blade':[0.23,1,0.07],'crane-boom':[1,0.35,0.15]})[name]||[1,1,1];
      mesh.setMatrixAt(0,new THREE.Matrix4().makeScale(...scale).setPosition(...p));group.add(mesh);
    });
-   controls.target.set(0,0,0);camera.position.set(...(kind==='all'?[5.5,6.6,10.2]:[1.45,0.9,2.2]));
+   controls.target.set(0,0,0);
+   const view=new URLSearchParams(location.search).get('view');
+   camera.position.set(...(kind==='all'?[5.5,6.6,10.2]:view==='front'?[2.2,0.8,0.18]:view==='upstream'?[0.6,0.8,-2.2]:[1.45,0.9,2.2]));
  }
  controls.update();renderer.render(scene,camera);
 }

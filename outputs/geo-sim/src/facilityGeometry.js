@@ -27,7 +27,7 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     const rgb = new THREE.Color(color), values = new Float32Array(geometry.attributes.position.count * 3);
     const response = new Float32Array(geometry.attributes.position.count * 2);
     const glazed = [glass,0x679aaa,0x94bdb1,0xaccdc0,0x78b8ba].includes(color);
-    const metallic = color === metal;
+    const metallic = [metal,0x7896a1,0x91abb2].includes(color);
     for(let i=0;i<response.length;i+=2){response[i]=glazed?0.18:metallic?0.40:0.86;response[i+1]=metallic?0.55:0;}
     for (let i = 0; i < values.length; i += 3) rgb.toArray(values, i);
     geometry.setAttribute("color", new THREE.BufferAttribute(values, 3));
@@ -269,19 +269,36 @@ export function createFacilityGeometry(kind, quality = "ultra") {
   } else if (kind === "bridge-pier") {
     box([0,-0.44,0],[0.96,0.10,0.86],wall,0.02);
     for(const x of [-0.25,0.25]) {
-      const g=new THREE.CylinderGeometry(0.13,0.17,0.76,radial);put(g,wall,[x,-0.01,0]);
+      const plan=new THREE.Shape();
+      plan.moveTo(0,0.52);
+      plan.quadraticCurveTo(0.13,0.45,0.15,0.18);
+      plan.lineTo(0.15,-0.32);plan.quadraticCurveTo(0.13,-0.43,0.05,-0.44);
+      plan.lineTo(-0.05,-0.44);plan.quadraticCurveTo(-0.13,-0.43,-0.15,-0.32);
+      plan.lineTo(-0.15,0.18);plan.quadraticCurveTo(-0.13,0.45,0,0.52);
+      const shaft=new THREE.ExtrudeGeometry(plan,{
+        depth:0.68,steps:2+tier,curveSegments:6+tier*4,
+        bevelEnabled:true,bevelSegments:1+tier,bevelThickness:0.006,bevelSize:0.006
+      });
+      shaft.rotateX(-Math.PI/2);
+      const position=shaft.attributes.position;
+      for(let vertex=0;vertex<position.count;vertex++){
+        const t=Math.max(0,Math.min(1,position.getY(vertex)/0.68));
+        position.setX(vertex,position.getX(vertex)*(1.12-0.18*t));
+        position.setZ(vertex,position.getZ(vertex)*(1.03-0.08*t));
+      }
+      position.needsUpdate=true;shaft.computeVertexNormals();put(shaft,wall,[x,-0.39,0]);
       // A pier carries its bearing, not the deck directly: a plinth, then the bearing pad, then the
       // girder seat, which is what a real pier head looks like from the side.
       box([x,0.30,0],[0.30,0.06,0.34],wall);
       box([x,0.35,0],[0.20,0.035,0.24],0x6f7a7c);
       box([x,0.375,0],[0.24,0.02,0.28],metal);
-      // Chamfered cutwater on the upstream face.
-      box([x,-0.10,-0.50],[0.20,0.55,0.10],wall,0.03);
+      tube([[x,-0.31,-0.535],[x,-0.10,-0.535],[x,0.13,-0.51]],0.011,metal);
     }
-    box([0,0.35,0],[0.98,0.17,0.46],trim,0.03);
+    box([0,0.435,0],[0.98,0.10,0.46],trim,0.016);
+    box([0,0.387,0],[0.96,0.012,0.48],0xb8c1c2,0.002);
     // Bearing seats under the deck soffit and a maintenance kerb along it.
     for(const x of [-0.25,0.25]) box([x,0.30,0],[0.34,0.03,0.52],0x8f9798);
-    for(const z of [-0.24,0.24]) box([0,0.31,z],[0.98,0.02,0.05],0x9aa0a0);
+    for(const z of [-0.24,0.24]) box([0,0.49,z],[0.98,0.018,0.04],0x9aa0a0,0.002);
   } else if (kind === "crowned-road") {
     const geometry=new THREE.PlaneGeometry(1,1,4,8+tier*4);geometry.rotateX(-Math.PI/2);
     const position=geometry.attributes.position;
@@ -330,15 +347,65 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     for(let i=1;i<sides-1;i++)indices.push(0,i+1,i,rings*sides,rings*sides+i,rings*sides+i+1);
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setIndex(indices);g.computeVertexNormals();put(g,trim);
   } else if (kind === "greenhouse-bay") {
-    box([0,-0.45,0],[1,0.08,1],wall);
-    for(let i=0;i<6+tier*2;i++){
-      const z=-0.48+i*0.96/(5+tier*2);
-      tube([[-0.47,-0.4,z],[-0.47,0.12,z],[0,0.47,z],[0.47,0.12,z],[0.47,-0.4,z]],0.012,trim);
+    const halfWidth=0.475, frameBays=6, archSteps=12+tier*8;
+    const archY=x=>0.07+0.40*Math.sqrt(Math.max(0,1-(x/halfWidth)**2));
+    box([0,-0.45,0],[1,0.08,1],0xb9c3b9);
+    const positions=[],indices=[],stride=(archSteps+1)*(frameBays+1);
+    for(const offset of [-0.003,0.003])for(let bay=0;bay<=frameBays;bay++)for(let step=0;step<=archSteps;step++){
+      const x=-halfWidth+step*2*halfWidth/archSteps;
+      positions.push(x,archY(x)+offset,-0.48+bay*0.96/frameBays);
     }
-    for(const x of [-0.47,0.47])box([x,-0.13,0],[0.014,0.50,0.96],0x94bdb1);
-    for(const sign of [-1,1]){
-      const g=new THREE.PlaneGeometry(Math.hypot(0.47,0.35),0.96);g.rotateX(-Math.PI/2);g.rotateZ(sign*-Math.atan2(0.35,0.47));put(g,0xaccdc0,[sign*0.235,0.295,0]);
+    for(let bay=0;bay<frameBays;bay++)for(let step=0;step<archSteps;step++){
+      const a=bay*(archSteps+1)+step,b=a+1,c=b+archSteps+1,d=a+archSteps+1;
+      indices.push(a,b,c,a,c,d,stride+a,stride+c,stride+b,stride+a,stride+d,stride+c);
     }
+    for(const side of [0,archSteps])for(let bay=0;bay<frameBays;bay++){
+      const a=bay*(archSteps+1)+side,b=a+archSteps+1;
+      indices.push(a,b,stride+b,a,stride+b,stride+a);
+    }
+    for(const bay of [0,frameBays])for(let step=0;step<archSteps;step++){
+      const a=bay*(archSteps+1)+step,b=a+1;
+      indices.push(a,stride+a,stride+b,a,stride+b,b);
+    }
+    const glazedRoof=new THREE.BufferGeometry();
+    glazedRoof.setAttribute("position",new THREE.Float32BufferAttribute(positions,3));
+    glazedRoof.setIndex(indices);glazedRoof.computeVertexNormals();put(glazedRoof,0xaccdc0);
+    for(let bay=0;bay<=frameBays;bay++){
+      const z=-0.48+bay*0.96/frameBays;
+      tube(Array.from({length:17+tier*8},(_,step)=>{
+        const x=-halfWidth+step*2*halfWidth/(16+tier*8);
+        return [x,archY(x)+0.006,z];
+      }),0.009,trim);
+      for(const x of [-halfWidth,halfWidth])box([x,-0.16,z],[0.018,0.48,0.026],metal,0.002);
+    }
+    for(const x of [-0.35,0,0.35])tube([[x,archY(x)+0.008,-0.48],[x,archY(x)+0.008,0.48]],0.006,metal);
+    for(const x of [-halfWidth,halfWidth])for(let bay=0;bay<frameBays;bay++){
+      const z=-0.40+bay*0.96/frameBays;
+      box([x,-0.16,z],[0.009,0.46,0.96/frameBays-0.014],0x94bdb1,0.001);
+    }
+    for(const z of [-0.48,0.48]){
+      const gable=new THREE.Shape();gable.moveTo(-halfWidth,0.07);
+      for(let step=1;step<=archSteps;step++){
+        const x=-halfWidth+step*2*halfWidth/archSteps;gable.lineTo(x,archY(x));
+      }
+      gable.lineTo(halfWidth,0.07);gable.closePath();
+      put(new THREE.ExtrudeGeometry(gable,{depth:0.006,bevelEnabled:false}),0x94bdb1,[0,0,z-0.003]);
+      for(const x of [-0.32,0.32])box([x,-0.16,z],[0.26,0.47,0.009],0x94bdb1,0.001);
+      for(const x of [-0.14,0.14])box([x,-0.16,z],[0.012,0.49,0.017],metal,0.001);
+      box([0,0.08,z],[0.29,0.015,0.018],metal,0.001);
+    }
+    box([0,-0.16,-0.48],[0.26,0.47,0.009],0x94bdb1,0.001);
+    for(const x of [-0.24,0.24]){
+      box([x,-0.32,0],[0.19,0.13,0.82],0xb4b6a8);
+      box([x,-0.247,0],[0.17,0.015,0.79],0x497b57,0.001);
+      for(let plant=0;plant<8+tier*4;plant++){
+        const z=-0.36+plant*0.72/(7+tier*4);
+        tube([[x,-0.24,z],[x,-0.18,z],[x+0.045,-0.14,z+0.012]],0.004,0x5a915d);
+        tube([[x,-0.18,z],[x-0.045,-0.15,z-0.012]],0.004,0x70a76d);
+      }
+    }
+    tube([[0.42,-0.36,-0.40],[0.42,-0.36,0.40]],0.012,metal);
+    cylinder([0.39,-0.32,0.34],0.055,0.16,0x839fa3);
   } else if (kind === "stadium-bowl") {
     const profile=[new THREE.Vector2(0.49,-0.44),new THREE.Vector2(0.49,0.33)];
     for(let i=10+tier*5;i>=0;i--){const t=i/(10+tier*5);profile.push(new THREE.Vector2(0.28+t*0.19,-0.4+t*0.7+0.025),new THREE.Vector2(0.28+t*0.19,-0.4+t*0.7));}
@@ -357,14 +424,10 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     // A slit, a shutter that slides over it, the shutter rails, and the telescope the building
     // exists for, all on a drum that rotates.
     //
-    // The slit is carved by SphereGeometry's own angular range, so its centreline is the direction
-    // the shell's opening faces: with phiStart 0.16 and phiLength 2PI-0.32 the opening spans
-    // azimuth [-0.16, +0.16] about the seam, which on a sphere is the +x axis. Everything that has
-    // to line up with the slit - the edge arcs, the parked shutter, the telescope - is placed on
-    // that axis deliberately rather than by eye.
+    // SphereGeometry maps phi=PI to +x. The omitted sector, rails, shutter and telescope all face +x.
     const slitHalfAngle = 0.16, shellRadius = 0.46, shellCentreY = -0.08;
     cylinder([0,-0.28,0],0.46,0.35,wall);ring(0.46,0.02,[0,shellCentreY,0],metal);
-    put(new THREE.SphereGeometry(shellRadius,radial*2,radial,slitHalfAngle,Math.PI*2-slitHalfAngle*2,0,Math.PI/2),trim,[0,shellCentreY,0]);
+    put(new THREE.SphereGeometry(shellRadius,radial*2,radial,Math.PI+slitHalfAngle,Math.PI*2-slitHalfAngle*2,0,Math.PI/2),trim,[0,shellCentreY,0]);
     // The two slit edges, each an arc up the meridian at the slit boundary azimuth.
     for(const theta of [slitHalfAngle, -slitHalfAngle]){
       const arc=Array.from({length:13},(_,j)=>{
@@ -375,11 +438,22 @@ export function createFacilityGeometry(kind, quality = "ultra") {
       });
       tube(arc,0.012,metal);
     }
-    // The shutter parked over the lower part of the opening, sliding along the slit, so it spans the
-    // slit's azimuthal width and steps up the meridian.
-    for(let i=0;i<5+tier*2;i++){
-      const count=4+tier*2,phi=(0.12+i/count*0.42)*Math.PI/2;
-      box([Math.cos(0)*Math.sin(phi)*0.40,shellCentreY+Math.cos(phi)*0.40,0],[0.30,0.016,0.30],0xcfd4d0);
+    // Curved shutter leaves sit on the shell radius; straight plates would float above the dome.
+    const shutterStart=0.92, shutterSpan=0.64, shutterRadius=shellRadius+0.012, leaves=4;
+    for(let leaf=0;leaf<leaves;leaf++){
+      const theta=shutterStart+leaf*shutterSpan/leaves;
+      put(new THREE.SphereGeometry(shutterRadius,radial,3+tier*3,
+        Math.PI-slitHalfAngle+0.01,slitHalfAngle*2-0.02,theta,shutterSpan/leaves+0.003),
+        leaf%2?0x7896a1:0x91abb2,[0,shellCentreY,0]);
+    }
+    for(let seam=0;seam<=leaves;seam++){
+      const theta=shutterStart+seam*shutterSpan/leaves;
+      tube(Array.from({length:9+tier*4},(_,step)=>{
+        const phi=-slitHalfAngle+step*(slitHalfAngle*2)/(8+tier*4);
+        return [shutterRadius*Math.sin(theta)*Math.cos(phi),
+          shellCentreY+shutterRadius*Math.cos(theta),
+          shutterRadius*Math.sin(theta)*Math.sin(phi)];
+      }),0.005,metal);
     }
     // The telescope: a pier, a fork mount, and a tube aimed along the slit centreline at 45 degrees
     // elevation, long enough to reach the shell.
@@ -391,13 +465,15 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     cylinder([0,-0.02,0],0.062,0.05,metal);
     tube([[tubeTip[0],tubeTip[1],tubeTip[2]],[tubeTip[0]*1.06,tubeTip[1]*1.06-0.02,tubeTip[2]]],0.030,metal);
   } else if (kind === "crane-boom") {
-    const bays=7+tier*3;
+    const bays=7;
     for(const y of [-0.12,0.12])for(const z of [-0.12,0.12])tube([[-0.5,y,z],[0.5,y,z]],0.012,0xd4b967);
     for(let i=0;i<bays;i++)for(const z of [-0.12,0.12]){
       const x=-0.5+i/bays; tube([[x,-0.12,z],[x+1/bays,0.12,z]],0.008,0xe1ca85);
       tube([[x,0.12,z],[x+1/bays,-0.12,z]],0.008,0xe1ca85);
     }
-    tube([[0.45,0.12,0],[0.45,-0.40,0]],0.008,metal);
+    put(new THREE.CylinderGeometry(0.044,0.044,0.056,radial),metal,[0.43,-0.15,0],[Math.PI/2,0,0]);
+    for(const z of [-0.032,0.032])put(new THREE.TorusGeometry(0.045,0.006,6+tier*2,radial),trim,[0.43,-0.15,z]);
+    tube([[0.34,0.10,0],[0.43,0.10,0],[0.47,-0.13,0],[0.47,-0.18,0],[0.43,-0.21,0],[0.43,-0.39,0]],0.005,metal);
   } else {
     // An extruded arch with an actual hole, not a dark rectangle painted on a wall.
     const shape = new THREE.Shape(); shape.moveTo(-0.49,-0.5);shape.lineTo(0.49,-0.5);shape.lineTo(0.49,0);

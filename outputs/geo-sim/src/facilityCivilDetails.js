@@ -288,7 +288,7 @@ export function civilDetailParts(kind, helpers) {
   } else if (kind === "crane-boom") {
     // A 0.24 x 0.24 square boom along x, chords at y and z = +/-0.12, existing diagonals in the two
     // vertical planes at z = +/-0.12. Everything added here reads as the rest of the truss.
-    const bays = 7 + tier * 3, panel = 1 / bays;
+    const bays = 7, panel = 1 / bays;
     // Verticals at every panel point the existing diagonals land on, in both side planes.
     for (let index = 0; index <= bays; index++) {
       const x = -0.5 + index * panel;

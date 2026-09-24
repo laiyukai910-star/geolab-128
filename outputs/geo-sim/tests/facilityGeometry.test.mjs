@@ -12,7 +12,7 @@ registerHooks({
   }
 });
 const { REBUILT_FACILITY_KINDS, createFacilityGeometry } = await import("../src/facilityGeometry.js");
-const { Color } = await import("three");
+const { Color, DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } = await import("three");
 
 const QUALITY_TIERS = Object.freeze(["low", "ultra", "exhaustive"]);
 const COLOR_ATTRIBUTES = Object.freeze(["color", "constructionResponse"]);
@@ -22,8 +22,7 @@ const NORMALIZED_BOUND = 0.5 + 1e-5;
 const ENVELOPE_BOUND = 1.2;
 // Floors are 75% of the smallest triangle count measured across low/ultra/exhaustive for that kind
 // (the low tier is always the binding one because refinement is strictly monotonic). The measured
-// minima below were read from facilityGeometry.js at src sha256 be080bcd6b7aab3c...; re-measure and
-// re-pin them when a kind is legitimately rebuilt with a different detail density.
+// minima below were measured from generated meshes; re-measure when a kind is rebuilt.
 const MIN_TRIANGLES = Object.freeze({
   "setback-tower": 31320,      // measured 41760
   "courtyard-midrise": 45729,  // measured 60972
@@ -38,14 +37,14 @@ const MIN_TRIANGLES = Object.freeze({
   "utility-gallery": 2730,     // measured 3640
   "buttress-dam": 2181,        // measured 2908
   "stepped-spillway": 936,     // measured 1248
-  "bridge-pier": 1230,         // measured 1640
+  "bridge-pier": 1740,         // measured 2320
   "crowned-road": 615,         // measured 820
   "solar-panel-frame": 8019,   // measured 10692
   "turbine-blade": 309,        // measured 412
-  "greenhouse-bay": 1110,      // measured 1480
+  "greenhouse-bay": 9990,      // measured 13320
   "stadium-bowl": 2769,        // measured 9620
-  "observatory-dome": 2397,    // measured 3132
-  "crane-boom": 4752,          // measured 6336
+  "observatory-dome": 2952,    // measured 3936
+  "crane-boom": 8541,          // measured 11388
   "evacuation-shelter": 13770, // measured 18360
   "river-hatchery": 9655      // measured 12874
 });
@@ -125,6 +124,29 @@ for (const kind of REBUILT_FACILITY_KINDS) {
       }
       assert.equal(roofX.size, 5, `${quality}: four fixed sawtooth bays require five eave/ridge boundaries`);
       assert.equal(roofY.size, 2, `${quality}: roof shells need a low eave and high glazed ridge`);
+    }
+    if (kind === "observatory-dome") {
+      const { center, size } = geometry.userData.facilityRebuild.normalization;
+      const sightY = (-0.08 + 0.46 * Math.cos(0.55) - center[1]) / size[1];
+      const sightZ = -center[2] / size[2];
+      const material = new MeshBasicMaterial({ side: DoubleSide });
+      const mesh = new Mesh(geometry, material);
+      const sight = sign => new Raycaster(new Vector3(sign, sightY, sightZ),
+        new Vector3(-sign, 0, 0), 0, 2).intersectObject(mesh);
+      const front = sight(1), back = sight(-1);
+      assert.ok(front[0]?.distance > 1.05, `${quality}: +x view must pass through the upper slit`);
+      assert.ok(back[0]?.distance < 0.95, `${quality}: -x view must meet the rear shell`);
+      material.dispose();
+      const shutter = new Color(0x7896a1), colors = geometry.getAttribute("color");
+      let shutterCount = 0, shutterX = 0;
+      for (let vertex = 0; vertex < position.count; vertex++) {
+        if (Math.abs(colors.getX(vertex) - shutter.r) > 1e-5 ||
+            Math.abs(colors.getY(vertex) - shutter.g) > 1e-5 ||
+            Math.abs(colors.getZ(vertex) - shutter.b) > 1e-5) continue;
+        shutterCount++;shutterX += position.getX(vertex);
+      }
+      assert.ok(shutterCount > 0 && shutterX / shutterCount > 0.2,
+        `${quality}: curved shutter must face the same +x opening`);
     }
 
     assert.equal(repeat.getAttribute("position").count, position.count, `${kind}/${quality}: deterministic vertex count`);

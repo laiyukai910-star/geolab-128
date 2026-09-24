@@ -4,6 +4,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Rebuilt the greenhouse bay, bridge pier, observatory shutter and crane boom: curved glazed roof with crop beds, tapered cutwater shafts with exposed bearings, a shell-aligned slit and shutter, and a fixed-panel boom with pulley rigging. Corrected the dome slit facing away from its telescope.
 - Rebuilt the industrial hall's nominal sawtooth roof as four asymmetric solid roof bays with continuous glazed clerestories, frames, gutters and tiered standing seams. Detail quality no longer changes the structural bay count.
 - Corrected shelter and hatchery scene scale and preserved their authored vertex colors; hatcheries now use their 9 m visual height instead of the generic 10 m fallback.
 - Added evacuation shelters and river hatcheries as selectable, environment-screened facilities with separate 3D assemblies, ecosystem roles, and site-impact defaults. Added dedicated presets for six existing specialized facilities whose UI previously used generic values.
