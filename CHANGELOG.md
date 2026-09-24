@@ -4,6 +4,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Rebuilt the industrial hall's nominal sawtooth roof as four asymmetric solid roof bays with continuous glazed clerestories, frames, gutters and tiered standing seams. Detail quality no longer changes the structural bay count.
 - Corrected shelter and hatchery scene scale and preserved their authored vertex colors; hatcheries now use their 9 m visual height instead of the generic 10 m fallback.
 - Added evacuation shelters and river hatcheries as selectable, environment-screened facilities with separate 3D assemblies, ecosystem roles, and site-impact defaults. Added dedicated presets for six existing specialized facilities whose UI previously used generic values.
 - Added local bathymetry and groundwater-depth raster inputs. Bathymetry informs seabed geometry, groundwater depth constrains the subsurface water table, and both are traceable in cell inspection, coverage reports, and grid exports. Fixed missing NoData metadata incorrectly masking valid zero-valued raster cells.

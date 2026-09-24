@@ -69,7 +69,7 @@ function sawtoothDetails(h, parts, tier, radial, colors) {
   const { box, cylinder, tube, ring, put } = h;
   const { wall, trim, glass, metal } = colors;
 
-  const bays = 4 + tier;                       // sawtooth bays across the 0.96 m hall
+  const bays = 4;                              // structural grid follows the fixed roof bay count
   const bayWidth = 0.96 / bays;                // roof bay pitch, matched by the structural grid
   const hallHalf = 0.465;                      // interior wall face, keeps members inside the shell
 

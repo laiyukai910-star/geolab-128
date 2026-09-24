@@ -12,6 +12,7 @@ registerHooks({
   }
 });
 const { REBUILT_FACILITY_KINDS, createFacilityGeometry } = await import("../src/facilityGeometry.js");
+const { Color } = await import("three");
 
 const QUALITY_TIERS = Object.freeze(["low", "ultra", "exhaustive"]);
 const COLOR_ATTRIBUTES = Object.freeze(["color", "constructionResponse"]);
@@ -27,7 +28,7 @@ const MIN_TRIANGLES = Object.freeze({
   "setback-tower": 31320,      // measured 41760
   "courtyard-midrise": 45729,  // measured 60972
   "l-plan-lowrise": 13755,     // measured 18340
-  "sawtooth-industrial": 14823,// measured 19764
+  "sawtooth-industrial": 23865,// measured 31820
   "cross-plan-civic": 29121,   // measured 38828
   "hipped-roof": 4443,         // measured 5924
   "tapered-landmark": 2544,    // measured 3392
@@ -111,6 +112,19 @@ for (const kind of REBUILT_FACILITY_KINDS) {
     assert.equal(geometry.getAttribute("constructionResponse").itemSize, 2, `${kind}/${quality}: pair of construction response channels`);
     for (const name of COLOR_ATTRIBUTES) {
       assert.equal(countOutsideUnitRange(geometry.getAttribute(name).array), 0, `${kind}/${quality}: ${name} must stay inside [0, 1]`);
+    }
+    if (kind === "sawtooth-industrial") {
+      const roof = new Color(0x8e999b), colors = geometry.getAttribute("color");
+      const roofX = new Set(), roofY = new Set();
+      for (let vertex = 0; vertex < position.count; vertex++) {
+        if (Math.abs(colors.getX(vertex) - roof.r) > 1e-5 ||
+            Math.abs(colors.getY(vertex) - roof.g) > 1e-5 ||
+            Math.abs(colors.getZ(vertex) - roof.b) > 1e-5) continue;
+        roofX.add(Math.round(position.getX(vertex) * 10000));
+        roofY.add(Math.round(position.getY(vertex) * 10000));
+      }
+      assert.equal(roofX.size, 5, `${quality}: four fixed sawtooth bays require five eave/ridge boundaries`);
+      assert.equal(roofY.size, 2, `${quality}: roof shells need a low eave and high glazed ridge`);
     }
 
     assert.equal(repeat.getAttribute("position").count, position.count, `${kind}/${quality}: deterministic vertex count`);

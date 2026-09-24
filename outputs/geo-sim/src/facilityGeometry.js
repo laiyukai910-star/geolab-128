@@ -140,8 +140,28 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     for (let step = 0; step < 3; step++) box([-0.15,-0.44+step*0.025,0.47-step*0.018],[0.20,0.035,0.08],trim);
   } else if (kind === "sawtooth-industrial") {
     block([0,-0.15,0],[0.96,0.64,0.96],2,4+tier);
-    const bays = 4 + tier;
-    for (let bay = 0; bay < bays; bay++) roof(-0.48+(bay+0.5)*0.96/bays,0.18,0,0.96/bays,0.20,0.98);
+    const bays = 4, bayWidth = 0.96 / bays;
+    for (let bay = 0; bay < bays; bay++) {
+      const x0 = -0.48 + bay * bayWidth, x1 = x0 + bayWidth;
+      const section = new THREE.Shape();
+      section.moveTo(x0,0.17); section.lineTo(x1,0.17); section.lineTo(x1,0.37); section.closePath();
+      const shell = new THREE.ExtrudeGeometry(section,{depth:0.96,steps:1,bevelEnabled:false});
+      shell.translate(0,0,-0.48);
+      put(shell,0x8e999b);
+      box([x1+0.004,0.27,0],[0.007,0.19,0.9],glass,0.001);
+      for (const z of [-0.45,0.45]) box([x1+0.009,0.27,z],[0.012,0.21,0.018],metal,0.001);
+      for (let mullion = 1; mullion < 2+tier; mullion++) {
+        const z = -0.45 + mullion * 0.9 / (2+tier);
+        box([x1+0.009,0.27,z],[0.01,0.2,0.01],metal,0.001);
+      }
+      box([x1+0.01,0.275,0],[0.012,0.008,0.92],metal,0.001);
+      box([x0,0.175,0],[0.018,0.018,0.98],0x7f9298,0.001);
+      box([x1,0.376,0],[0.018,0.014,0.98],0xb5b8af,0.001);
+      if (tier > 0) for (let seam = 1; seam < 3+tier*2; seam++) {
+        const z = -0.44 + seam * 0.88 / (3+tier*2);
+        tube([[x0+0.025,0.20,z],[x1-0.025,0.35,z]],0.003,metal);
+      }
+    }
     box([0,-0.23,0.489],[0.34,0.37,0.012],0xa8b2b3);
     for (let row = 0; row < 9; row++) box([0,-0.39+row*0.04,0.497],[0.32,0.009,0.006],metal,0.001);
     tube([[0.37,0.16,-0.25],[0.37,0.46,-0.25],[0.3,0.49,-0.25]],0.023);
