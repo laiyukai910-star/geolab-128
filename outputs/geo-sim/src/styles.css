@@ -783,6 +783,53 @@ input[type="range"] {
   grid-column: 1 / -1;
 }
 
+.button-row #cancelInfrastructureEdit:not([hidden]) {
+  grid-column: 1 / -1;
+}
+
+.facility-list {
+  max-height: 244px;
+  margin: 12px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.facility-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.facility-list li[data-editing="true"] {
+  box-shadow: inset 3px 0 var(--accent);
+  padding-left: 8px;
+}
+
+.facility-list-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.facility-list-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.facility-list-actions button {
+  min-height: 30px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
 .analysis-section {
   background: transparent;
 }

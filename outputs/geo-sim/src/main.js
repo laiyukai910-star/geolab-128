@@ -106,6 +106,7 @@ import {
   getContinentTemplate
 } from "./continentTemplates.js";
 import { setupLocalization } from "./localization.js";
+import { manualInfrastructureCoordinatePairs, manualInfrastructureFeatureBounds } from "./manualInfrastructureFeatureList.js";
 import { buildScenarioSynthesis, makeScenarioSynthesisMarkdown } from "./scenarioSynthesis.js";
 
 setupLocalization();
@@ -234,6 +235,7 @@ const ctx = canvas.getContext("2d", { willReadFrequently: false });
 const infrastructureSelectionOverlay = document.getElementById("infrastructureSelectionOverlay");
 const infrastructureSelectionReadout = document.getElementById("infrastructureSelectionReadout");
 const infrastructureAddButton = document.getElementById("addInfrastructureFeature");
+const manualInfrastructureList = document.getElementById("manualInfrastructureList");
 const magnifierCanvas = document.getElementById("magnifierCanvas");
 const magnifierCtx = magnifierCanvas?.getContext("2d", { willReadFrequently: false });
 const magnifierLabel = document.getElementById("magnifierLabel");
@@ -320,7 +322,10 @@ Object.assign(LOCALIZED_INFRASTRUCTURE_TYPES, {
   ranger_station: "\u62a4\u6797/\u666f\u533a\u7ba1\u7406\u7ad9",
   gauging_station: "\u6c34\u6587\u6d4b\u7ad9",
   evacuation_shelter: "应急避难中心",
-  river_hatchery: "河流育苗设施"
+  river_hatchery: "河流育苗设施",
+  water_treatment_plant: "净水厂",
+  ferry_terminal: "渡轮码头",
+  fire_watch_tower: "森林火情瞭望塔"
 });
 
 const LOCALIZED_GEOMETRY_TYPES = {
@@ -385,6 +390,7 @@ let vegetationVisible = true;
 let uploadedLayers = null;
 let externalLayers = null;
 let manualInfrastructureFeatures = [];
+let editingInfrastructureFeatureIndex = -1;
 let manualSurfaceFeatures = [];
 let wildlifeReleaseBatches = [];
 let wildlifeReleaseSerial = 0;
@@ -782,6 +788,7 @@ function bindUi() {
     uploadedLayers = null;
     externalLayers = null;
     manualInfrastructureFeatures = [];
+    editingInfrastructureFeatureIndex = -1;
     manualSurfaceFeatures = [];
     osmInfrastructure = null;
     updateManualInfrastructureReadout();
@@ -802,6 +809,8 @@ function bindUi() {
     document.getElementById(id).addEventListener("change", () => updateSurfacePatchGeometryTemplate(false));
   });
   infrastructureAddButton?.addEventListener("click", addManualInfrastructureFeature);
+  document.getElementById("cancelInfrastructureEdit")?.addEventListener("click", cancelManualInfrastructureEdit);
+  manualInfrastructureList?.addEventListener("click", handleManualInfrastructureListAction);
   document.getElementById("applyAdaptiveInfrastructurePlan").addEventListener("click", applyAdaptiveInfrastructurePlan);
   document.getElementById("clearInfrastructureFeatures").addEventListener("click", clearManualInfrastructureFeatures);
   document.getElementById("exportInfrastructureFeatures").addEventListener("click", exportManualInfrastructureFeatures);
@@ -1757,6 +1766,7 @@ function updateInfrastructureSelectionReadoutSafe() {
       addButton.textContent = "\u6dfb\u52a0\u5230\u9009\u533a";
       addButton.title = `\u628a${typeLabel}\u6295\u653e\u5230\u5f53\u524d\u9009\u533a`;
     }
+    updateInfrastructureEditorControls(addButton);
     return;
   }
   const coords = parseManualCoordinateList();
@@ -1776,21 +1786,36 @@ function updateInfrastructureSelectionReadoutSafe() {
     addButton.textContent = "\u6309\u5750\u6807\u6dfb\u52a0";
     addButton.title = `\u6309\u5f53\u524d\u5750\u6807\u6dfb\u52a0${typeLabel}`;
   }
+  updateInfrastructureEditorControls(addButton);
+}
+
+function updateInfrastructureEditorControls(addButton) {
+  const editing = editingInfrastructureFeatureIndex >= 0;
+  const cancelButton = document.getElementById("cancelInfrastructureEdit");
+  if (cancelButton) cancelButton.hidden = !editing;
+  if (editing && addButton) {
+    addButton.textContent = "保存设施修改";
+    addButton.title = "更新当前编辑的设施";
+  }
 }
 
 async function addManualInfrastructureFeature() {
   const feature = readManualInfrastructureFeature();
-  manualInfrastructureFeatures.push(feature);
+  const editing = editingInfrastructureFeatureIndex >= 0 && editingInfrastructureFeatureIndex < manualInfrastructureFeatures.length;
+  if (editing) manualInfrastructureFeatures[editingInfrastructureFeatureIndex] = feature;
+  else manualInfrastructureFeatures.push(feature);
+  editingInfrastructureFeatureIndex = -1;
   rebuildExternalLayerBundle();
   updateManualInfrastructureReadout();
   updateInfrastructureSelectionReadout();
   dataStatus.textContent = summarizeLayerBundle(externalLayers);
-  setStatus("已加入人造设施情景");
+  setStatus(editing ? "已更新人造设施" : "已加入人造设施情景");
   scheduleTerrainRebuild();
 }
 
 async function clearManualInfrastructureFeatures() {
   manualInfrastructureFeatures = [];
+  editingInfrastructureFeatureIndex = -1;
   rebuildExternalLayerBundle();
   updateManualInfrastructureReadout();
   updateInfrastructureSelectionReadout();
@@ -1828,6 +1853,7 @@ async function applyAdaptiveInfrastructurePlan() {
   const generatedFeatures = plan.featureCollection?.features || [];
   const preservedManual = manualInfrastructureFeatures.filter((feature) => feature.properties?.scenario !== "adaptive_matrix_plan");
   manualInfrastructureFeatures = [...preservedManual, ...generatedFeatures];
+  editingInfrastructureFeatureIndex = -1;
   rebuildExternalLayerBundle();
   updateManualInfrastructureReadout();
   updateInfrastructureSelectionReadout();
@@ -1984,6 +2010,69 @@ function roundPoint(point) {
   return [round(point[0], 4), round(point[1], 4)];
 }
 
+function cancelManualInfrastructureEdit() {
+  editingInfrastructureFeatureIndex = -1;
+  updateManualInfrastructureReadout();
+  updateInfrastructureSelectionReadout();
+}
+
+function handleManualInfrastructureListAction(event) {
+  const button = event.target.closest("button[data-action][data-index]");
+  if (!button || !manualInfrastructureList.contains(button)) return;
+  const index = Number(button.dataset.index);
+  if (!Number.isInteger(index) || index < 0 || index >= manualInfrastructureFeatures.length) return;
+  const feature = manualInfrastructureFeatures[index];
+  if (button.dataset.action === "focus") {
+    const bounds = manualInfrastructureFeatureBounds(feature);
+    if (bounds) renderer?.focusRegion?.(bounds, { mode: "manual-infrastructure" });
+    setStatus(`已定位：${localizedLabel(LOCALIZED_INFRASTRUCTURE_TYPES, feature.properties?.infrastructure_type || "custom")}`);
+    return;
+  }
+  if (button.dataset.action === "edit" && feature.properties?.scenario === "manual") {
+    editingInfrastructureFeatureIndex = index;
+    clearInfrastructureRegionSelection();
+    const bounds = manualInfrastructureFeatureBounds(feature);
+    const pairs = manualInfrastructureCoordinatePairs(feature);
+    const fields = {
+      infraImpervious: "impervious_fraction", infraRunoffDelta: "runoff_delta",
+      infraRoughnessDelta: "roughness_delta", infraTempDelta: "temperature_delta_c",
+      infraStorage: "storage_mm", infraRetention: "flow_retention",
+      infraIrrigation: "irrigation_mm", infraVegetationDelta: "vegetation_delta",
+      infraDemand: "water_demand_mm", infraBuildingDensity: "building_density",
+      infraBuildingHeight: "building_height_m", infraFloors: "floor_count",
+      infraLandmarkHeight: "landmark_height_m", infraRadius: "radius_km"
+    };
+    document.getElementById("infraType").value = feature.properties.infrastructure_type || "custom";
+    document.getElementById("infraGeometry").value = feature.geometry?.type || "Point";
+    if (bounds) {
+      document.getElementById("infraX").value = String(round(bounds.centerXKm, 4));
+      document.getElementById("infraY").value = String(round(bounds.centerYKm, 4));
+    }
+    for (const [id, property] of Object.entries(fields)) {
+      const value = feature.properties[property];
+      if (Number.isFinite(Number(value))) document.getElementById(id).value = String(value);
+    }
+    const coordinateInput = document.getElementById("infraCoordinates");
+    coordinateInput.value = pairs.map(([x, y]) => `${x},${y}`).join("; ");
+    coordinateInput.dataset.manual = "true";
+    updateManualInfrastructureReadout();
+    updateInfrastructureSelectionReadout();
+    setStatus("正在编辑人造设施");
+    return;
+  }
+  if (button.dataset.action === "remove") {
+    manualInfrastructureFeatures.splice(index, 1);
+    if (editingInfrastructureFeatureIndex === index) editingInfrastructureFeatureIndex = -1;
+    else if (editingInfrastructureFeatureIndex > index) editingInfrastructureFeatureIndex -= 1;
+    rebuildExternalLayerBundle();
+    updateManualInfrastructureReadout();
+    updateInfrastructureSelectionReadout();
+    dataStatus.textContent = summarizeLayerBundle(externalLayers);
+    setStatus("已删除人造设施");
+    scheduleTerrainRebuild();
+  }
+}
+
 function manualInfrastructureCollection() {
   const mapSizeKm = currentMapSizeKm();
   return {
@@ -1998,6 +2087,7 @@ function manualInfrastructureCollection() {
 function updateManualInfrastructureReadout() {
   const node = document.getElementById("manualInfrastructureReadout");
   if (!node) return;
+  renderManualInfrastructureList();
   if (!manualInfrastructureFeatures.length) {
     node.textContent = "未添加手工设施";
     return;
@@ -2018,6 +2108,37 @@ function updateManualInfrastructureReadout() {
   node.textContent += ` · ${Object.entries(geometryCounts)
     .map(([key, value]) => `${localizedLabel(LOCALIZED_GEOMETRY_TYPES, key)}:${value}`)
     .join(" / ")}`;
+}
+
+function renderManualInfrastructureList() {
+  if (!manualInfrastructureList) return;
+  manualInfrastructureList.hidden = manualInfrastructureFeatures.length === 0;
+  const rows = manualInfrastructureFeatures.map((feature, index) => {
+    const row = document.createElement("li");
+    row.dataset.editing = String(index === editingInfrastructureFeatureIndex);
+    const label = document.createElement("span");
+    label.className = "facility-list-label";
+    const type = localizedLabel(LOCALIZED_INFRASTRUCTURE_TYPES, feature.properties?.infrastructure_type || "custom");
+    const bounds = manualInfrastructureFeatureBounds(feature);
+    label.textContent = `${index + 1}. ${type} · ${bounds ? `${format(bounds.centerXKm, 1)}, ${format(bounds.centerYKm, 1)} km` : "位置未知"}`;
+    label.title = label.textContent;
+    const actions = document.createElement("span");
+    actions.className = "facility-list-actions";
+    for (const [action, text] of [["focus", "定位"], ["edit", "编辑"], ["remove", "删除"]]) {
+      if (action === "edit" && feature.properties?.scenario !== "manual") continue;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.action = action;
+      button.dataset.index = String(index);
+      button.textContent = text;
+      button.title = `${text}${type}`;
+      button.setAttribute("aria-label", `${text}：${index + 1} · ${type}`);
+      actions.append(button);
+    }
+    row.append(label, actions);
+    return row;
+  });
+  manualInfrastructureList.replaceChildren(...rows);
 }
 
 function applyInfrastructurePreset() {

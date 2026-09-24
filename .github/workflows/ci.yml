@@ -68,6 +68,7 @@ jobs:
           node outputs/geo-sim/tests/geologyStructure.test.mjs
           node outputs/geo-sim/tests/facilityGeometry.test.mjs
           node outputs/geo-sim/tests/facilityExpansion.test.mjs
+          node outputs/geo-sim/tests/manualInfrastructureFeatureList.test.mjs
           node outputs/geo-sim/tests/facilityEnvelopeDetails.test.mjs
           node outputs/geo-sim/tests/facilityIndustrialDetails.test.mjs
           node outputs/geo-sim/tests/facilityCivilDetails.test.mjs
