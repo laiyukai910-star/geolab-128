@@ -8,6 +8,16 @@ function random01(x, z, seed) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
+function patchNoise(x, z, wavelengthKm, seed) {
+  const gx = x / wavelengthKm, gz = z / wavelengthKm;
+  const ix = Math.floor(gx), iz = Math.floor(gz);
+  const tx = (gx - ix) ** 2 * (3 - 2 * (gx - ix));
+  const tz = (gz - iz) ** 2 * (3 - 2 * (gz - iz));
+  const a = random01(ix, iz, seed) * (1 - tx) + random01(ix + 1, iz, seed) * tx;
+  const b = random01(ix, iz + 1, seed) * (1 - tx) + random01(ix + 1, iz + 1, seed) * tx;
+  return a * (1 - tz) + b * tz;
+}
+
 function bilinear(values, n, gx, gz) {
   if (!values) return 0;
   const x0 = Math.floor(gx), z0 = Math.floor(gz);
@@ -36,8 +46,8 @@ export function planLocalVegetationStands(model, centerXKm, centerZKm, options =
   const maxZ = Math.floor((centerZKm + radiusKm) / spacingKm);
   const result = [];
   for (let z = minZ; z <= maxZ; z++) for (let x = minX; x <= maxX; x++) {
-    const wx = (x + (random01(x, z, seed + 17) - 0.5) * 0.76) * spacingKm;
-    const wz = (z + (random01(x, z, seed + 19) - 0.5) * 0.76) * spacingKm;
+    const wx = (x + (random01(x, z, seed + 17) - 0.5) * 0.94) * spacingKm;
+    const wz = (z + (random01(x, z, seed + 19) - 0.5) * 0.94) * spacingKm;
     if ((wx - centerXKm) ** 2 + (wz - centerZKm) ** 2 > radiusKm ** 2) continue;
     const gx = (wx / sizeKm + 0.5) * (n - 1);
     const gz = (wz / sizeKm + 0.5) * (n - 1);
@@ -59,11 +69,15 @@ export function planLocalVegetationStands(model, centerXKm, centerZKm, options =
     } else if (OPEN_COVERS.has(landCover) || vegetationType === 5 || vegetationType === 9) kind = "grass";
     else kind = canopyM > 4.5 ? "broadleaf" : "shrub";
     const density = kind === "grass" || kind === "reed" ? 0.78 : kind === "shrub" ? 0.65 : 0.57;
-    if (random01(x, z, seed + 23) > cover * density) continue;
+    const patch = patchNoise(wx, wz, 0.32, seed + 43) * 0.7
+      + patchNoise(wx, wz, 0.11, seed + 47) * 0.3;
+    const localDensity = Math.max(0.08, Math.min(1, cover * density * (0.16 + patch * 1.7)));
+    if (random01(x, z, seed + 23) > localDensity) continue;
     result.push({ x: wx, z: wz, kind, cover, canopyM, landCover,
       variant: Math.floor(random01(x, z, seed + 29) * 3),
-      scale: 0.76 + random01(x, z, seed + 31) * 0.48,
+      scale: 0.59 + random01(x, z, seed + 31) * 0.75 + patch * 0.16,
       rotation: random01(x, z, seed + 37) * Math.PI * 2,
+      patch,
       priority: random01(x, z, seed + 41) });
   }
   // Select across the whole disc so the budget never cuts a straight boundary through a stand.

@@ -1949,6 +1949,13 @@ export class TerrainRenderer {
     const buckets = new Map();
     const verticalScale = Number(this.params.verticalScale) || 1;
     const seaLevel = Number(this.params.seaLevel) || 0;
+    const standColors = {
+      broadleaf: [0xa5c28d, 0xb5c79a, 0x94bca0],
+      conifer: [0x90b9a1, 0xa4be9e, 0x85a894],
+      shrub: [0xa5c089, 0xb7c78d, 0x92b69a],
+      reed: [0xc1ce93, 0xb2c891, 0xc9c49d],
+      grass: [0xb9c984, 0xc4c58b, 0xa8bd83]
+    };
     for (const stand of stands) {
       const groundM = sampleTerrainHeight(this.model, stand.x, stand.z);
       if (groundM == null || groundM <= seaLevel) continue;
@@ -1964,8 +1971,8 @@ export class TerrainRenderer {
       buckets.get(bucketKey).push({
         x: stand.x, y: groundM * verticalScale / 1000 + height * 0.5, z: stand.z,
         sx: width, sy: height, sz: width, ry: stand.rotation,
-        color: stand.kind === "conifer" ? 0x8dc69c : stand.kind === "broadleaf" ? 0xa7d48f
-          : stand.kind === "reed" ? 0xc4d796 : stand.kind === "grass" ? 0xb9d27e : 0x91bc7e
+        color: new THREE.Color(standColors[stand.kind][stand.variant])
+          .multiplyScalar(0.9 + stand.patch * 0.22).getHex()
       });
     }
     const group = new THREE.Group();
@@ -2550,17 +2557,21 @@ export class TerrainRenderer {
     addInstancedCylinder(this.infrastructureGroup, "楼顶天线", buckets.antennas, 0xd8ddd7, { radiusSegments: 6, roughness: 0.48, metalness: 0.12 });
     addInstancedBox(this.infrastructureGroup, "设施底板", buckets.slabs, 0x72736b, { roughness: 0.85, metalness: 0.02 });
     if (buckets.parkPlantings.length) {
-      const detail = sharedGeometry(this.infrastructureGroup, `park-tree:${budgetPlan.quality}:detail`, () =>
-        createFoliageGeometry(false, budgetPlan.quality, 0, true));
-      const proxy = sharedGeometry(this.infrastructureGroup, "park-tree:proxy", () =>
-        createFoliageGeometry(false, "distant", 0, true));
       const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, side: THREE.DoubleSide });
       const profile = foliageDetailProfile(budgetPlan.quality);
-      const lod = new FoliageInstances(detail, proxy, material, buckets.parkPlantings, 0xffffff,
-        profile.maximumDetail, profile.pixelThreshold);
-      lod.name = "公园乔木";
-      for (const mesh of [lod.near, lod.far]) mesh.userData.assetKind = "park-tree";
-      this.infrastructureGroup.add(lod);
+      for (let variant = 0; variant < 3; variant++) {
+        const transforms = buckets.parkPlantings.filter(tree => tree.variant === variant);
+        if (!transforms.length) continue;
+        const detail = sharedGeometry(this.infrastructureGroup, `park-tree:${budgetPlan.quality}:${variant}:detail`, () =>
+          createFoliageGeometry(false, budgetPlan.quality, variant, true));
+        const proxy = sharedGeometry(this.infrastructureGroup, `park-tree:${variant}:proxy`, () =>
+          createFoliageGeometry(false, "distant", variant, true));
+        const lod = new FoliageInstances(detail, proxy, material, transforms, 0xffffff,
+          Math.ceil(profile.maximumDetail / 3), profile.pixelThreshold);
+        lod.name = `公园乔木 ${variant + 1}`;
+        for (const mesh of [lod.near, lod.far]) mesh.userData.assetKind = "park-tree";
+        this.infrastructureGroup.add(lod);
+      }
     }
     addInstancedBox(this.infrastructureGroup, "道路桥面", buckets.roads, 0x59605c, { roughness: 0.9 });
     addInstancedBox(this.infrastructureGroup, "道路标线", buckets.laneMarkings, 0xd9d5bd, { roughness: 0.7 });
@@ -4117,10 +4128,13 @@ function addFacilityCell(buckets, cellInfo) {
     // plinths, walls and a raised slab obscure it and misrepresent a planted open space.
     const count = Math.min(20, Math.max(0, Math.round(cell * 36 * (1 - clamp01(impervious)))));
     for (let k = 0; k < count; k++) {
-      const radius = Math.sqrt(hash01(x + k * 7, y - k * 11, seed + 5101)) * cell * 0.32;
+      const grove = Math.floor(k / 5);
+      const groveAngle = hash01(x + grove * 7, y - grove * 11, seed + 5101) * Math.PI * 2;
+      const groveRadius = cell * (0.12 + hash01(x - grove, y + grove, seed + 5103) * 0.12);
       const bearing = hash01(x - k * 13, y + k * 17, seed + 5107) * Math.PI * 2;
-      const wx = base.x + Math.cos(bearing) * radius;
-      const wz = base.z + Math.sin(bearing) * radius;
+      const radius = Math.sqrt(hash01(x + k * 7, y - k * 11, seed + 5109)) * cell * 0.065;
+      const wx = base.x + Math.cos(groveAngle) * groveRadius + Math.cos(bearing) * radius;
+      const wz = base.z + Math.sin(groveAngle) * groveRadius + Math.sin(bearing) * radius;
       const elevationM = sampleTerrainHeight(model, wx, wz);
       if (elevationM == null || elevationM <= seaLevel) continue;
       const height = (0.008 + hash01(x + k, y - k, seed + 5113) * 0.006) * scaledVertical;
@@ -4128,7 +4142,8 @@ function addFacilityCell(buckets, cellInfo) {
       buckets.parkPlantings.push({
         x: wx, y: elevationM * scaledVertical / 1000 + height / 2, z: wz,
         sx: crown, sy: height, sz: crown,
-        ry: bearing, color: 0xffffff
+        ry: bearing, color: [0xe4efdc, 0xf0e8d2, 0xdce9e6][k % 3],
+        variant: k % 3
       });
       used += 1;
     }

@@ -23,6 +23,8 @@ assert.deepEqual(first, planLocalVegetationStands(model, 0, 0, options));
 assert.ok(first.every(item => item.kind === "broadleaf" && Math.hypot(item.x, item.z) <= 0.5));
 assert.ok(first.every(item => Math.abs(item.x) <= 0.8 && Math.abs(item.z) <= 0.8));
 assert.ok(first.some(item => item.z < -0.2) && first.some(item => item.z > 0.2));
+assert.ok(Math.max(...first.map(item => item.patch)) - Math.min(...first.map(item => item.patch)) > 0.3);
+assert.ok(first.every(item => item.patch >= 0 && item.patch <= 1));
 assert.deepEqual(planLocalVegetationStands(model, 0, 0, { ...options, budget: 0 }), []);
 
 model.surface.landCover.fill(42);
