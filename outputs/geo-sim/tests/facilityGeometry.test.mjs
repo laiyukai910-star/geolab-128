@@ -46,11 +46,14 @@ const MIN_TRIANGLES = Object.freeze({
   "observatory-dome": 2952,    // measured 3936
   "crane-boom": 8541,          // measured 11388
   "evacuation-shelter": 13770, // measured 18360
-  "river-hatchery": 9655      // measured 12874
+  "river-hatchery": 9655,     // measured 12874
+  "water-treatment-works": 13539, // measured 18052
+  "ferry-terminal": 7611,         // measured 10148
+  "fire-watch-tower": 13362        // measured 17816
 });
 
-assert.equal(REBUILT_FACILITY_KINDS.length, 23, "23 rebuilt facility kinds");
-assert.equal(new Set(REBUILT_FACILITY_KINDS).size, 23, "facility kinds must be unique");
+assert.equal(REBUILT_FACILITY_KINDS.length, 26, "26 rebuilt facility kinds");
+assert.equal(new Set(REBUILT_FACILITY_KINDS).size, 26, "facility kinds must be unique");
 assert.deepEqual(Object.keys(MIN_TRIANGLES).sort(), [...REBUILT_FACILITY_KINDS].sort(), "every kind needs a measured triangle floor");
 
 const coordinateBytes = geometry => {
@@ -148,6 +151,29 @@ for (const kind of REBUILT_FACILITY_KINDS) {
       assert.ok(shutterCount > 0 && shutterX / shutterCount > 0.2,
         `${quality}: curved shutter must face the same +x opening`);
     }
+    if (["water-treatment-works", "ferry-terminal", "fire-watch-tower"].includes(kind)) {
+      const signature = new Color({
+        "water-treatment-works": 0x318ba0,
+        "ferry-terminal": 0x454f50,
+        "fire-watch-tower": 0xa29b87
+      }[kind]);
+      const colors = geometry.getAttribute("color");
+      const feature = [];
+      for (let vertex = 0; vertex < position.count; vertex++) {
+        if (Math.abs(colors.getX(vertex) - signature.r) < 1e-5 &&
+            Math.abs(colors.getY(vertex) - signature.g) < 1e-5 &&
+            Math.abs(colors.getZ(vertex) - signature.b) < 1e-5) feature.push(vertex);
+      }
+      assert.ok(feature.length > 12, `${kind}/${quality}: identifying modeled feature must be present`);
+      if (kind === "water-treatment-works") {
+        const z = feature.map(vertex => position.getZ(vertex));
+        assert.ok(Math.max(...z) - Math.min(...z) > 0.4, `${quality}: two water-filled clarifiers must be separate`);
+      }
+      if (kind === "fire-watch-tower") {
+        const y = feature.map(vertex => position.getY(vertex));
+        assert.ok(Math.max(...y) - Math.min(...y) > 0.45, `${quality}: bracing must span multiple tower stages`);
+      }
+    }
 
     assert.equal(repeat.getAttribute("position").count, position.count, `${kind}/${quality}: deterministic vertex count`);
     assert.equal(Buffer.compare(coordinateBytes(geometry), coordinateBytes(repeat)), 0, `${kind}/${quality}: deterministic position bytes`);
@@ -163,6 +189,13 @@ assert.equal(checked, REBUILT_FACILITY_KINDS.length * QUALITY_TIERS.length, "eve
 
 assert.equal(createFacilityGeometry("not-a-real-kind", "ultra"), null, "unknown kinds must not fabricate geometry");
 assert.equal(createFacilityGeometry(null, "ultra"), null, "null kind must not fabricate geometry");
+
+const { semanticAssetKind } = await import("../src/proceduralAssets.js");
+for (const [label, kind] of [
+  ["净水处理厂", "water-treatment-works"],
+  ["渡轮码头", "ferry-terminal"],
+  ["火情瞭望塔", "fire-watch-tower"]
+]) assert.equal(semanticAssetKind(label), kind, `${label} must route to its own mesh`);
 
 const source = readFileSync(new URL("../src/facilityGeometry.js", import.meta.url), "utf8");
 for (const token of ["Math.random", "Date.now", "performance.now"]) {

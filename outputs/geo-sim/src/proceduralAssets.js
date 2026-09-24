@@ -20,6 +20,8 @@ const SEMANTIC_ASSET_KIND = new Map([
   ["错落低层住宅", "l-plan-lowrise"], ["锯齿顶工业厂房", "sawtooth-industrial"],
   ["多翼公共设施", "cross-plan-civic"], ["四坡脊屋顶", "hipped-roof"],
   ["应急避难中心", "evacuation-shelter"], ["河流育苗设施", "river-hatchery"],
+  ["净水处理厂", "water-treatment-works"], ["渡轮码头", "ferry-terminal"],
+  ["火情瞭望塔", "fire-watch-tower"],
   ["曲面地标塔体", "tapered-landmark"], ["塔楼顶冠", "architectural-crown"],
   ["立面横带", "facade-band"], ["立面竖肋", "facade-fin"], ["窗格幕墙", "curtain-wall"],
   ["阳台挑板", "balcony-railed"], ["建筑阳台栏杆", "balcony-railed"], ["入口雨棚", "entrance-canopy"],

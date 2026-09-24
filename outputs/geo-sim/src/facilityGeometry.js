@@ -11,7 +11,8 @@ export const REBUILT_FACILITY_KINDS = Object.freeze([
   "water-tower-tank", "tunnel-portal", "utility-gallery", "buttress-dam",
   "stepped-spillway", "bridge-pier", "crowned-road", "solar-panel-frame",
   "turbine-blade", "greenhouse-bay", "stadium-bowl", "observatory-dome", "crane-boom",
-  "evacuation-shelter", "river-hatchery"
+  "evacuation-shelter", "river-hatchery", "water-treatment-works",
+  "ferry-terminal", "fire-watch-tower"
 ]);
 
 // Normalized display envelopes retain existing placement transforms and pivots.
@@ -237,6 +238,101 @@ export function createFacilityGeometry(kind, quality = "ultra") {
     box([0.24,-0.26,0.42],[0.43,0.025,0.08],0xabbab7,0.002);
     for(const x of [0.02,0.44])cylinder([x,-0.37,0.43],0.009,0.2,metal);
     tube([[-0.18,-0.16,-0.34],[-0.02,-0.16,-0.34],[0.44,-0.16,-0.34]],0.018,0x7c979c);
+  } else if (kind === "water-treatment-works") {
+    box([0,-0.47,0],[0.98,0.06,0.96],0x9baaa8,0.004);
+    block([-0.29,-0.19,0],[0.37,0.54,0.76],2,2+tier);
+    box([-0.29,0.095,0],[0.42,0.035,0.81],0x78959a,0.003);
+    for(const z of [-0.24,0.24]){
+      const x=0.20, basinY=-0.36, radius=0.19;
+      put(new THREE.CylinderGeometry(radius,radius,0.13,radial,1,true),0xb7c8c7,[x,basinY,z]);
+      put(new THREE.CircleGeometry(radius-0.018,radial),0x318ba0,[x,-0.34,z],[-Math.PI/2,0,0]);
+      ring(radius,0.012,[x,-0.285,z],0xe5e5db);
+      ring(radius-0.025,0.003,[x,-0.331,z],0x8dc9d1);
+      cylinder([x,-0.27,z],0.012,0.14,metal);
+      cylinder([x,-0.24,z],0.03,0.025,0xb3b9b1);
+      for(const direction of [-1,1]){
+        tube([[x,-0.24,z],[x+direction*0.145,-0.24,z]],0.007,metal);
+        box([x+direction*0.145,-0.25,z],[0.012,0.035,0.018],metal,0.001);
+      }
+      tube([[x-0.19,-0.24,z],[x-0.26,-0.24,z],[x-0.26,-0.42,z]],0.011,0x7d9fa5);
+    }
+    for(const z of [-0.34,0.34]){
+      tube([[-0.1,-0.37,z],[0.43,-0.37,z]],0.018,0x77969b);
+      for(const x of [0.02,0.38])cylinder([x,-0.32,z],0.007,0.12,metal);
+    }
+    box([0.21,-0.26,0],[0.44,0.018,0.05],0xd0d5ce,0.002);
+    for(const z of [-0.035,0.035])tube([[0.01,-0.25,z],[0.42,-0.25,z]],0.004,metal);
+    for(const x of [-0.44,-0.14]){
+      cylinder([x,0.155,-0.24],0.032,0.10,0x879fa2);
+      ring(0.034,0.004,[x,0.21,-0.24],trim);
+    }
+  } else if (kind === "ferry-terminal") {
+    box([0,-0.47,-0.06],[0.96,0.06,0.83],0x9ca7a4,0.004);
+    block([0,-0.24,-0.24],[0.78,0.40,0.37],1,4+tier);
+    box([0,-0.025,-0.24],[0.88,0.04,0.47],0x728f98,0.004);
+    box([0,-0.055,0.075],[0.76,0.025,0.29],0x879fa1,0.002);
+    for(const x of [-0.36,0.36]){
+      box([x,-0.23,-0.012],[0.018,0.38,0.025],metal,0.002);
+      box([x,-0.16,0.17],[0.018,0.23,0.018],metal,0.002);
+      tube([[x,-0.08,-0.08],[x,-0.08,0.19]],0.008,metal);
+    }
+    for(const z of [-0.04,0.16])box([0,-0.075,z],[0.75,0.012,0.013],0xc1c9c5,0.001);
+    box([0,-0.39,0.19],[0.55,0.045,0.45],0xaaa795,0.003);
+    for(const x of [-0.27,0.27]){
+      for(const z of [0.06,0.37])cylinder([x,-0.36,z],0.016,0.23,0x79898b);
+      tube([[x,-0.24,0.06],[x,-0.24,0.37]],0.008,0xc7d2ce);
+    }
+    put(new THREE.BoxGeometry(0.34,0.025,0.25),0xc4c8ba,[0,-0.39,0.38],[-0.15,0,0]);
+    box([0,-0.42,0.48],[0.48,0.03,0.13],0x9c9e90,0.003);
+    for(const x of [-0.21,0.21]){
+      cylinder([x,-0.36,0.46],0.021,0.22,0x7d8888);
+      cylinder([x,-0.41,0.48],0.027,0.13,0x454f50);
+    }
+    for(const z of [0.14,0.34])for(const x of [-0.13,0.13]){
+      box([x,-0.357,z],[0.012,0.005,0.03],0xd4d2ba,0.001);
+    }
+    box([0,0.005,-0.24],[0.3,0.024,0.12],0xe4e0ca,0.002);
+  } else if (kind === "fire-watch-tower") {
+    for(const x of [-0.39,0.39])for(const z of [-0.39,0.39]){
+      box([x,-0.485,z],[0.13,0.03,0.13],0x9fa7a0,0.003);
+      const upper=[x*0.58,0.19,z*0.58];
+      tube([[x,-0.47,z],upper],0.018,0x8b806d);
+      for(const level of [-0.43,-0.19,0.05]){
+        const t=(level+0.47)/0.66;
+        box([x*(1-t*0.42),level,z*(1-t*0.42)],[0.045,0.014,0.045],0xb5a98e,0.001);
+      }
+    }
+    for(const side of [-1,1])for(let stage=0;stage<3;stage++){
+      const y0=-0.44+stage*0.21,y1=y0+0.21;
+      const t0=(y0+0.47)/0.66,t1=(y1+0.47)/0.66;
+      const a=side*(0.39-t0*0.164),b=side*(0.39-t1*0.164);
+      for(const depth of [-1,1]){
+        tube([[a,y0,depth*(0.39-t0*0.164)],[b,y1,-depth*(0.39-t1*0.164)]],0.008,0xa29b87);
+      }
+      for(const depth of [-1,1]){
+        tube([[depth*(0.39-t0*0.164),y0,a],[-depth*(0.39-t1*0.164),y1,b]],0.008,0xa29b87);
+      }
+    }
+    for(const level of [-0.24,-0.03,0.18]){
+      const span=0.39-(level+0.47)/0.66*0.164;
+      for(const z of [-span,span])tube([[-span,level,z],[span,level,z]],0.009,0x9eaa9d);
+      for(const x of [-span,span])tube([[x,level,-span],[x,level,span]],0.009,0x9eaa9d);
+    }
+    box([0,0.19,0],[0.68,0.035,0.68],0x9a9d88,0.003);
+    block([0,0.29,0],[0.43,0.19,0.43],1,2+tier);
+    box([0,0.4,0],[0.49,0.035,0.49],0x786d58,0.003);
+    for(const x of [-0.31,0.31])for(const z of [-0.31,0.31])cylinder([x,0.265,z],0.007,0.13,metal);
+    for(const side of [-1,1]){
+      tube([[-0.31,0.32,side*0.31],[0.31,0.32,side*0.31]],0.006,metal);
+      tube([[side*0.31,0.32,-0.31],[side*0.31,0.32,0.31]],0.006,metal);
+    }
+    box([0,0.435,0],[0.16,0.045,0.16],0xb5a98e,0.002);
+    cylinder([0,0.47,0],0.007,0.07,metal);
+    for(let step=0;step<10+tier*3;step++){
+      const t=step/(9+tier*3);
+      box([-0.42+t*0.24,-0.44+t*0.62,0.32-t*0.11],[0.12,0.012,0.05],0xb4aa91,0.001);
+    }
+    tube([[-0.48,-0.45,0.35],[-0.24,0.19,0.24]],0.009,metal);
   } else if (kind === "tapered-landmark") {
     const points = Array.from({length:17},(_,i)=>new THREE.Vector2(0.38*(1-i/22)+0.055*Math.sin(i/16*Math.PI*2),i/16-0.5));
     put(new THREE.LatheGeometry(points,radial*2),glass);

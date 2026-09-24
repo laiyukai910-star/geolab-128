@@ -368,6 +368,9 @@ const BUILDING_FACADE_PROFILES = {
 };
 
 const LINEAR_INFRA_TYPES = new Set(["transport", "rail", "bridge", "canal", "levee", "dam", "metro_station", "tunnel_portal", "cable_car_station", "ferry_terminal"]);
+const DEDICATED_FACILITY_TYPES = new Set([
+  "evacuation_shelter", "river_hatchery", "water_treatment_plant", "ferry_terminal", "fire_watch_tower"
+]);
 
 export const rendererScaleDiagnostics = {
   buildingMetrics({ type = "custom", heightM = 10, density = 0.1, cellKm = 0.5, verticalScale = 1, x = 0, y = 0, seed = 0 } = {}) {
@@ -2044,6 +2047,9 @@ export class TerrainRenderer {
       civic: [],
       evacuationShelters: [],
       riverHatcheries: [],
+      waterTreatmentWorks: [],
+      ferryTerminals: [],
+      fireWatchTowers: [],
       caps: [],
       facadeBands: [],
       facadeVerticals: [],
@@ -2212,8 +2218,9 @@ export class TerrainRenderer {
           blockId: influence.blockId?.[i] ?? -1
         });
 
+        let facilityAdded = false;
         if (facilityBudget > 0) {
-          facilityBudget -= addFacilityCell(buckets, {
+          const used = addFacilityCell(buckets, {
             type,
             base,
             cell,
@@ -2230,9 +2237,11 @@ export class TerrainRenderer {
             suitability: influence.suitabilityScore?.[i] ?? 0,
             environment
           });
+          facilityBudget -= used;
+          facilityAdded = used > 0;
         }
 
-        if (type === "evacuation_shelter" || type === "river_hatchery") continue;
+        if (facilityAdded && DEDICATED_FACILITY_TYPES.has(type)) continue;
         if (buildingBudget <= 0 || !isBuildingType(type, density, heightM, landmarkHeightM)) continue;
         const instanceCount = buildingInstancesFor(type, density, x, y, seed);
         for (let k = 0; k < instanceCount && buildingBudget > 0; k += 1) {
@@ -2433,6 +2442,9 @@ export class TerrainRenderer {
     addInstancedBox(this.infrastructureGroup, "多翼公共设施", buckets.civic, 0xc8bc96, { geometryFactory: (variant) => createAssetGeometry("cross-plan-civic", budgetPlan.quality, variant), roughness: 0.72, metalness: 0.02 });
     addInstancedBox(this.infrastructureGroup, "应急避难中心", buckets.evacuationShelters, 0xffffff, { roughness: 0.66, metalness: 0.04, emissive: 0x000000 });
     addInstancedBox(this.infrastructureGroup, "河流育苗设施", buckets.riverHatcheries, 0xffffff, { roughness: 0.62, metalness: 0.04, emissive: 0x000000 });
+    addInstancedBox(this.infrastructureGroup, "净水处理厂", buckets.waterTreatmentWorks, 0xffffff, { roughness: 0.59, metalness: 0.05 });
+    addInstancedBox(this.infrastructureGroup, "渡轮码头", buckets.ferryTerminals, 0xffffff, { roughness: 0.64, metalness: 0.04 });
+    addInstancedBox(this.infrastructureGroup, "火情瞭望塔", buckets.fireWatchTowers, 0xffffff, { roughness: 0.68, metalness: 0.07 });
     addInstancedBox(this.infrastructureGroup, "四坡脊屋顶", buckets.roofs, 0x875d43, { geometryFactory: (variant) => createAssetGeometry("hipped-roof", budgetPlan.quality, variant), roughness: 0.88 });
     addInstancedBox(this.infrastructureGroup, "塔楼顶冠", buckets.caps, 0xd7dfdf, { roughness: 0.48, metalness: 0.08 });
     addInstancedBox(this.infrastructureGroup, "立面横带", buckets.facadeBands, 0x66808e, { roughness: 0.56, metalness: 0.14 });
@@ -2894,6 +2906,21 @@ function addFacilityCell(buckets, cellInfo) {
     (shelter ? buckets.evacuationShelters : buckets.riverHatcheries).push({
       x: base.x, y: base.y + height / 2, z: base.z,
       sx: width, sy: height, sz: width * (shelter ? 0.9 : 1.05),
+      ry: angle, color: 0xffffff
+    });
+    return used + 1;
+  }
+  if (type === "water_treatment_plant" || type === "ferry_terminal" || type === "fire_watch_tower") {
+    const treatment = type === "water_treatment_plant";
+    const tower = type === "fire_watch_tower";
+    const height = visualBuildingHeight(Math.max(heightM || 0, tower ? 24 : treatment ? 16 : 12), scaledVertical);
+    const width = tower
+      ? Math.max(0.01, Math.min(cell * 0.08, 0.022))
+      : Math.max(treatment ? 0.045 : 0.04, Math.min(cell * 0.23, treatment ? 0.09 : 0.08));
+    const bucket = tower ? buckets.fireWatchTowers : treatment ? buckets.waterTreatmentWorks : buckets.ferryTerminals;
+    bucket.push({
+      x: base.x, y: base.y + height / 2, z: base.z,
+      sx: width, sy: height, sz: width * (tower ? 1 : treatment ? 0.98 : 0.9),
       ry: angle, color: 0xffffff
     });
     return used + 1;
