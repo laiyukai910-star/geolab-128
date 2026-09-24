@@ -6,14 +6,13 @@
 
 ![GeoLab 128 terrain controls and a 32 km canyon scenario](media/workspace-terrain.jpg)
 
-GeoLab 128 is a local 3D application for constructing regional landscape scenarios and examining
-how terrain, weather, water, geology, habitat, wildlife and facilities interact. You can edit a
-scenario, inspect its calculated layers and 3D representation, then export the data for further
-work. It is a teaching and exploratory prototype, not a calibrated prediction service.
+GeoLab 128 builds a 3D map of a square region. Set the map size and grid, generate terrain or
+import elevation data, then change the weather, rivers, land cover and facilities. The map can be
+viewed as terrain, a geological section or a solid block. Calculated layers and reports can be
+exported for inspection outside the app.
 
-The desktop application uses a loopback-only native service. The browser version runs model
-calculations locally through its bundled WebAssembly worker; the hosted copy must first load its
-application files from GitHub Pages.
+This is a teaching and exploratory project. Its maps are not surveyed terrain and its hazard
+results are not site-specific forecasts.
 
 ## Contents
 
@@ -27,31 +26,35 @@ application files from GitHub Pages.
 
 ## Features
 
-| Area | Controls and inputs | Inspectable results |
-| --- | --- | --- |
-| Region and terrain | Choose a 4-512 km square extent, 128²-4096² grid, seed, continental template or landform preset; adjust relief, uplift, sea level and terrain complexity. Import DEMs as GeoTIFF, CSV, JSON or GeoJSON. | 3D surface, elevation, slope, curvature, roughness, terrain sections and a solid-volume view. The default 128 km / 256² setup has about 502 m between grid samples; a larger grid does not create measured detail absent from the input. |
-| Climate | Set temperature, precipitation, humidity, wind and related conditions, or import meteorological fields. | Temperature, precipitation, wind, evapotranspiration and water-balance layers. |
-| Rivers and watersheds | Adjust channel-formation threshold and hydrological parameters; import flow lines, soil data and bathymetry. | Flow accumulation and routing, watershed delineation, runoff, discharge, channel geometry, erosion and deposition diagnostics. |
-| Ground and groundwater | Set underground depth and section position; import lithology and groundwater-depth evidence. | Geological sections, modelled strata, lithology, aquifer potential, stress, confidence and subsurface data exports. Cave geometry is a visual scenario, not a solved cave-flow model. |
-| Land cover and ecology | Edit surface patches and vegetation conditions; examine ecological blocks, barriers and habitat settings. | Cover, canopy, leaf area, biomass, habitat suitability and connectivity views. |
-| Wildlife and aquatic habitat | Configure species and releases; inspect freshwater and marine habitat separately. | Distribution and movement indicators, habitat classifications and illustrative organism models. These are not field-validated population forecasts. |
-| Facilities | Select an area before placing a facility; choose from housing, transport, civic, industry, energy, water and emergency types. Search, focus, edit or remove individual placements. | Suitability screening, placed footprints, impervious cover, demand and risk indicators; procedural 3D models for supported facility types. |
-| Time and hazards | Set a simulation time and examine hazard scenarios. | Flood, drought, wildfire and landslide screening, time-series output and hazard-event export. |
-| Evidence and export | Import supported rasters/vectors; save parameters and reports. | Scenario and quality reports, CSV/JSON/GeoJSON layers, and Unity Terrain / Unreal Landscape interchange packages. Exports are terrain interchange data, not complete engine scenes. |
-
-The 3D scene and analytical maps share scenario inputs, but some scene detail is illustrative or
-render-only. Imported observations, inferred fields and display geometry should not be treated as
-equivalent evidence.
+- **Map:** Choose a 4-512 km square area and a 128²-4096² grid. Start with a continental or
+  landform preset, or import a DEM. Change relief, uplift and sea level; compare elevation,
+  slope, curvature and roughness maps. The default 128 km / 256² grid has about 502 m between
+  samples.
+- **Weather:** Set temperature, precipitation, humidity and wind, or import meteorological data.
+  View temperature, rainfall, wind, evapotranspiration and water-balance layers.
+- **Rivers:** Change the channel threshold and hydrological settings. Inspect flow accumulation,
+  watersheds, runoff, discharge, erosion and deposition. Soil data, bathymetry and flow lines can
+  be imported.
+- **Underground:** Import lithology and groundwater-depth data. Inspect strata, geological
+  sections, aquifer indicators, stress and confidence. The cave view is illustrative geometry;
+  it does not solve cave flow.
+- **Ecology:** Edit land-cover patches, vegetation and habitat settings. View canopy, biomass,
+  habitat and connectivity layers. Configure wildlife releases and inspect freshwater and marine
+  habitat separately.
+- **Facilities:** Select an area and place housing, transport, public-service, industrial,
+  energy or water facilities. Search, edit and remove individual placements; inspect suitability,
+  footprints and demand indicators.
+- **Hazards and time:** Examine flood, drought, wildfire and landslide screening at selected
+  simulation times. Export hazard events and time-series data.
+- **Files:** Import GeoTIFF, CSV, JSON and GeoJSON where supported by each data layer. Export
+  scenario settings, grid and vector data, quality reports, and terrain packages for Unity and
+  Unreal. Those packages are not complete engine scenes.
 
 ## Feature Gallery
 
-These screenshots were captured from the browser application at 32 km × 32 km with a 256² grid,
-using the Grand Canyon scenic preset. They show the current renderer and interface without
-retouching; the preset is an illustrative terrain scenario, not a reconstruction from surveyed
-Grand Canyon data.
-
-The opening image shows the terrain controls and 3D scene. The second image shows the same
-scenario with flow accumulation selected:
+Browser screenshots: 32 km × 32 km, 256² grid, Grand Canyon preset. The preset is generated
+terrain, not surveyed Grand Canyon data. The opening image shows the terrain controls; below is
+the same map with flow accumulation selected.
 
 ![Flow accumulation selected in the analysis drawer](media/workspace-flow.jpg)
 
