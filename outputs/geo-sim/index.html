@@ -624,6 +624,14 @@
             <button id="exportAdaptiveInfrastructurePlan">&#x5bfc;&#x51fa;&#x9002;&#x914d;&#x8bbe;&#x65bd; JSON</button>
             <button id="exportAdaptiveInfrastructurePlanCSV">&#x9002;&#x914d;&#x8bbe;&#x65bd; CSV</button>
           </div>
+          <div id="manualInfrastructureFilters" class="facility-list-filters" hidden>
+            <label>查找设施<input id="infraListSearch" type="search" placeholder="设施名称或类型" /></label>
+            <label>来源<select id="infraListOrigin">
+              <option value="all">全部</option>
+              <option value="manual">手工</option>
+              <option value="generated">自动</option>
+            </select></label>
+          </div>
           <ol id="manualInfrastructureList" class="facility-list" aria-label="已添加设施" hidden></ol>
           <div class="button-row">
             <button id="loadDataLayers">加载数据层</button>

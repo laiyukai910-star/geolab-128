@@ -4,6 +4,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- The placed-facility list can now be searched by localized name or type code and filtered by manual versus generated origin, including large adaptive plans.
 - Added a per-facility list in the data drawer. Placed facilities can be located in the 3D scene or removed individually; manually added features can be reopened, edited and saved without clearing the scenario. Point, line and polygon focus uses each feature's GeoJSON bounds. The new controls follow the English/Chinese language setting.
 - Added dedicated 3D assemblies for three existing facilities: a water-treatment works with open clarifiers and pipework, a ferry terminal with a covered boarding deck and berth, and a braced fire-watch tower with an observation cabin. These replace generic building shapes in the sand table; the generic fallback remains available when the facility detail budget is exhausted.
 - Rebuilt the greenhouse bay, bridge pier, observatory shutter and crane boom: curved glazed roof with crop beds, tapered cutwater shafts with exposed bearings, a shell-aligned slit and shutter, and a fixed-panel boom with pulley rigging. Corrected the dome slit facing away from its telescope.

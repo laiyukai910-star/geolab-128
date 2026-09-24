@@ -109,7 +109,7 @@ import { setupLocalization } from "./localization.js";
 import { manualInfrastructureCoordinatePairs, manualInfrastructureFeatureBounds } from "./manualInfrastructureFeatureList.js";
 import { buildScenarioSynthesis, makeScenarioSynthesisMarkdown } from "./scenarioSynthesis.js";
 
-setupLocalization();
+const localizationController = setupLocalization();
 
 const APP_BOOT_STARTED_AT = performance.now();
 let lastWorkerTransferDiagnostics = null;
@@ -236,6 +236,7 @@ const infrastructureSelectionOverlay = document.getElementById("infrastructureSe
 const infrastructureSelectionReadout = document.getElementById("infrastructureSelectionReadout");
 const infrastructureAddButton = document.getElementById("addInfrastructureFeature");
 const manualInfrastructureList = document.getElementById("manualInfrastructureList");
+const manualInfrastructureFilters = document.getElementById("manualInfrastructureFilters");
 const magnifierCanvas = document.getElementById("magnifierCanvas");
 const magnifierCtx = magnifierCanvas?.getContext("2d", { willReadFrequently: false });
 const magnifierLabel = document.getElementById("magnifierLabel");
@@ -789,6 +790,7 @@ function bindUi() {
     externalLayers = null;
     manualInfrastructureFeatures = [];
     editingInfrastructureFeatureIndex = -1;
+    resetManualInfrastructureFilters();
     manualSurfaceFeatures = [];
     osmInfrastructure = null;
     updateManualInfrastructureReadout();
@@ -811,6 +813,8 @@ function bindUi() {
   infrastructureAddButton?.addEventListener("click", addManualInfrastructureFeature);
   document.getElementById("cancelInfrastructureEdit")?.addEventListener("click", cancelManualInfrastructureEdit);
   manualInfrastructureList?.addEventListener("click", handleManualInfrastructureListAction);
+  document.getElementById("infraListSearch")?.addEventListener("input", renderManualInfrastructureList);
+  document.getElementById("infraListOrigin")?.addEventListener("change", renderManualInfrastructureList);
   document.getElementById("applyAdaptiveInfrastructurePlan").addEventListener("click", applyAdaptiveInfrastructurePlan);
   document.getElementById("clearInfrastructureFeatures").addEventListener("click", clearManualInfrastructureFeatures);
   document.getElementById("exportInfrastructureFeatures").addEventListener("click", exportManualInfrastructureFeatures);
@@ -1803,7 +1807,10 @@ async function addManualInfrastructureFeature() {
   const feature = readManualInfrastructureFeature();
   const editing = editingInfrastructureFeatureIndex >= 0 && editingInfrastructureFeatureIndex < manualInfrastructureFeatures.length;
   if (editing) manualInfrastructureFeatures[editingInfrastructureFeatureIndex] = feature;
-  else manualInfrastructureFeatures.push(feature);
+  else {
+    manualInfrastructureFeatures.push(feature);
+    resetManualInfrastructureFilters();
+  }
   editingInfrastructureFeatureIndex = -1;
   rebuildExternalLayerBundle();
   updateManualInfrastructureReadout();
@@ -1816,6 +1823,7 @@ async function addManualInfrastructureFeature() {
 async function clearManualInfrastructureFeatures() {
   manualInfrastructureFeatures = [];
   editingInfrastructureFeatureIndex = -1;
+  resetManualInfrastructureFilters();
   rebuildExternalLayerBundle();
   updateManualInfrastructureReadout();
   updateInfrastructureSelectionReadout();
@@ -1854,6 +1862,7 @@ async function applyAdaptiveInfrastructurePlan() {
   const preservedManual = manualInfrastructureFeatures.filter((feature) => feature.properties?.scenario !== "adaptive_matrix_plan");
   manualInfrastructureFeatures = [...preservedManual, ...generatedFeatures];
   editingInfrastructureFeatureIndex = -1;
+  resetManualInfrastructureFilters();
   rebuildExternalLayerBundle();
   updateManualInfrastructureReadout();
   updateInfrastructureSelectionReadout();
@@ -2062,6 +2071,7 @@ function handleManualInfrastructureListAction(event) {
   }
   if (button.dataset.action === "remove") {
     manualInfrastructureFeatures.splice(index, 1);
+    if (!manualInfrastructureFeatures.length) resetManualInfrastructureFilters();
     if (editingInfrastructureFeatureIndex === index) editingInfrastructureFeatureIndex = -1;
     else if (editingInfrastructureFeatureIndex > index) editingInfrastructureFeatureIndex -= 1;
     rebuildExternalLayerBundle();
@@ -2110,10 +2120,28 @@ function updateManualInfrastructureReadout() {
     .join(" / ")}`;
 }
 
+function resetManualInfrastructureFilters() {
+  const search = document.getElementById("infraListSearch");
+  const origin = document.getElementById("infraListOrigin");
+  if (search) search.value = "";
+  if (origin) origin.value = "all";
+}
+
 function renderManualInfrastructureList() {
   if (!manualInfrastructureList) return;
-  manualInfrastructureList.hidden = manualInfrastructureFeatures.length === 0;
-  const rows = manualInfrastructureFeatures.map((feature, index) => {
+  const hasFeatures = manualInfrastructureFeatures.length > 0;
+  manualInfrastructureList.hidden = !hasFeatures;
+  if (manualInfrastructureFilters) manualInfrastructureFilters.hidden = !hasFeatures;
+  const query = document.getElementById("infraListSearch")?.value.trim().toLocaleLowerCase() || "";
+  const origin = document.getElementById("infraListOrigin")?.value || "all";
+  const visible = manualInfrastructureFeatures.map((feature, index) => ({ feature, index })).filter(({ feature }) => {
+    const source = feature.properties?.scenario === "adaptive_matrix_plan" ? "generated" : "manual";
+    if (origin !== "all" && origin !== source) return false;
+    const typeCode = feature.properties?.infrastructure_type || "custom";
+    const typeLabel = localizedLabel(LOCALIZED_INFRASTRUCTURE_TYPES, typeCode);
+    return !query || `${typeCode} ${typeLabel} ${localizationController.translate(typeLabel)}`.toLocaleLowerCase().includes(query);
+  });
+  const rows = visible.map(({ feature, index }) => {
     const row = document.createElement("li");
     row.dataset.editing = String(index === editingInfrastructureFeatureIndex);
     const label = document.createElement("span");
@@ -2138,6 +2166,12 @@ function renderManualInfrastructureList() {
     row.append(label, actions);
     return row;
   });
+  if (hasFeatures && !rows.length) {
+    const empty = document.createElement("li");
+    empty.className = "facility-list-empty";
+    empty.textContent = "无匹配设施";
+    rows.push(empty);
+  }
   manualInfrastructureList.replaceChildren(...rows);
 }
 
