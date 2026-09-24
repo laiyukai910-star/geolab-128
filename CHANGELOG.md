@@ -4,6 +4,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Replaced the README and tracked social-preview images with current browser screenshots. Rewrote the feature inventory around controls and inspectable outputs, and clarified illustrative 3D detail and hosted-build limits.
 - Nearby trees and grass now form uneven patches with varied height and color; park trees grow in small groves. Close trees use a more detailed mesh.
 - Ground color blends across source-grid cells. Removed raised green slabs and generic buildings from parks. These rendering changes do not alter elevation or biomass data.
 - The placed-facility list can now be searched by localized name or type code and filtered by manual versus generated origin, including large adaptive plans.
