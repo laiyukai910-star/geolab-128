@@ -927,7 +927,7 @@ const INFRASTRUCTURE_TYPE_LABELS_ZH = Object.freeze({
 
 export const GEOMORPHOLOGY_PRESETS = Object.freeze([
   { id: "custom", labelZh: "\u81ea\u5b9a\u4e49\u5730\u5f62", referenceLandformZh: "\u7528\u6237\u624b\u52a8\u53c2\u6570", seedOffset: 0, params: {} },
-  { id: "canyon_plateau", labelZh: "\u5ce1\u8c37\u53f0\u5730", referenceLandformZh: "\u5e72\u65f1\u53f0\u5730\u6df1\u5207\u5ce1\u8c37", seedOffset: 4103, params: { relief: 2050, ridgeWeight: 0.68, tectonics: 0.72, microRelief: 24, riverThreshold: 56 } },
+  { id: "canyon_plateau", labelZh: "\u5ce1\u8c37\u53f0\u5730", referenceLandformZh: "\u5e72\u65f1\u53f0\u5730\u6df1\u5207\u5ce1\u8c37", seedOffset: 4103, params: { relief: 2050, ridgeWeight: 0.68, tectonics: 0.72, microRelief: 24, seaLevel: 0, humidity: 0.38, precipitationScale: 0.6, riverThreshold: 56 } },
   { id: "karst_towers", labelZh: "\u5580\u65af\u7279\u5cf0\u6797", referenceLandformZh: "\u77f3\u67f1 / 鐭虫煴\u3001\u5cf0\u4e1b\u3001\u6eb6\u8680\u6d3c\u5730", seedOffset: 7207, params: { relief: 1900, ridgeWeight: 0.82, tectonics: 0.62, microRelief: 32, permeability: 0.44, riverThreshold: 64 } },
   { id: "alpine_glacier", labelZh: "\u9ad8\u5c71\u51b0\u5ddd\u8c37", referenceLandformZh: "U \u578b\u8c37\u3001\u89d2\u5cf0\u3001\u51b0\u6597", seedOffset: 9109, params: { relief: 2600, ridgeWeight: 0.76, tectonics: 0.84, microRelief: 26, baseTemperature: 8.5, lapseRate: 7.1 } },
   { id: "volcanic_island", labelZh: "\u706b\u5c71\u5c9b\u5f27", referenceLandformZh: "\u706b\u5c71\u9525\u3001\u7834\u706b\u5c71\u53e3\u3001\u6d77\u5cb8\u9636\u5730", seedOffset: 1213, params: { relief: 2300, ridgeWeight: 0.58, tectonics: 0.88, microRelief: 20, seaLevel: 160 } },
@@ -963,7 +963,7 @@ export const SCENIC_REPRODUCTION_PRESETS = Object.freeze([
     seedOffset: 30031,
     params: { relief: 2225, ridgeWeight: 0.86, tectonics: 0.7, microRelief: 36, permeability: 0.48, riverThreshold: 58 }
   },
-  { id: "grand_canyon", labelZh: "\u5927\u5ce1\u8c37", geomorphologyPreset: "canyon_plateau", referenceLandformZh: "\u5c42\u72b6\u53f0\u5730\u4e0e\u6df1\u5207\u4e3b\u8c37", reconstructionNotesZh: ["\u7528\u5f2f\u66f2\u4e3b\u5ce1\u8c37\u548c\u591a\u7ea7\u9636\u5730\u8868\u8fbe\u53f0\u5730\u5207\u5272\u5730\u8c8c"], seedOffset: 31039, params: { relief: 2500, ridgeWeight: 0.7, tectonics: 0.78, microRelief: 26, riverThreshold: 52 } },
+  { id: "grand_canyon", labelZh: "\u5927\u5ce1\u8c37", geomorphologyPreset: "canyon_plateau", referenceLandformZh: "\u5c42\u72b6\u53f0\u5730\u4e0e\u6df1\u5207\u4e3b\u8c37", reconstructionNotesZh: ["\u7528\u5f2f\u66f2\u4e3b\u5ce1\u8c37\u548c\u591a\u7ea7\u9636\u5730\u8868\u8fbe\u53f0\u5730\u5207\u5272\u5730\u8c8c"], seedOffset: 31039, params: { relief: 2500, ridgeWeight: 0.7, tectonics: 0.78, microRelief: 26, seaLevel: 0, latitude: 36, baseTemperature: 24, humidity: 0.25, precipitationScale: 0.5, vegetationCoverScale: 0.5, riverThreshold: 52 } },
   { id: "guilin_lijiang", labelZh: "\u6842\u6797\u6f13\u6c5f", geomorphologyPreset: "karst_towers", referenceLandformZh: "\u5580\u65af\u7279\u5b64\u5cf0\u3001\u6c5f\u6d41\u5e73\u539f", reconstructionNotesZh: ["\u964d\u4f4e\u6574\u4f53\u8d77\u4f0f\u3001\u5f3a\u5316\u4f4e\u5730\u6cb3\u8c37\u4e0e\u5b64\u5cf0\u7684\u5bf9\u6bd4"], seedOffset: 32041, params: { relief: 1450, ridgeWeight: 0.78, tectonics: 0.52, microRelief: 26, humidity: 1.12, riverThreshold: 44 } },
   { id: "yosemite_valley", labelZh: "\u7ea6\u585e\u7c73\u8482\u51b0\u5ddd\u8c37", geomorphologyPreset: "alpine_glacier", referenceLandformZh: "\u82b1\u5c97\u5ca9 U \u578b\u8c37\u3001\u60ac\u5d16\u3001\u51b0\u6597", reconstructionNotesZh: ["\u901a\u8fc7 U \u578b\u8c37\u69fd\u548c\u5c71\u810a\u9510\u5316\u8fd1\u4f3c\u51b0\u5ddd\u4fb5\u8680\u5256\u9762"], seedOffset: 33049, params: { relief: 2850, ridgeWeight: 0.79, tectonics: 0.86, microRelief: 24, baseTemperature: 7.8 } },
   { id: "huangshan", labelZh: "\u9ec4\u5c71", geomorphologyPreset: "alpine_glacier", referenceLandformZh: "\u82b1\u5c97\u5ca9\u5cf0\u4e1b\u3001\u9661\u58c1\u3001\u72ed\u810a", reconstructionNotesZh: ["\u5f3a\u5316\u5cf0\u4e1b\u3001\u5c71\u810a\u548c\u5d16\u58c1\u7684\u8d77\u4f0f\uff0c\u9002\u5408\u590d\u73b0\u5c71\u5730\u666f\u89c2"], seedOffset: 34057, params: { relief: 2150, ridgeWeight: 0.84, tectonics: 0.75, microRelief: 34, humidity: 1.04 } },
@@ -1771,6 +1771,8 @@ export function createDefaultParams() {
     windSpeed: 12,
     baseTemperature: 17.5,
     humidity: 0.92,
+    precipitationScale: 1,
+    vegetationCoverScale: 1,
     latitude: 32,
     lapseRate: 6.2,
     permeability: 0.28,
@@ -1817,23 +1819,33 @@ export function applyTerrainPresetParams(baseParams = {}, selection = {}) {
   const scenicId = String(selection.scenicPreset ?? base.scenicPreset ?? "none");
   const scenic = scenicPresetById(scenicId);
   const selectedGeomorphology = selection.geomorphologyPreset ?? base.geomorphologyPreset;
-  const geomorphologyId = String(
-    selectedGeomorphology && selectedGeomorphology !== "custom"
-      ? selectedGeomorphology
-      : scenic && scenic.id !== "none"
-        ? scenic.geomorphologyPreset
-        : selectedGeomorphology || "custom"
-  );
+  const geomorphologyId = String(scenic?.id !== "none"
+    ? scenic.geomorphologyPreset
+    : selectedGeomorphology || "custom");
   const geomorphology = geomorphologyPresetById(geomorphologyId);
   const geomorphologyInfo = terrainPresetDisplayInfo(geomorphology, "geomorphology");
   const scenicInfo = terrainPresetDisplayInfo(scenic, "scenic");
   const seedBase = Number.isFinite(Number(base.seed)) ? Math.round(Number(base.seed)) : 142857;
-  const seedOffset = (geomorphology?.seedOffset || 0) + (scenic?.seedOffset || 0);
+  const previousScenicId = selection.previousScenicPreset ?? base.scenicPreset ?? "none";
+  const previousGeomorphologyId = selection.previousGeomorphologyPreset ?? base.geomorphologyPreset ?? "custom";
+  const changedPreset = scenicId !== previousScenicId || geomorphologyId !== previousGeomorphologyId;
+  const defaults = changedPreset ? createDefaultParams() : null;
   const next = {
     ...base,
+    ...(defaults && (scenicId !== "none" || geomorphologyId !== "custom") ? {
+      seaLevel: defaults.seaLevel,
+      baseTemperature: defaults.baseTemperature,
+      humidity: defaults.humidity,
+      precipitationScale: defaults.precipitationScale,
+      vegetationCoverScale: defaults.vegetationCoverScale,
+      latitude: defaults.latitude,
+      lapseRate: defaults.lapseRate,
+      windDirection: defaults.windDirection,
+      windSpeed: defaults.windSpeed
+    } : {}),
     ...(geomorphology?.params || {}),
     ...(scenic?.params || {}),
-    seed: seedOffset ? normalizeSeed(seedBase + seedOffset) : seedBase,
+    seed: seedBase,
     geomorphologyPreset: geomorphology?.id || "custom",
     scenicPreset: scenic?.id || "none",
     terrainPresetLabelZh: geomorphologyInfo?.labelZh || "\u81ea\u5b9a\u4e49\u5730\u5f62",
@@ -1865,11 +1877,6 @@ export function terrainPresetDisplayInfo(presetOrId, kind = "geomorphology") {
   if (!preset) return null;
   const overrides = TERRAIN_DISPLAY_TEXT_OVERRIDES[kind]?.[preset.id] || {};
   return { ...preset, ...overrides };
-}
-
-function normalizeSeed(value) {
-  const seed = Math.abs(Math.round(Number(value) || 1)) % 2_147_483_647;
-  return seed || 1;
 }
 
 function terrainPresetSummary(params = {}) {
@@ -7517,8 +7524,19 @@ function createHeightField(n, params) {
 
 function generateTerrain(n, params) {
   const height = new Float32Array(n * n);
-  const seed = Number(params.seed) || 1;
+  const seed = (Number(params.seed) || 1) +
+    (geomorphologyPresetById(params.geomorphologyPreset)?.seedOffset || 0) +
+    (scenicPresetById(params.scenicPreset)?.seedOffset || 0);
   const relief = Number(params.relief);
+  if (params.scenicPreset === "grand_canyon") {
+    for (let y = 0; y < n; y += 1) {
+      for (let x = 0; x < n; x += 1) {
+        height[y * n + x] = grandCanyonHeight(x / (n - 1), y / (n - 1), seed, relief, Number(params.mapSizeKm));
+      }
+    }
+    preconditionTerrain(height, n, params);
+    return height;
+  }
   const ridgeWeight = Number(params.ridgeWeight);
   const tectonics = Number(params.tectonics);
   const complexity = clamp(Number(params.terrainComplexity ?? 0.58), 0, 1);
@@ -7594,7 +7612,9 @@ function applyGeomorphologyPresetToHeight(height, n, params) {
   const id = String(params.geomorphologyPreset || "custom");
   if (!id || id === "custom") return;
   const relief = firstFinite(params.relief, 1450);
-  const seed = Number(params.seed) || 1;
+  const seed = (Number(params.seed) || 1) +
+    (geomorphologyPresetById(params.geomorphologyPreset)?.seedOffset || 0) +
+    (scenicPresetById(params.scenicPreset)?.seedOffset || 0);
   const process = terrainPresetProcessProfile(params);
   for (let y = 0; y < n; y += 1) {
     const ny = y / Math.max(1, n - 1);
@@ -7625,6 +7645,48 @@ function applyGeomorphologyPresetToHeight(height, n, params) {
       if (delta) height[i] = clamp(height[i] + delta, 0, MAX_TERRAIN_ELEVATION_M);
     }
   }
+}
+
+function grandCanyonHeight(nx, ny, seed, relief, mapSizeKm) {
+  // NPS park statistics put the rims near 2.1/2.4 km and the river roughly 1.6 km below them.
+  // This is a process-shaped reference scene, not a georeferenced Grand Canyon DEM.
+  const widthKm = Number.isFinite(mapSizeKm) && mapSizeKm > 0 ? mapSizeKm : MAP_SIZE_KM;
+  const depthScale = clamp(relief / 2500, 0.45, 1.6);
+  const center = 0.5 + Math.sin(nx * Math.PI * 2.3 + seed * 0.0007) * 0.1 +
+    Math.sin(nx * Math.PI * 5.6 + seed * 0.0011) * 0.03;
+  const side = ny < center ? -1 : 1;
+  const distanceKm = Math.abs(ny - center) * widthKm;
+  const rimVariation = 0.67 + fbm(nx * 7 + 4, ny * 2 - 3, seed + 677, 3, 2, 0.5) * 0.5 +
+    fbm(nx * 23 - 4, ny * 9 + 3, seed + 691, 3, 2, 0.5) * 0.22;
+  const distance = distanceKm / (clamp(widthKm * 0.24, 1.5, 8.5) * rimVariation);
+  const wall = clamp(
+    0.11 * smoothstep(0.015, 0.07, distance) +
+    0.20 * smoothstep(0.12, 0.19, distance) +
+    0.12 * smoothstep(0.21, 0.34, distance) +
+    0.22 * smoothstep(0.40, 0.49, distance) +
+    0.13 * smoothstep(0.57, 0.72, distance) +
+    0.22 * smoothstep(0.79, 0.98, distance), 0, 1
+  );
+  const river = 780 + (1 - nx) * widthKm * 1.3;
+  const rim = 780 + (side < 0 ? 1650 : 1350) * depthScale;
+  const plateauNoise = (fbm(nx * 5.5 + 13, ny * 5.5 - 7, seed + 701, 4, 2, 0.5) - 0.5) * 65;
+  const wallNoise = (fbm(nx * 16 - 9, ny * 16 + 21, seed + 733, 3, 2, 0.48) - 0.5) * 95;
+  const branchIndex = Math.round((nx - side * 0.085 * distance) * 7 - 0.5);
+  const branchX = (branchIndex + 0.5) / 7 + side * 0.085 * distance +
+    Math.sin(distance * 8 + branchIndex * 2.7 + seed * 0.0001) * 0.012 * distance;
+  const branchWidth = 0.012 + distance * 0.012;
+  const tributary = Math.exp(-Math.pow((nx - branchX) / branchWidth, 2)) *
+    smoothstep(0.08, 0.25, distance) * (1 - smoothstep(1.08, 1.55, distance));
+  const feederIndex = Math.round((nx - side * 0.16 * distance) * 15 - 0.5);
+  const feederX = (feederIndex + 0.5) / 15 + side * 0.16 * distance +
+    Math.sin(distance * 11 + feederIndex * 3.1 + seed * 0.00013) * 0.006 * distance;
+  const feeder = Math.exp(-Math.pow((nx - feederX) / (0.009 + distance * 0.007), 2)) *
+    smoothstep(0.35, 0.58, distance) * (1 - smoothstep(1.10, 1.45, distance));
+  return clamp(
+    river + (rim - river) * wall + plateauNoise * wall + wallNoise * Math.sin(Math.PI * wall) -
+    (tributary * 420 + feeder * 150) * depthScale,
+    1, MAX_TERRAIN_ELEVATION_M
+  );
 }
 
 function canyonPlateauDelta(nx, ny, seed, relief, process = TERRAIN_PROCESS_DEFAULT) {
@@ -21076,6 +21138,8 @@ function applyTerrainPresetColor(baseColor, model, params, i, t) {
   const plan = terrainPresetMaterialPlan(params, model.stats);
   if (!plan.active || plan.blend <= 0) return baseColor;
   const material = TERRAIN_PRESET_MATERIALS[plan.geomorphologyPreset] || TERRAIN_PRESET_MATERIALS.custom;
+  const h = Number(model.height?.[i] ?? 0);
+  const seaLevel = Number(params.seaLevel ?? 0);
   const slopeNorm = clamp((model.slope?.[i] ?? 0) / 48, 0, 1);
   const roughMax = Math.max(120, model.stats?.maxRoughness ?? 180);
   const roughNorm = clamp((model.terrainDiagnostics?.roughness?.[i] ?? 0) / roughMax, 0, 1);

@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-2f855a.svg)](LICENSE)
 [![Version](https://img.shields.io/github/v/tag/laiyukai910-star/geolab-128?label=release)](https://github.com/laiyukai910-star/geolab-128/releases)
 
-![GeoLab 128 terrain controls and a 32 km canyon scenario](media/workspace-terrain.jpg)
+![Generated 32 km canyon reference terrain in GeoLab 128](media/workspace-terrain.jpg)
 
 GeoLab 128 builds a 3D map of a square region. Set the map size and grid, generate terrain or
 import elevation data, then change the weather, rivers, land cover and facilities. The map can be
@@ -52,9 +52,12 @@ results are not site-specific forecasts.
 
 ## Feature Gallery
 
-Browser screenshots: 32 km × 32 km, 256² grid, Grand Canyon preset. The preset is generated
-terrain, not surveyed Grand Canyon data. The opening image shows the terrain controls; below is
-the same map with flow accumulation selected.
+Browser screenshots: 32 km × 32 km, 256² grid, Grand Canyon preset. The preset now uses an inland
+plateau, incised river corridor and dry climate informed by [National Park Service park
+statistics](https://home.nps.gov/grca/learn/management/statistics.htm). It does not contain a
+georeferenced Grand Canyon DEM. River lines come from simulated local runoff, not a traced Colorado
+River or prescribed upstream inflow. The opening image shows the 3D map; below is the same scenario
+with flow accumulation selected.
 
 ![Flow accumulation selected in the analysis drawer](media/workspace-flow.jpg)
 

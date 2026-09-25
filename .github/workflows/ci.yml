@@ -62,6 +62,7 @@ jobs:
         run: |
           node outputs/geo-sim/tests/assetPipeline.test.mjs
           node outputs/geo-sim/tests/geographicDataInputs.test.mjs
+          node outputs/geo-sim/tests/scenicPreset.test.mjs
           node outputs/geo-sim/tests/proceduralGeometry.test.mjs
           node outputs/geo-sim/tests/terrainSurface.test.mjs
           node outputs/geo-sim/tests/geoLithology.test.mjs

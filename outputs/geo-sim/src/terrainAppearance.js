@@ -14,6 +14,30 @@ const smooth = (low, high, value) => {
   const t = unit((value - low) / (high - low));
   return t * t * (3 - 2 * t);
 };
+// Illustrative bed colors and alternating cliff/bench levels, not mapped local stratigraphy.
+const CANYON_BEDS = [
+  [780, [94, 91, 88]],
+  [930, [125, 100, 91]],
+  [1110, [154, 111, 91]],
+  [1320, [185, 105, 78]],
+  [1510, [178, 135, 106]],
+  [1710, [169, 111, 91]],
+  [1890, [191, 145, 112]],
+  [2070, [207, 176, 139]],
+  [2270, [191, 183, 157]],
+  [2440, [159, 151, 135]]
+];
+
+function canyonBedColor(height) {
+  let color = CANYON_BEDS[0][1];
+  for (let i = 1; i < CANYON_BEDS.length; i += 1) {
+    const [elevation, next] = CANYON_BEDS[i];
+    const blend = smooth(elevation - 35, elevation + 35, height);
+    if (blend === 0) break;
+    color = color.map((channel, index) => channel * (1 - blend) + next[index] * blend);
+  }
+  return color;
+}
 
 /**
  * Geomorphic description of one surface cell, derived from the lithology that underlies it.
@@ -212,14 +236,16 @@ export function naturalTerrainColor(model, params, index, weights = null, lithol
   if (model.height[index] <= (Number(params?.seaLevel) || 0)) return [142, 151, 132];
   const geomorphology = prepared || surfaceGeomorphology(model, params, index, { lithologyTable });
   const [rock, vegetation, wet, sealed] = weights || [geomorphology.rock, geomorphology.vegetation, geomorphology.wet, geomorphology.sealed];
-  const soil = [139, 121, 93];
-  const mineral = [147, 151, 146];
-  const plant = [65, 108, 54];
+  const canyonReference = params?.scenicPreset === "grand_canyon";
+  const canyonBed = canyonReference ? canyonBedColor(model.height[index]) : null;
+  const soil = canyonBed ? canyonBed.map(channel => channel * 0.92 + 10) : [139, 121, 93];
+  const mineral = canyonBed || [147, 151, 146];
+  const plant = canyonReference ? [83, 105, 65] : [65, 108, 54];
   // Weathered cover and scree are drawn toward the lithology's own colour, so a granite upland and
   // a clay plain stop sharing one regolith tone.
   const lithologyColor = lithologyTable?.[geomorphology.lithologyCode]?.color || lithologyTable?.[0]?.color || null;
   const cover = unit(geomorphology.regolith ?? 0) + unit(geomorphology.scree ?? 0);
-  const regolithTone = lithologyColor
+  const regolithTone = lithologyColor && !canyonReference
     ? soil.map((value, channel) => value * 0.72 + lithologyColor[channel] * 0.28)
     : soil;
   return regolithTone.map((value, channel) => {

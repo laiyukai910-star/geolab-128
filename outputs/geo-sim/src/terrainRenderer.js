@@ -1013,6 +1013,11 @@ export class TerrainRenderer {
     const sizeKm = modelSizeKm(this.model);
     const focusY = terrainCameraFocusY(this.model, this.params);
     const home = cameraHome(sizeKm, this.camera.aspect);
+    if (this.params?.scenicPreset === "grand_canyon") {
+      home.x = sizeKm * 0.75;
+      home.y = sizeKm * 0.68;
+      home.z = sizeKm * 0.58;
+    }
     this.camera.position.set(home.x, home.y + focusY, home.z);
     this.controls.target.set(0, focusY, 0);
     this.controls.update();

@@ -4,6 +4,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Rebuilt the generated Grand Canyon reference as an inland plateau with a continuous incised channel, tributary cuts, drier climate, sparser vegetation and stratified warm surface tones. Scenic selection now takes priority over a stale landform choice, keeps the user seed stable and resets inherited climate settings when changing presets. Added precipitation and vegetation-cover controls, fixed preset elevation coloring, and refreshed the running-app screenshots.
 - Rewrote the repository introduction and feature list in plain language, with concrete controls and outputs instead of broad claims.
 - Replaced the README and tracked social-preview images with current browser screenshots. Rewrote the feature inventory around controls and inspectable outputs, and clarified illustrative 3D detail and hosted-build limits.
 - Nearby trees and grass now form uneven patches with varied height and color; park trees grow in small groves. Close trees use a more detailed mesh.

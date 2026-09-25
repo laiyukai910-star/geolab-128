@@ -147,6 +147,8 @@ const ids = [
   "windSpeed",
   "baseTemperature",
   "humidity",
+  "precipitationScale",
+  "vegetationCoverScale",
   "latitude",
   "lapseRate",
   "permeability",
@@ -857,6 +859,8 @@ function bindUi() {
     "windSpeed",
     "baseTemperature",
     "humidity",
+    "precipitationScale",
+    "vegetationCoverScale",
     "latitude",
     "lapseRate",
     "permeability",
@@ -2419,9 +2423,12 @@ function exportEcologicalIntegrityCSV() {
 }
 
 async function applyTerrainPresetSelection() {
+  const previousScenicPreset = params.scenicPreset;
   const next = applyTerrainPresetParams(readParams(), {
     geomorphologyPreset: ui.geomorphologyPreset?.value || "custom",
-    scenicPreset: ui.scenicPreset?.value || "none"
+    scenicPreset: ui.scenicPreset?.value || "none",
+    previousGeomorphologyPreset: params.geomorphologyPreset,
+    previousScenicPreset: params.scenicPreset
   });
   params = next;
   writeParams(params);
@@ -2433,6 +2440,7 @@ async function applyTerrainPresetSelection() {
   const label = scenic?.id && scenic.id !== "none" ? scenicDisplay?.labelZh : geomorphologyDisplay?.labelZh || "\u81ea\u5b9a\u4e49\u5730\u5f62";
   setStatus(`\u5df2\u5e94\u7528\u5730\u8c8c\u9884\u8bbe\uff1a${label}`);
   await rebuildTerrain();
+  if (previousScenicPreset !== next.scenicPreset && next.scenicPreset === "grand_canyon") renderer.resetCamera();
 }
 
 function updateTerrainPresetStatus() {
@@ -2444,7 +2452,9 @@ function updateTerrainPresetStatus() {
   const activeScenic = scenic && scenic.id !== "none";
   const label = activeScenic ? scenicDisplay?.labelZh : geomorphologyDisplay?.labelZh || "\u81ea\u5b9a\u4e49\u5730\u5f62";
   const reference = activeScenic ? scenicDisplay?.referenceLandformZh : geomorphologyDisplay?.referenceLandformZh || "\u624b\u52a8\u53c2\u6570";
-  terrainPresetStatus.textContent = `\u5730\u8c8c\uff1a${label} · \u53c2\u7167\uff1a${reference}`;
+  terrainPresetStatus.textContent = activeScenic
+    ? `\u666f\u533a\u53c2\u8003\uff1a${label} · \u5730\u8c8c\uff1a${geomorphologyDisplay?.labelZh || ""} · \u53c2\u7167\uff1a${reference}`
+    : `\u5730\u8c8c\uff1a${label} · \u53c2\u7167\uff1a${reference}`;
 }
 
 async function rebuildTerrain() {
@@ -3006,10 +3016,6 @@ function updateMetrics() {
   const eventDynamics = stats.hazards?.eventDynamics || null;
   const eventPulses = eventDynamics?.currentYearPulses || null;
   const seasonalState = stats.hazards?.seasonalState || eventDynamics?.seasonalState || null;
-  const terrainPresetMetricChips = [
-    stats.terrainPreset?.active ? `<span>\u5730\u8c8c/鍦拌矊 ${stats.terrainPreset.labelZh}</span>` : "",
-    stats.terrainPreset?.scenicPreset && stats.terrainPreset.scenicPreset !== "none" ? `<span>\u666f\u533a/鏅尯 ${stats.terrainPreset.scenicLabelZh}</span>` : ""
-  ].filter(Boolean);
   const cleanTerrainPresetMetricChips = [
     stats.terrainPreset?.active ? `<span>地貌 ${stats.terrainPreset.labelZh}</span>` : "",
     stats.terrainPreset?.scenicPreset && stats.terrainPreset.scenicPreset !== "none" ? `<span>景区 ${stats.terrainPreset.scenicLabelZh}</span>` : ""
@@ -3509,6 +3515,8 @@ function readParams() {
     windSpeed: Number(ui.windSpeed.value),
     baseTemperature: Number(ui.baseTemperature.value),
     humidity: Number(ui.humidity.value),
+    precipitationScale: Number(ui.precipitationScale.value),
+    vegetationCoverScale: Number(ui.vegetationCoverScale.value),
     latitude: Number(ui.latitude.value),
     lapseRate: Number(ui.lapseRate.value),
     permeability: Number(ui.permeability.value),
