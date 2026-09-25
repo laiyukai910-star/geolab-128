@@ -21,7 +21,7 @@ const EXACT = Object.freeze({
   "当前海平面下没有可进入的水域。": "No submerged terrain at the current sea level.",
   "自然地表（示意）": "Natural surface (illustrative)",
   "GeoLab 128 | 地理演算程序": "GeoLab 128 | Geographic Simulation",
-  "DEM 演算中": "DEM processing",
+  "网格演算中": "Grid processing",
   "初始化": "Initializing",
   "参数工作区": "Simulation workspace",
   "关闭参数抽屉": "Close parameter drawer",

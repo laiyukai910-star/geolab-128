@@ -27,6 +27,10 @@ const CANYON_BEDS = [
   [2270, [191, 183, 157]],
   [2440, [159, 151, 135]]
 ];
+const DRY_SOIL = [174, 151, 112];
+const COLD_SOIL = [146, 145, 135];
+const DRY_PLANT = [132, 126, 79];
+const COLD_PLANT = [104, 124, 112];
 
 function canyonBedColor(height) {
   let color = CANYON_BEDS[0][1];
@@ -239,6 +243,8 @@ export function naturalTerrainColor(model, params, index, weights = null, lithol
   const scenic = params?.scenicPreset;
   const canyonReference = scenic === "grand_canyon";
   const canyonBed = canyonReference ? canyonBedColor(model.height[index]) : null;
+  const dedicatedScenic = canyonReference || scenic === "yosemite_valley" ||
+    scenic === "guilin_lijiang" || scenic === "mount_fuji";
   let soil = [139, 121, 93];
   let mineral = [147, 151, 146];
   let plant = [65, 108, 54];
@@ -259,13 +265,20 @@ export function naturalTerrainColor(model, params, index, weights = null, lithol
     soil = [117 - upper * 27, 111 - upper * 21, 101 - upper * 13];
     mineral = [135 - upper * 44, 137 - upper * 39, 132 - upper * 31];
     plant = [54, 91, 61];
+  } else {
+    const rain = model.precipitation?.[index];
+    const temperature = model.temperature?.[index];
+    const dry = Number.isFinite(rain) ? 1 - smooth(300, 1000, rain) : 0;
+    const cold = Number.isFinite(temperature) ? 1 - smooth(-3, 8, temperature) : 0;
+    soil = soil.map((value, channel) =>
+      (value * (1 - dry * 0.65) + DRY_SOIL[channel] * dry * 0.65) * (1 - cold * 0.45) + COLD_SOIL[channel] * cold * 0.45);
+    plant = plant.map((value, channel) =>
+      (value * (1 - dry) + DRY_PLANT[channel] * dry) * (1 - cold) + COLD_PLANT[channel] * cold);
   }
   // Weathered cover and scree are drawn toward the lithology's own colour, so a granite upland and
   // a clay plain stop sharing one regolith tone.
   const lithologyColor = lithologyTable?.[geomorphology.lithologyCode]?.color || lithologyTable?.[0]?.color || null;
   const cover = unit(geomorphology.regolith ?? 0) + unit(geomorphology.scree ?? 0);
-  const dedicatedScenic = canyonReference || scenic === "yosemite_valley" ||
-    scenic === "guilin_lijiang" || scenic === "mount_fuji";
   const regolithTone = lithologyColor && !dedicatedScenic
     ? soil.map((value, channel) => value * 0.72 + lithologyColor[channel] * 0.28)
     : soil;

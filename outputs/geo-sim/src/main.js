@@ -3086,7 +3086,7 @@ function updateMetrics() {
     hazardLabel.textContent = `${Math.round(stats.hazards.currentYear ?? params.currentYear ?? 0)}/${Math.round(stats.hazards.years ?? params.simulationYears ?? 0)} 年 · ${mode} · x${format(stats.hazards.intensity ?? params.disasterIntensity ?? 0, 2)}${seasonalText}${eventText}`;
   }
   const sourceText = stats.externalSourceCount ? ` · 真实数据 ${stats.externalSourceCount}` : "";
-  subtitle.textContent = `${model.sizeKm} km × ${model.sizeKm} km · ${model.areaKm2} km² · ${model.n}² DEM · 单元 ${format(model.cellSizeKm * 1000, 1)} m${sourceText}`;
+  subtitle.textContent = `${model.sizeKm} km × ${model.sizeKm} km · ${model.areaKm2} km² · ${model.n}² 网格 · 单元 ${format(model.cellSizeKm * 1000, 1)} m${sourceText}`;
   runtimeLabel.textContent =
     model.lastUpdateMode === "temporal"
       ? `时间快算 ${format(model.temporalRuntimeMs ?? model.runtimeMs, 1)} ms · 静态层复用`

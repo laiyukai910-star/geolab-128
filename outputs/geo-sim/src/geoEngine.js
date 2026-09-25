@@ -7547,11 +7547,13 @@ function generateTerrain(n, params) {
   const tectonics = Number(params.tectonics);
   const complexity = clamp(Number(params.terrainComplexity ?? 0.58), 0, 1);
   const diversity = clamp(Number(params.terrainDiversity ?? 0.64), 0, 1);
-  const warpFrequency = lerp(2.6, 6.2, diversity);
-  const warpAmplitude = lerp(0.055, 0.16, complexity * (0.55 + diversity * 0.45));
-  const baseFrequency = lerp(1.65, 3.15, diversity);
-  const detailFrequency = lerp(9.5, 30, complexity * 0.68 + diversity * 0.32);
-  const ridgeFrequency = lerp(3.8, 8.4, diversity);
+  const sizeKm = Number(params.mapSizeKm) || MAP_SIZE_KM;
+  const cellKm = sizeKm / (n - 1);
+  const warpWavelengthKm = lerp(36, 20, diversity);
+  const warpAmplitudeKm = lerp(1.5, 4.0, complexity * (0.55 + diversity * 0.45));
+  const baseWavelengthKm = lerp(72, 42, diversity);
+  const detailWavelengthKm = lerp(9, 3.5, complexity * 0.68 + diversity * 0.32);
+  const ridgeWavelengthKm = lerp(30, 14, diversity);
   const baseOctaves = Math.round(lerp(4, 8, complexity));
   const detailOctaves = Math.round(lerp(2, 6, complexity));
   const ridgeOctaves = Math.round(lerp(3, 7, complexity));
@@ -7559,36 +7561,40 @@ function generateTerrain(n, params) {
   const angle = hash01(9, 13, seed) * Math.PI;
   const ca = Math.cos(angle);
   const sa = Math.sin(angle);
+  const ridgeCenterKm = (hash01(9, 15, seed) - 0.5) * 28;
+  const ridgeSeparationKm = 20 + hash01(11, 15, seed) * 15;
+  const basinXKm = (hash01(5, 7, seed) - 0.5) * 64;
+  const basinYKm = (hash01(7, 5, seed) - 0.5) * 64;
+  const coastalLandform = ["fjord_coast", "coastal_cliff", "basalt_column_coast", "limestone_sea_stacks", "delta_wetland", "volcanic_island"].includes(params.geomorphologyPreset) || params.scenicPreset === "ha_long_bay";
+  const coastalFrame = coastalLandform ? 1 : params.geomorphologyPreset === "custom" ? smoothstep(48, 96, sizeKm) : 0;
 
   for (let y = 0; y < n; y += 1) {
     const ny = y / (n - 1);
     for (let x = 0; x < n; x += 1) {
       const nx = x / (n - 1);
-      const px = nx - 0.5;
-      const py = ny - 0.5;
-      const warpX = fbm(nx * warpFrequency + 19.1, ny * warpFrequency - 7.3, seed + 11, 3 + Math.round(complexity * 3), 2.05, 0.52) - 0.5;
-      const warpY = fbm(nx * warpFrequency - 5.8, ny * warpFrequency + 29.4, seed + 23, 3 + Math.round(complexity * 3), 2.0, 0.5) - 0.5;
-      const wx = nx + warpX * warpAmplitude;
-      const wy = ny + warpY * warpAmplitude;
-      const primaryBase = fbm(wx * baseFrequency, wy * baseFrequency, seed + 41, baseOctaves, 2.02, 0.49);
-      const crossBase = fbm(wx * (baseFrequency * 1.72) + 31.7, wy * (baseFrequency * 0.86) - 12.4, seed + 57, Math.max(3, baseOctaves - 1), 2.16, 0.47);
+      const worldXKm = (nx - 0.5) * sizeKm;
+      const worldYKm = (ny - 0.5) * sizeKm;
+      const warpX = sampledFbm(worldXKm + 19.1, worldYKm - 7.3, seed + 11, warpWavelengthKm, 3 + Math.round(complexity * 3), 2.05, 0.52, cellKm) - 0.5;
+      const warpY = sampledFbm(worldXKm - 5.8, worldYKm + 29.4, seed + 23, warpWavelengthKm, 3 + Math.round(complexity * 3), 2, 0.5, cellKm) - 0.5;
+      const wxKm = worldXKm + warpX * warpAmplitudeKm;
+      const wyKm = worldYKm + warpY * warpAmplitudeKm;
+      const primaryBase = sampledFbm(wxKm, wyKm, seed + 41, baseWavelengthKm, baseOctaves, 2.02, 0.49, cellKm);
+      const crossBase = sampledFbm(wxKm + 31.7, wyKm - 12.4, seed + 57, baseWavelengthKm / 1.72, Math.max(3, baseOctaves - 1), 2.16, 0.47, cellKm);
       const base = lerp(primaryBase, primaryBase * 0.68 + crossBase * 0.32, diversity);
-      const detail = fbm(wx * detailFrequency, wy * detailFrequency, seed + 73, detailOctaves, 2.1, lerp(0.4, 0.5, complexity));
-      const microDetail = fbm(wx * detailFrequency * 2.35 + 4.7, wy * detailFrequency * 1.88 - 9.2, seed + 89, Math.max(2, detailOctaves - 1), 2.22, 0.43);
+      const detail = sampledFbm(wxKm, wyKm, seed + 73, detailWavelengthKm, detailOctaves, 2.1, lerp(0.4, 0.5, complexity), cellKm);
+      const microDetail = sampledFbm(wxKm + 4.7, wyKm - 9.2, seed + 89, detailWavelengthKm * 0.33, Math.max(2, detailOctaves - 1), 2.22, 0.43, cellKm);
       const ridged = Math.pow(
-        1 - Math.abs(fbm(wx * ridgeFrequency, wy * ridgeFrequency, seed + 101, ridgeOctaves, 2.0, 0.5) * 2 - 1),
+        1 - Math.abs(sampledFbm(wxKm, wyKm, seed + 101, ridgeWavelengthKm, ridgeOctaves, 2, 0.5, cellKm) * 2 - 1),
         ridgeExponent
       );
 
-      const rx = ca * px + sa * py;
-      const ry = -sa * px + ca * py;
-      const spineA = Math.exp(-Math.pow(Math.abs(ry + Math.sin(rx * 7.2 + warpX * 3.0) * 0.045) * 9.8, 1.25));
-      const spineB = Math.exp(-Math.pow(Math.abs(ry - 0.22 + Math.sin(rx * 5.1 + 1.7) * 0.03) * 12.0, 1.2));
+      const rx = ca * worldXKm + sa * worldYKm;
+      const ry = -sa * worldXKm + ca * worldYKm;
+      const spineA = Math.exp(-Math.pow(Math.abs(ry - ridgeCenterKm + Math.sin(rx / 13 + warpX * 3) * 2.5) / 4.8, 1.25));
+      const spineB = Math.exp(-Math.pow(Math.abs(ry - ridgeCenterKm - ridgeSeparationKm + Math.sin(rx / 18 + 1.7) * 3) / 5.8, 1.2));
       const plate = Math.max(spineA, spineB * 0.72);
-      const radial = Math.hypot(px * 1.08, py * 1.08);
       const edge = Math.min(nx, ny, 1 - nx, 1 - ny);
-      const continental = smoothstep(0.04, 0.26, edge) * clamp(1.15 - radial * 0.82, 0.18, 1);
-      const shelf = smoothstep(0.0, 0.18, edge);
+      const shoreline = 1 - smoothstep(0.03, 0.22, edge);
 
       let normalized =
         0.08 +
@@ -7597,11 +7603,10 @@ function generateTerrain(n, params) {
         (microDetail - 0.5) * lerp(0.006, 0.075, complexity * diversity) +
         ridged * ridgeWeight * 0.34 +
         plate * tectonics * 0.56;
-      normalized *= 0.54 + continental * 0.54;
-      normalized *= 0.68 + shelf * 0.44;
-      normalized -= (1 - shelf) * 0.14;
+      const coastal = normalized * (1 - shoreline * 0.6) - shoreline * 0.12;
+      normalized = lerp(normalized, coastal, coastalFrame);
 
-      const alluvial = Math.pow(1 - clamp(radial, 0, 1), 2.5) * (1 - ridgeWeight) * 105;
+      const alluvial = Math.exp(-Math.pow(Math.hypot(worldXKm - basinXKm, worldYKm - basinYKm) / 18, 2.5)) * (1 - ridgeWeight) * 105;
       const localNoise =
         (detail - 0.5) * Number(params.microRelief ?? 18) * lerp(0.72, 1.58, complexity) +
         (microDetail - 0.5) * Number(params.microRelief ?? 18) * complexity * 0.76;
@@ -8116,12 +8121,17 @@ function evaporitePlayaDelta(nx, ny, seed, relief, process = TERRAIN_PROCESS_DEF
 
 function preconditionTerrain(height, n, params) {
   const copy = new Float32Array(height.length);
+  const sizeM = (Number(params.mapSizeKm) || MAP_SIZE_KM) * 1000;
+  const cellSizeM = sizeM / Math.max(1, n - 1);
+  const tieBreakM = Math.min(0.5, cellSizeM * 0.01);
   for (let pass = 0; pass < 2; pass += 1) {
     copy.set(height);
     for (let y = 1; y < n - 1; y += 1) {
       for (let x = 1; x < n - 1; x += 1) {
         const i = y * n + x;
-        const slopeNoise = hash01(x, y, params.seed + pass * 157) - 0.5;
+        const worldXMetres = Math.round((x / (n - 1) - 0.5) * sizeM);
+        const worldYMetres = Math.round((y / (n - 1) - 0.5) * sizeM);
+        const slopeNoise = hash01(worldXMetres, worldYMetres, params.seed + pass * 157) - 0.5;
         let total = copy[i] * 5;
         let weight = 5;
         for (const nb of D8) {
@@ -8129,7 +8139,7 @@ function preconditionTerrain(height, n, params) {
           total += copy[ni];
           weight += 1;
         }
-        height[i] = lerp(copy[i], total / weight + slopeNoise * 5, 0.23);
+        height[i] = lerp(copy[i], total / weight + slopeNoise * tieBreakM, 0.23);
       }
     }
   }
@@ -21456,6 +21466,23 @@ function fbm(x, y, seed, octaves, lacunarity, gain) {
     frequency *= lacunarity;
   }
   return sum / normalization;
+}
+
+function sampledFbm(xKm, yKm, seed, wavelengthKm, octaves, lacunarity, gain, cellKm) {
+  let sum = 0;
+  let totalWeight = 0;
+  let amplitude = 0.5;
+  let wavelength = wavelengthKm;
+  for (let octave = 0; octave < octaves; octave += 1) {
+    const resolved = smoothstep(2 * cellKm, 4 * cellKm, wavelength);
+    if (resolved <= 0) break;
+    const weight = amplitude * resolved;
+    sum += valueNoise(xKm / wavelength, yKm / wavelength, seed + octave * 37) * weight;
+    totalWeight += weight;
+    amplitude *= gain;
+    wavelength /= lacunarity;
+  }
+  return totalWeight > 0 ? sum / totalWeight : 0.5;
 }
 
 function hash01(x, y, seed) {

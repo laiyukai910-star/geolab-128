@@ -165,6 +165,9 @@ assertion on each push to `main`.
 ## Scientific Scope
 
 GeoLab makes its assumptions visible and keeps imported evidence distinct from modelled fields.
+Without an imported DEM, the terrain generator samples landform structure at fixed physical scales;
+changing the map extent reveals a larger or smaller area rather than resizing the same pattern.
+Detail below the selected grid spacing is not recovered by the generator or by the surface shader.
 Its structure draws on established hydrology, geomorphology, groundwater, rock mechanics and
 connectivity formulations, including FAO-56 reference evapotranspiration, NRCS runoff
 constraints, multiple-flow-direction routing, Manning normal-depth inversion for finite-width

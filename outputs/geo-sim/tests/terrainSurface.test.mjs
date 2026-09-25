@@ -26,6 +26,19 @@ const steep = { ...model, slope: new Float32Array(25).fill(65) };
 assert.ok(terrainSurfaceWeights(steep, { seaLevel: 0 }, 0)[0] > terrainSurfaceWeights(model, { seaLevel: 0 }, 0)[0]);
 const flat = { ...model, height: new Float32Array(25).fill(50) };
 assert.deepEqual(terrainVertexNormal(flat, 2, 2, 1), [-0, 1, -0]);
+const wetClimate = { ...model, precipitation: new Float32Array(25).fill(1300), temperature: new Float32Array(25).fill(18) };
+const dryClimate = { ...wetClimate, precipitation: new Float32Array(25).fill(150) };
+const coldClimate = { ...wetClimate, temperature: new Float32Array(25).fill(-8) };
+const displayCover = { regolith: 1, scree: 0, lithologyCode: -1 };
+const coverWeights = [0, 0.8, 0, 0];
+const colorFor = (source, scenicPreset = "none") =>
+  naturalTerrainColor(source, { seaLevel: 0, scenicPreset }, 0, coverWeights, null, displayCover);
+assert.ok(colorFor(dryClimate)[0] > colorFor(wetClimate)[0] + 30,
+  "generic dry ground cover must not reuse the humid green pigment");
+assert.ok(colorFor(coldClimate)[2] > colorFor(wetClimate)[2] + 30,
+  "generic cold ground cover must retain a distinct display tone");
+assert.deepEqual(colorFor(dryClimate, "mount_fuji"), colorFor(wetClimate, "mount_fuji"),
+  "dedicated scenic palettes must remain separate from the generic climate tint");
 
 const { registerHooks } = await import("node:module");
 registerHooks({
