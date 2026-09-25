@@ -113,12 +113,80 @@ export function sampleStratumColor(model, surfaceX, surfaceY, layer) {
   return color.lerp(WET_ROCK, Math.min(0.45, wetDepth));
 }
 
+function buildStratumProfile(model, config) {
+  const volume = model.subsurface;
+  const layerCount = Math.max(0, (volume?.depthEdgesM?.length || 1) - 1);
+  if (!volume?.columnCellCount || !layerCount) return null;
+  const grid = volume.columnCellCount === model.n * model.n ? model.n : volume.gridN;
+  const width = Math.max(2, grid), height = 4 * layerCount;
+  // A per-build snapshot lets unversioned inputs reuse the median without caching stale edits.
+  const depthModel = Number.isFinite(Number(model.brushStamp)) ? model : { ...model, brushStamp: 0 };
+  const data = new Float32Array(width * height * 4), cache = new Map(), filteredCache = new Map();
+  const kernel = [1, 8, 28, 56, 70, 56, 28, 8, 1];
+  const filteredEdges = (x, y) => {
+    const key = y * grid + x;
+    if (filteredCache.has(key)) return filteredCache.get(key);
+    const result = new Float64Array(layerCount + 1);
+    // Low-pass column noise for display before magnifying depth; scientific columns stay intact.
+    for (let j = 0; j < kernel.length; j++) for (let i = 0; i < kernel.length; i++) {
+      const column = clamp(y + j - 4, 0, grid - 1) * grid + clamp(x + i - 4, 0, grid - 1);
+      if (!cache.has(column)) cache.set(column, columnDepthEdgesM(depthModel, column, { seaLevel: config.seaLevel }));
+      const edges = cache.get(column), weight = kernel[i] * kernel[j] / 65536;
+      for (let layer = 0; layer <= layerCount; layer++) result[layer] += edges[layer] * weight;
+    }
+    filteredCache.set(key, result);
+    return result;
+  };
+  const layerTones = Array.from({ length: layerCount }, (_, layer) => {
+    const tone = new THREE.Color(0, 0, 0);
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+      const sample = sampleStratumColor(model, (x + 0.5) / 8 * (model.n - 1), (y + 0.5) / 8 * (model.n - 1), layer);
+      tone.r += sample.r / 64; tone.g += sample.g / 64; tone.b += sample.b / 64;
+    }
+    return tone;
+  });
+  const sampleEdges = (sx, sy) => {
+    const x = sx / (model.n - 1) * (grid - 1), y = sy / (model.n - 1) * (grid - 1);
+    const ix = Math.floor(x), iy = Math.floor(y), wx = splineWeights(x - ix), wy = splineWeights(y - iy);
+    const result = new Float64Array(layerCount + 1);
+    // Positive spline weights keep reconstructed contacts ordered, even where beds pinch out.
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+      const edges = filteredEdges(clamp(ix + i - 1, 0, grid - 1), clamp(iy + j - 1, 0, grid - 1));
+      const weight = wx[i] * wy[j];
+      for (let layer = 0; layer <= layerCount; layer++) result[layer] += edges[layer] * weight;
+    }
+    return result;
+  };
+  for (let side = 0; side < 4; side++) for (let column = 0; column < width; column++) {
+    const t = column / (width - 1), end = model.n - 1;
+    const [x, y] = side === 0 ? [t * config.cutIndex, 0]
+      : side === 1 ? [config.cutIndex, t * end]
+      : side === 2 ? [(1 - t) * config.cutIndex, end] : [0, (1 - t) * end];
+    const edges = sampleEdges(x, y);
+    for (let layer = 0; layer < layerCount; layer++) {
+      const tone = sampleStratumColor(model, x, y, layer).lerp(layerTones[layer], 0.92);
+      const offset = ((side * layerCount + layer) * width + column) * 4;
+      data.set([tone.r, tone.g, tone.b, edges[layer + 1]], offset);
+    }
+  }
+  // Nearest filtering works on float textures without requiring float-linear filtering support.
+  // The material reconstructs the continuous profile explicitly, including both corner endpoints.
+  const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
+  texture.minFilter = texture.magFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return { texture, width, height, layerCount, unknownColor: UNCLASSIFIED_COLOR };
+}
+
 function geometryBuilder() {
-  const positions = [], colors = [], indices = [], depths = [];
+  const positions = [], colors = [], indices = [], depths = [], profileUvs = [];
   return {
-    polygon(points, tones, depthValues = []) {
+    polygon(points, tones, depthValues = [], profileValues = []) {
       const start = positions.length / 3;
-      points.forEach((point, i) => { positions.push(...point); colors.push(tones[i].r, tones[i].g, tones[i].b); depths.push(depthValues[i] || 0); });
+      points.forEach((point, i) => {
+        positions.push(...point); colors.push(tones[i].r, tones[i].g, tones[i].b);
+        depths.push(depthValues[i] || 0); profileUvs.push(...(profileValues[i] || [0, -1]));
+      });
       for (let i = 1; i < points.length - 1; i++) indices.push(start, start + i, start + i + 1);
     },
     finish() {
@@ -126,6 +194,7 @@ function geometryBuilder() {
       geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
       geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
       geometry.setAttribute("stratumDepth", new THREE.Float32BufferAttribute(depths, 1));
+      geometry.setAttribute("stratumUv", new THREE.Float32BufferAttribute(profileUvs, 2));
       geometry.setIndex(indices);
       geometry.computeVertexNormals();
       geometry.computeBoundingBox();
@@ -161,46 +230,25 @@ export function buildTerrainVolume(model, config) {
   config.beddingSpacingM = modeledThicknesses.length
     ? modeledThicknesses.length / modeledThicknesses.reduce((sum, thickness) => sum + 1 / thickness, 0)
     : DEFAULT_BEDDING_SPACING_M;
-  const layerTones=Array.from({length:edges.length-1},(_,layer)=>{
-    const color=new THREE.Color(0,0,0);
-    for(let y=0;y<8;y++)for(let x=0;x<8;x++){
-      const sample=sampleStratumColor(model,(x+0.5)/8*(n-1),(y+0.5)/8*(n-1),layer);
-      color.r+=sample.r/64;color.g+=sample.g/64;color.b+=sample.b/64;
-    }
-    return color;
-  });
+  const profile = buildStratumProfile(model, config);
   const solid = geometryBuilder(), water = geometryBuilder();
   const unknown = unclassifiedTone();
   const seaY = seaLevel * verticalScale / 1000;
   const waterTop = new THREE.Color(0x5fa6b3), waterBottom = new THREE.Color(0x145064);
-  // The section bands each column at that column's own sediment thickness, so the exposed face shows
-  // the same stratigraphy the cave anchoring and the surface structure are derived from. Without this
-  // the display published the region's reference geometry while the geology reported a per-column one,
-  // and an anchored cave could render in a differently banded slice.
-  const edgesCache = new Map();
-  const edgesFor = surfaceIndex => {
-    if (!edgesCache.has(surfaceIndex)) {
-      const edges = columnDepthEdgesM(model, subsurfaceColumnIndex(model, surfaceIndex), { seaLevel });
-      edgesCache.set(surfaceIndex, edges);
-    }
-    return edgesCache.get(surfaceIndex);
-  };
+  const wallTone = profile ? new THREE.Color(1, 1, 1) : unknown;
   for (let r = 0; r < rim.length; r++) {
     const ia = rim[r], ib = rim[(r + 1) % rim.length];
     const a = point(ia), b = point(ib);
-    const edgesA = edgesFor(ia), edgesB = edgesFor(ib);
-    for (let layer = 0; layer < edges.length; layer++) {
-      const topA = edgesA[layer] * depthScale * verticalScale / 1000;
-      const lowA = edgesA[layer + 1] * depthScale * verticalScale / 1000;
-      const topB = edgesB[layer] * depthScale * verticalScale / 1000;
-      const lowB = edgesB[layer + 1] * depthScale * verticalScale / 1000;
-      const last = layer === edges.length - 1;
-      const ca = last ? unknown : sampleStratumColor(model, ia % n, Math.floor(ia/n), layer).lerp(layerTones[layer],0.92);
-      const cb = last ? unknown : sampleStratumColor(model, ib % n, Math.floor(ib/n), layer).lerp(layerTones[layer],0.92);
-      solid.polygon([[a[0], a[1] - topA, a[2]], [b[0], b[1] - topB, b[2]],
-        [b[0], last ? baseY : b[1] - lowB, b[2]], [a[0], last ? baseY : a[1] - lowA, a[2]]], [ca, cb, cb, ca],
-        [edgesA[layer], edgesB[layer], last ? (b[1]-baseY)*1000/(depthScale*verticalScale) : edgesB[layer+1], last ? (a[1]-baseY)*1000/(depthScale*verticalScale) : edgesA[layer+1]]);
-    }
+    const ax = ia % n, ay = Math.floor(ia / n), bx = ib % n, by = Math.floor(ib / n);
+    const side = ay === 0 && by === 0 ? 0 : ax === cutIndex && bx === cutIndex ? 1
+      : ay === n - 1 && by === n - 1 ? 2 : 3;
+    const uv = (x, y) => [side === 0 ? x / cutIndex : side === 1 ? y / (n - 1)
+      : side === 2 ? 1 - x / cutIndex : 1 - y / (n - 1), side];
+    // One closed wall follows the terrain exactly; contacts are reconstructed per fragment.
+    solid.polygon([a, b, [b[0], baseY, b[2]], [a[0], baseY, a[2]]],
+      [wallTone, wallTone, wallTone, wallTone],
+      [0, 0, (b[1] - baseY) * 1000 / (depthScale * verticalScale), (a[1] - baseY) * 1000 / (depthScale * verticalScale)],
+      [uv(ax, ay), uv(bx, by), uv(bx, by), uv(ax, ay)]);
     solid.polygon([[(config.cutX - sizeKm / 2) / 2, baseY, 0], [a[0], baseY, a[2]], [b[0], baseY, b[2]]], [unknown, unknown, unknown]);
     if (a[1] < seaY || b[1] < seaY) {
       let wa = a, wb = b;
@@ -212,7 +260,7 @@ export function buildTerrainVolume(model, config) {
       water.polygon([[wa[0], seaY, wa[2]], [wb[0], seaY, wb[2]], wb, wa], [waterTop, waterTop, waterBottom, waterBottom]);
     }
   }
-  return { solid: solid.finish(), waterSides: water.finish(), baseY, boundarySamples: rim.length, modeledLayerCount: edges.length - 1 };
+  return { solid: solid.finish(), waterSides: water.finish(), profile, baseY, boundarySamples: rim.length, modeledLayerCount: profile?.layerCount || 0 };
 }
 
 // Preserve the lower saddle diagonal instead of inserting a ridge across it.

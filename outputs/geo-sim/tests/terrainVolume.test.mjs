@@ -44,6 +44,9 @@ for (const worldView of ["solid", "section"]) {
     geometry.dispose();
   }
   assert.equal(volume.baseY, (10 - 20 * 10) * 2 / 1000);
+  assert.equal(volume.solid.index.count / 3, volume.boundarySamples * 3,
+    'each rim segment needs only two wall triangles and one floor triangle, independent of layer count');
+  volume.profile.texture.dispose();
 }
 assert.ok(Math.abs(sampleTerrainHeight(model, -0.15, 0) - 15) < 1e-10);
 assert.equal(sampleTerrainHeight(model, 0.3, 0), null);
@@ -66,6 +69,8 @@ assert.equal(manager.habitatDisplay,null,'regional startup must not build underw
 assert.equal(manager.stats.sessileLife.deferred,true);
 const rock = manager.group.children.find(mesh => mesh.name === 'modeled columns and unclassified closure');
 assert.ok(rock.material.userData.inspectionFill > 0, 'underside needs a geological inspection fill');
+let profileDisposed = false;
+rock.material.userData.stratumProfile.texture.addEventListener('dispose', () => { profileDisposed = true; });
 manager.applyClipping([terrain]);
 assert.equal(terrain.material.clippingPlanes, null);
 const camera = new THREE.PerspectiveCamera(50, 1, 0.00001, 10);
@@ -152,7 +157,53 @@ assert.deepEqual(model, before);
 manager.setVisibility(params, 'slope');
 assert.equal(manager.waterMeshes[0].visible, false);
 manager.dispose();
+assert.equal(profileDisposed, true, 'rebuilding or disposing the volume must release its profile texture');
 assert.equal(sourceDisposed, false, 'water disposal must not release shared terrain buffers');
 assert.equal(scene.children.length, 0);
 borrowed.dispose(); terrain.material.dispose();
+
+// A coarse, noisy subsurface must reconstruct ordered contacts without nearest-column jumps.
+const coarse = structuredClone(model);
+coarse.brushStamp = 0;
+coarse.subsurface = {gridN:3,columnCellCount:9,layerCount:3,depthEdgesM:new Float32Array([0,5,12,20]),
+  columnBedrockDepthM:Float32Array.from([10,80,12,70,10,70,12,80,10]),
+  lithologyCode:Uint8Array.from({length:27},(_,i)=>Math.floor(i/9)+1)};
+const original = structuredClone(coarse);
+for (const worldView of ['solid','section']) {
+  const config=volumeDisplayConfig(coarse,{worldView,subsurfaceDisplayScale:20});
+  const volume=buildTerrainVolume(coarse,config), {texture,width,layerCount}=volume.profile;
+  const pixel=(side,column,layer)=>Array.from(texture.image.data.slice(((side*layerCount+layer)*width+column)*4,((side*layerCount+layer)*width+column)*4+4));
+  for(let side=0;side<4;side++)for(let x=0;x<width;x++) {
+    let previous=0;
+    for(let layer=0;layer<layerCount;layer++) {
+      const values=pixel(side,x,layer);
+      assert.ok(values.every(Number.isFinite));
+      assert.ok(values[3]>=previous && values[3]<=20,'display contacts must not invert or escape the modelled depth');
+      previous=values[3];
+    }
+  }
+  for(let side=0;side<4;side++)for(let layer=0;layer<layerCount;layer++) {
+    assert.deepEqual(pixel(side,width-1,layer),pixel((side+1)%4,0,layer),
+      'adjacent wall faces must share exactly the same corner colour and contact depth');
+  }
+  const enlarged=buildTerrainVolume(coarse,volumeDisplayConfig(coarse,{worldView,subsurfaceDisplayScale:100}));
+  assert.deepEqual(enlarged.profile.texture.image.data,texture.image.data,
+    'visual depth exaggeration must not alter the stratigraphic data');
+  for(const result of [volume,enlarged]) {result.solid.dispose();result.waterSides.dispose();result.profile.texture.dispose();}
+}
+assert.deepEqual(coarse,original,'reconstructing the boundary must not modify scientific columns');
+const noisy={n:17,sizeKm:4,height:new Float32Array(289).fill(100),subsurface:{
+  gridN:17,columnCellCount:289,layerCount:2,depthEdgesM:new Float32Array([0,5,20]),
+  columnBedrockDepthM:Float32Array.from({length:289},(_,i)=>(i%17)%2?30:10),lithologyCode:new Uint8Array(578).fill(3)}};
+const smoothVolume=buildTerrainVolume(noisy,volumeDisplayConfig(noisy,{}));
+const contacts=Array.from({length:9},(_,i)=>smoothVolume.profile.texture.image.data[(i+4)*4+3]);
+assert.ok(Math.max(...contacts)-Math.min(...contacts)<1,
+  'alternating column-scale depth noise must not survive as sawteeth in the displayed contacts');
+smoothVolume.solid.dispose();smoothVolume.waterSides.dispose();smoothVolume.profile.texture.dispose();
+const bare={n:3,sizeKm:1,height:new Float32Array(9).fill(10)};
+const bareVolume=buildTerrainVolume(bare,volumeDisplayConfig(bare,{}));
+assert.equal(bareVolume.profile,null);
+assert.ok(Array.from(bareVolume.solid.attributes.position.array).every(Number.isFinite),
+  'a model without subsurface data must still have finite closed walls');
+bareVolume.solid.dispose();bareVolume.waterSides.dispose();
 console.log("Closed volume, clipping, water boundaries, immersion, disposal and data isolation passed");
