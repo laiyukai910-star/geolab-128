@@ -26,8 +26,9 @@ results are not site-specific forecasts.
 
 ## Features
 
-- **Map:** Choose a 4-512 km square area and a 128²-4096² grid. Start with a continental or
-  landform preset, or import a DEM. Change relief, uplift and sea level; compare elevation,
+- **Map:** Choose a 4-512 km square area and a 128²-4096² grid. Start with a continental,
+  landform or generated scenic reference, or import a DEM. Change relief, uplift and sea level;
+  compare elevation,
   slope, curvature and roughness maps. The default 128 km / 256² grid has about 502 m between
   samples.
 - **Weather:** Set temperature, precipitation, humidity and wind, or import meteorological data.
@@ -60,6 +61,28 @@ River or prescribed upstream inflow. The opening image shows the 3D map; below i
 with flow accumulation selected.
 
 ![Flow accumulation selected in the analysis drawer](media/workspace-flow.jpg)
+
+Three more scenic references have dedicated terrain generators. They are landform studies, not
+georeferenced copies of these places. Where rivers appear, they are routed from generated elevation
+and rainfall; the program does not prescribe the path of a named river.
+
+**Yosemite Valley.** A broad glacial trough, steep granite walls and hanging tributary valleys,
+based on the [National Park Service geology summary](https://www.nps.gov/yose/learn/nature/geology.htm).
+32 km × 32 km, 256² grid.
+
+![Generated Yosemite Valley landform reference](media/scenic-yosemite.jpg)
+
+**Guilin and the Li River.** Discontinuous tower karst around a low river plain, drawing on the
+[UNESCO South China Karst description](https://whc.unesco.org/en/list/1248). The visible stream
+follows the model's routed channel cells. 16 km × 16 km, 256² grid.
+
+![Generated Guilin karst landform reference](media/scenic-guilin.jpg)
+
+**Mount Fuji.** A volcanic cone with radial gullies, a summit crater and a flank vent. The
+elevation scale is checked against the [Geospatial Information Authority of Japan's summit
+height](https://web1.gsi.go.jp/WNEW/PRESS-RELEASE/keikaku61003.html). 16 km × 16 km, 256² grid.
+
+![Generated Mount Fuji landform reference](media/scenic-fuji.jpg)
 
 ## Example Workflow
 

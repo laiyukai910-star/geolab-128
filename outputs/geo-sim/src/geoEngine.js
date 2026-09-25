@@ -964,15 +964,15 @@ export const SCENIC_REPRODUCTION_PRESETS = Object.freeze([
     params: { relief: 2225, ridgeWeight: 0.86, tectonics: 0.7, microRelief: 36, permeability: 0.48, riverThreshold: 58 }
   },
   { id: "grand_canyon", labelZh: "\u5927\u5ce1\u8c37", geomorphologyPreset: "canyon_plateau", referenceLandformZh: "\u5c42\u72b6\u53f0\u5730\u4e0e\u6df1\u5207\u4e3b\u8c37", reconstructionNotesZh: ["\u7528\u5f2f\u66f2\u4e3b\u5ce1\u8c37\u548c\u591a\u7ea7\u9636\u5730\u8868\u8fbe\u53f0\u5730\u5207\u5272\u5730\u8c8c"], seedOffset: 31039, params: { relief: 2500, ridgeWeight: 0.7, tectonics: 0.78, microRelief: 26, seaLevel: 0, latitude: 36, baseTemperature: 24, humidity: 0.25, precipitationScale: 0.5, vegetationCoverScale: 0.5, riverThreshold: 52 } },
-  { id: "guilin_lijiang", labelZh: "\u6842\u6797\u6f13\u6c5f", geomorphologyPreset: "karst_towers", referenceLandformZh: "\u5580\u65af\u7279\u5b64\u5cf0\u3001\u6c5f\u6d41\u5e73\u539f", reconstructionNotesZh: ["\u964d\u4f4e\u6574\u4f53\u8d77\u4f0f\u3001\u5f3a\u5316\u4f4e\u5730\u6cb3\u8c37\u4e0e\u5b64\u5cf0\u7684\u5bf9\u6bd4"], seedOffset: 32041, params: { relief: 1450, ridgeWeight: 0.78, tectonics: 0.52, microRelief: 26, humidity: 1.12, riverThreshold: 44 } },
-  { id: "yosemite_valley", labelZh: "\u7ea6\u585e\u7c73\u8482\u51b0\u5ddd\u8c37", geomorphologyPreset: "alpine_glacier", referenceLandformZh: "\u82b1\u5c97\u5ca9 U \u578b\u8c37\u3001\u60ac\u5d16\u3001\u51b0\u6597", reconstructionNotesZh: ["\u901a\u8fc7 U \u578b\u8c37\u69fd\u548c\u5c71\u810a\u9510\u5316\u8fd1\u4f3c\u51b0\u5ddd\u4fb5\u8680\u5256\u9762"], seedOffset: 33049, params: { relief: 2850, ridgeWeight: 0.79, tectonics: 0.86, microRelief: 24, baseTemperature: 7.8 } },
+  { id: "guilin_lijiang", labelZh: "\u6842\u6797\u6f13\u6c5f", geomorphologyPreset: "karst_towers", referenceLandformZh: "\u5580\u65af\u7279\u5b64\u5cf0\u3001\u6c5f\u6d41\u5e73\u539f", reconstructionNotesZh: ["\u964d\u4f4e\u6574\u4f53\u8d77\u4f0f\u3001\u5f3a\u5316\u4f4e\u5730\u6cb3\u8c37\u4e0e\u5b64\u5cf0\u7684\u5bf9\u6bd4"], seedOffset: 32041, params: { relief: 900, ridgeWeight: 0.78, tectonics: 0.52, microRelief: 26, seaLevel: 0, latitude: 25, baseTemperature: 24, humidity: 1.12, precipitationScale: 0.9, permeability: 0.52, riverThreshold: 44 } },
+  { id: "yosemite_valley", labelZh: "\u7ea6\u585e\u7c73\u8482\u51b0\u5ddd\u8c37", geomorphologyPreset: "alpine_glacier", referenceLandformZh: "\u82b1\u5c97\u5ca9 U \u578b\u8c37\u3001\u60ac\u5d16\u3001\u51b0\u6597", reconstructionNotesZh: ["\u901a\u8fc7 U \u578b\u8c37\u69fd\u548c\u5c71\u810a\u9510\u5316\u8fd1\u4f3c\u51b0\u5ddd\u4fb5\u8680\u5256\u9762"], seedOffset: 33049, params: { relief: 2850, ridgeWeight: 0.79, tectonics: 0.86, microRelief: 24, seaLevel: 0, latitude: 38, baseTemperature: 20, humidity: 0.84, precipitationScale: 0.8, lapseRate: 6.5, riverThreshold: 36 } },
   { id: "huangshan", labelZh: "\u9ec4\u5c71", geomorphologyPreset: "alpine_glacier", referenceLandformZh: "\u82b1\u5c97\u5ca9\u5cf0\u4e1b\u3001\u9661\u58c1\u3001\u72ed\u810a", reconstructionNotesZh: ["\u5f3a\u5316\u5cf0\u4e1b\u3001\u5c71\u810a\u548c\u5d16\u58c1\u7684\u8d77\u4f0f\uff0c\u9002\u5408\u590d\u73b0\u5c71\u5730\u666f\u89c2"], seedOffset: 34057, params: { relief: 2150, ridgeWeight: 0.84, tectonics: 0.75, microRelief: 34, humidity: 1.04 } },
   { id: "zhangye_danxia", labelZh: "\u5f20\u6396\u4e39\u971e", geomorphologyPreset: "danxia_mesa", referenceLandformZh: "\u5f69\u8272\u7802\u5ca9\u4e18\u9675\u3001\u53f0\u5730\u3001\u5207\u6c9f", reconstructionNotesZh: ["\u4ee5\u9636\u68af\u5f0f\u53f0\u5730\u548c\u7eb5\u5411\u6c9f\u8c37\u8868\u8fbe\u4e39\u971e\u8d77\u4f0f"], seedOffset: 35059, params: { relief: 1725, ridgeWeight: 0.64, tectonics: 0.62, microRelief: 26, humidity: 0.62 } },
   { id: "iceland_fjord", labelZh: "\u51b0\u5c9b\u5ce1\u6e7e", geomorphologyPreset: "fjord_coast", referenceLandformZh: "\u51b0\u8680\u6d77\u5cb8\u3001\u5ce1\u6e7e\u3001\u706b\u5c71\u9ad8\u5730", reconstructionNotesZh: ["\u540c\u65f6\u4fdd\u7559\u6d77\u9762\u4fb5\u5165\u548c\u9ad8\u5730\u5ce1\u6e7e\u5d16\u58c1"], seedOffset: 36067, params: { relief: 2550, ridgeWeight: 0.72, tectonics: 0.82, microRelief: 28, seaLevel: 230, baseTemperature: 6.5 } },
   { id: "ha_long_bay", labelZh: "下龙湾", geomorphologyPreset: "karst_towers", referenceLandformZh: "海侵喀斯特塔峰、溶蚀洼地、岛峰群", reconstructionNotesZh: ["以较高海面和高溶蚀度表达被淹没的峰林与岛峰"], seedOffset: 37069, params: { relief: 1250, ridgeWeight: 0.82, tectonics: 0.5, microRelief: 24, seaLevel: 210, humidity: 1.18, permeability: 0.56, riverThreshold: 50 } },
   { id: "monument_valley", labelZh: "纪念碑谷", geomorphologyPreset: "canyon_plateau", referenceLandformZh: "水平层状砂岩孤峰、台地、干旱峡谷", reconstructionNotesZh: ["强化层状台地与孤立岩塔，降低湿度并保留稀疏河沟切割"], seedOffset: 38071, params: { relief: 1850, ridgeWeight: 0.58, tectonics: 0.52, microRelief: 22, humidity: 0.46, riverThreshold: 66 } },
   { id: "namib_sossusvlei", labelZh: "纳米布索苏斯盐沼", geomorphologyPreset: "desert_dune", referenceLandformZh: "高大纵向沙丘、干盐沼、风成沙脊", reconstructionNotesZh: ["用高风速、低湿度和长波沙脊表达大型沙丘场"], seedOffset: 39079, params: { relief: 1280, ridgeWeight: 0.3, tectonics: 0.18, microRelief: 46, humidity: 0.24, windSpeed: 22, windDirection: 235, riverThreshold: 120 } },
-  { id: "mount_fuji", labelZh: "富士山", geomorphologyPreset: "volcanic_island", referenceLandformZh: "近圆锥火山、放射状沟谷、火山麓扇", reconstructionNotesZh: ["增强中心火山锥和放射状排水，保留山麓缓坡"], seedOffset: 40087, params: { relief: 3150, ridgeWeight: 0.5, tectonics: 0.88, microRelief: 18, baseTemperature: 9.2, humidity: 0.9, riverThreshold: 68 } },
+  { id: "mount_fuji", labelZh: "富士山", geomorphologyPreset: "volcanic_island", referenceLandformZh: "近圆锥火山、放射状沟谷、火山麓扇", reconstructionNotesZh: ["增强中心火山锥和放射状排水，保留山麓缓坡"], seedOffset: 40087, params: { relief: 3150, ridgeWeight: 0.5, tectonics: 0.88, microRelief: 18, seaLevel: 0, latitude: 35, baseTemperature: 19, humidity: 0.9, precipitationScale: 0.85, riverThreshold: 68 } },
   { id: "antelope_canyon", labelZh: "羚羊峡谷", geomorphologyPreset: "canyon_plateau", referenceLandformZh: "狭缝峡谷、层状砂岩、短历时暴洪切割", reconstructionNotesZh: ["提高主槽下切和窄谷权重，近似狭缝峡谷横剖面"], seedOffset: 41093, params: { relief: 1420, ridgeWeight: 0.62, tectonics: 0.48, microRelief: 18, humidity: 0.38, riverThreshold: 42 } }
   ,
   {
@@ -7528,10 +7528,16 @@ function generateTerrain(n, params) {
     (geomorphologyPresetById(params.geomorphologyPreset)?.seedOffset || 0) +
     (scenicPresetById(params.scenicPreset)?.seedOffset || 0);
   const relief = Number(params.relief);
-  if (params.scenicPreset === "grand_canyon") {
+  const scenicHeight = params.scenicPreset === "grand_canyon" ? grandCanyonHeight
+    : params.scenicPreset === "yosemite_valley" ? yosemiteValleyHeight
+      : params.scenicPreset === "guilin_lijiang" ? guilinKarstHeight
+        : params.scenicPreset === "mount_fuji" ? mountFujiHeight : null;
+  if (scenicHeight) {
+    const sizeKm = Number(params.mapSizeKm);
+    const towerGrid = params.scenicPreset === "guilin_lijiang" ? buildGuilinTowerGrid(seed, sizeKm) : null;
     for (let y = 0; y < n; y += 1) {
       for (let x = 0; x < n; x += 1) {
-        height[y * n + x] = grandCanyonHeight(x / (n - 1), y / (n - 1), seed, relief, Number(params.mapSizeKm));
+        height[y * n + x] = scenicHeight(x / (n - 1), y / (n - 1), seed, relief, sizeKm, towerGrid);
       }
     }
     preconditionTerrain(height, n, params);
@@ -7687,6 +7693,111 @@ function grandCanyonHeight(nx, ny, seed, relief, mapSizeKm) {
     (tributary * 420 + feeder * 150) * depthScale,
     1, MAX_TERRAIN_ELEVATION_M
   );
+}
+
+function yosemiteValleyHeight(nx, ny, seed, relief, mapSizeKm) {
+  const sizeKm = Number.isFinite(mapSizeKm) && mapSizeKm > 0 ? mapSizeKm : MAP_SIZE_KM;
+  const reliefScale = clamp(relief / 2850, 0.45, 1.6);
+  const center = 0.5 + Math.sin(nx * Math.PI * 2.2 + seed * 0.0004) * 0.035 +
+    Math.sin(nx * Math.PI * 5.1 + seed * 0.0007) * 0.012;
+  const side = ny < center ? -1 : 1;
+  const distanceKm = Math.abs(ny - center) * sizeKm;
+  const floorHalfWidthKm = clamp(sizeKm * 0.035, 0.5, 1.25);
+  const wallWidthKm = clamp(sizeKm * 0.045, 0.8, 1.8);
+  const wallDistance = Math.max(0, (distanceKm - floorHalfWidthKm) / wallWidthKm);
+  const wall = Math.pow(smoothstep(0, 0.9, wallDistance), 0.55);
+  const floor = 1210 + (1 - nx) * sizeKm * 2.1;
+  const uplandNoise = (fbm(nx * 7 + 2, ny * 7 - 4, seed + 811, 4, 2, 0.5) - 0.5) * 145;
+  const graniteDomeA = Math.exp(-Math.pow(Math.hypot(nx - 0.30, ny - 0.28) * sizeKm / 2.7, 2)) * 390;
+  const graniteDomeB = Math.exp(-Math.pow(Math.hypot(nx - 0.70, ny - 0.75) * sizeKm / 3.1, 2)) * 330;
+  const branchIndex = Math.round((nx - side * 0.045 * wallDistance) * 6 - 0.5);
+  const branchX = (branchIndex + 0.5) / 6 + side * 0.045 * wallDistance;
+  const hangingValley = Math.exp(-Math.pow((nx - branchX) / 0.028, 2)) *
+    smoothstep(0.28, 0.60, wallDistance) * (1 - smoothstep(1.15, 1.70, wallDistance));
+  const channelCenter = center + Math.sin(nx * 17 + seed * 0.0003) * 0.008;
+  const floorChannel = Math.exp(-Math.pow((ny - channelCenter) * sizeKm / 0.30, 2)) * 6;
+  return clamp(
+    floor + (1080 * reliefScale + uplandNoise) * wall +
+    (graniteDomeA + graniteDomeB) * wall - hangingValley * 260 * reliefScale * wall - floorChannel,
+    1, MAX_TERRAIN_ELEVATION_M
+  );
+}
+
+function buildGuilinTowerGrid(seed, mapSizeKm) {
+  const sizeKm = Number.isFinite(mapSizeKm) && mapSizeKm > 0 ? mapSizeKm : MAP_SIZE_KM;
+  const count = clamp(Math.round(sizeKm / 2.8), 6, 64);
+  const stride = count + 2;
+  const spacingKm = sizeKm / count;
+  const towers = new Array(stride * stride);
+  for (let y = -1; y <= count; y += 1) {
+    for (let x = -1; x <= count; x += 1) {
+      const angle = hash01(x, y, seed + 1229) * Math.PI;
+      const cluster = fbm(x * 0.24 + 3, y * 0.24 - 5, seed + 1231, 3, 2, 0.5);
+      towers[(y + 1) * stride + x + 1] = {
+        x: (x + 0.10 + hash01(x, y, seed + 1201) * 0.80) / count,
+        y: (y + 0.10 + hash01(x, y, seed + 1207) * 0.80) / count,
+        radiusKm: spacingKm * (0.20 + hash01(x, y, seed + 1213) * 0.25),
+        aspect: 0.76 + hash01(x, y, seed + 1217) * 0.55,
+        cosAngle: Math.cos(angle),
+        sinAngle: Math.sin(angle),
+        riseM: hash01(x, y, seed + 1223) < 0.40 + cluster * 0.30
+          ? 0 : 270 + hash01(x, y, seed + 1219) * 570,
+        shape: 0.28 + hash01(x, y, seed + 1237) * 0.28
+      };
+    }
+  }
+  return { count, stride, towers };
+}
+
+function guilinKarstHeight(nx, ny, seed, relief, mapSizeKm, towerGrid) {
+  const sizeKm = Number.isFinite(mapSizeKm) && mapSizeKm > 0 ? mapSizeKm : MAP_SIZE_KM;
+  const { count, stride, towers } = towerGrid;
+  const gx = Math.min(count - 1, Math.floor(nx * count));
+  const gy = Math.min(count - 1, Math.floor(ny * count));
+  let peak = 0;
+  for (let y = gy - 1; y <= gy + 1; y += 1) {
+    for (let x = gx - 1; x <= gx + 1; x += 1) {
+      const tower = towers[(y + 1) * stride + x + 1];
+      if (!tower.riseM) continue;
+      const dxKm = (nx - tower.x) * sizeKm;
+      const dyKm = (ny - tower.y) * sizeKm;
+      const alongKm = dxKm * tower.cosAngle + dyKm * tower.sinAngle;
+      const acrossKm = dyKm * tower.cosAngle - dxKm * tower.sinAngle;
+      const scaledDistance = Math.hypot(alongKm / tower.aspect, acrossKm * tower.aspect);
+      const footprint = Math.max(0, 1 - Math.pow(scaledDistance / tower.radiusKm, 2));
+      peak = Math.max(peak, tower.riseM * Math.pow(footprint, tower.shape));
+    }
+  }
+  const riverCenter = 0.54 + Math.sin(nx * Math.PI * 3.0 + seed * 0.0005) * 0.035;
+  const riverDistanceKm = Math.abs(ny - riverCenter) * sizeKm;
+  const floodplain = smoothstep(0.65, 2.15, riverDistanceKm);
+  const plain = 135 + (1 - nx) * sizeKm * 1.6 +
+    (fbm(nx * 5 + 3, ny * 5 - 7, seed + 1241, 3, 2, 0.5) - 0.5) * 7;
+  const valley = Math.exp(-Math.pow(riverDistanceKm / 0.7, 2)) * 20;
+  return clamp(plain + peak * clamp(relief / 900, 0.4, 1.8) * floodplain - valley, 1, MAX_TERRAIN_ELEVATION_M);
+}
+
+function mountFujiHeight(nx, ny, seed, relief, mapSizeKm) {
+  const sizeKm = Number.isFinite(mapSizeKm) && mapSizeKm > 0 ? mapSizeKm : MAP_SIZE_KM;
+  const scale = clamp(relief / 3150, 0.45, 1.6);
+  const dx = nx - 0.5;
+  const dy = ny - 0.5;
+  const radiusKm = Math.hypot(dx, dy) * sizeKm;
+  const coneRadiusKm = clamp(sizeKm * 0.45, 5, 18);
+  const cone = Math.pow(clamp(1 - radiusKm / coneRadiusKm, 0, 1), 1.15);
+  const angle = Math.atan2(dy, dx);
+  const gully = Math.pow(0.5 + 0.5 * Math.sin(angle * 19 + Math.sin(radiusKm * 0.75 + seed * 0.0001) * 0.6), 7) *
+    smoothstep(1.7, 3.2, radiusKm) * (1 - smoothstep(10, 15, radiusKm));
+  const base = 570 + (fbm(nx * 4 + 8, ny * 4 - 5, seed + 1409, 3, 2, 0.5) - 0.5) * 60;
+  const craterRim = Math.exp(-Math.pow((radiusKm - 0.39) / 0.22, 2)) * 115 * scale;
+  const craterBowl = Math.exp(-Math.pow(radiusKm / 0.25, 4)) * 295 * scale;
+  const flankVentDistanceKm = Math.hypot(nx - 0.58, ny - 0.59) * sizeKm;
+  const flankVent = Math.exp(-Math.pow(flankVentDistanceKm / 0.85, 2)) * 195 * scale -
+    Math.exp(-Math.pow(flankVentDistanceKm / 0.24, 2)) * 95 * scale;
+  const lavaTexture = (fbm(nx * 18 - 4, ny * 18 + 11, seed + 1423, 3, 2, 0.48) - 0.5) *
+    85 * cone * smoothstep(1.2, 3.0, radiusKm);
+  return clamp(base + 3200 * scale * cone + craterRim - craterBowl - gully * 125 * scale +
+    flankVent + lavaTexture, 1, MAX_TERRAIN_ELEVATION_M);
 }
 
 function canyonPlateauDelta(nx, ny, seed, relief, process = TERRAIN_PROCESS_DEFAULT) {
@@ -16366,7 +16477,12 @@ function computeSurfaceLayers(model, params, climate) {
 
     const coverBase = LAND_COVER[lc].cover;
     const climateCover = clamp((moisture * 0.68 + warmth * 0.38 - slope / 120), 0, 1);
-    const generatedVeg = clamp(coverBase * 0.62 + climateCover * 0.42, 0, 1);
+    const scenicExposure = params.scenicPreset === "yosemite_valley"
+      ? smoothstep(18, 35, slope) * 0.78
+      : params.scenicPreset === "mount_fuji"
+        ? smoothstep(1900, 2750, h) * 0.96
+        : 0;
+    const generatedVeg = clamp(coverBase * 0.62 + climateCover * 0.42, 0, 1) * (1 - scenicExposure);
     const importedVeg = external.vegetation?.[i];
     vegetation[i] = Number.isFinite(importedVeg)
       ? clamp(importedVeg > 1 ? importedVeg / 100 : importedVeg, 0, 1)

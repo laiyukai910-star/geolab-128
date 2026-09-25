@@ -4,6 +4,7 @@ Notable user-visible, model, compatibility, and reliability changes are recorded
 
 ## [Unreleased]
 
+- Added dedicated generated terrain for Yosemite Valley, Guilin's riverine tower karst and Mount Fuji. Each has its own elevation profile, surface palette, climate defaults and camera framing. Routed Guilin channels are more visible; scenic tests now check valley width, inland drainage, summit height, crater form and channel-based coloring. These are landform references, not surveyed site reconstructions.
 - Rebuilt the generated Grand Canyon reference as an inland plateau with a continuous incised channel, tributary cuts, drier climate, sparser vegetation and stratified warm surface tones. Scenic selection now takes priority over a stale landform choice, keeps the user seed stable and resets inherited climate settings when changing presets. Added precipitation and vegetation-cover controls, fixed preset elevation coloring, and refreshed the running-app screenshots.
 - Rewrote the repository introduction and feature list in plain language, with concrete controls and outputs instead of broad claims.
 - Replaced the README and tracked social-preview images with current browser screenshots. Rewrote the feature inventory around controls and inspectable outputs, and clarified illustrative 3D detail and hosted-build limits.

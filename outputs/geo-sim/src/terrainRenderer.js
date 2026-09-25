@@ -1011,12 +1011,21 @@ export class TerrainRenderer {
 
   resetCamera() {
     const sizeKm = modelSizeKm(this.model);
-    const focusY = terrainCameraFocusY(this.model, this.params);
+    let focusY = terrainCameraFocusY(this.model, this.params);
     const home = cameraHome(sizeKm, this.camera.aspect);
-    if (this.params?.scenicPreset === "grand_canyon") {
+    if (this.params?.scenicPreset === "grand_canyon" || this.params?.scenicPreset === "yosemite_valley") {
       home.x = sizeKm * 0.75;
-      home.y = sizeKm * 0.68;
+      home.y = sizeKm * (this.params.scenicPreset === "grand_canyon" ? 0.68 : 0.61);
       home.z = sizeKm * 0.58;
+    } else if (this.params?.scenicPreset === "guilin_lijiang") {
+      home.y = sizeKm * 0.54;
+      home.z = sizeKm * 0.75;
+    } else if (this.params?.scenicPreset === "mount_fuji") {
+      home.x = sizeKm * 0.70;
+      home.y = sizeKm * 0.28;
+      home.z = sizeKm * 0.72;
+      const lowSlopeFocusM = Math.max(600, Number(this.model?.stats?.minElevation ?? 550) + 750);
+      focusY = Math.min(focusY, lowSlopeFocusM * (Number(this.params.verticalScale) || 1) / 1000 + 0.08);
     }
     this.camera.position.set(home.x, home.y + focusY, home.z);
     this.controls.target.set(0, focusY, 0);

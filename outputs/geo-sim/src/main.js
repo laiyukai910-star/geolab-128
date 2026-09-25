@@ -2440,7 +2440,7 @@ async function applyTerrainPresetSelection() {
   const label = scenic?.id && scenic.id !== "none" ? scenicDisplay?.labelZh : geomorphologyDisplay?.labelZh || "\u81ea\u5b9a\u4e49\u5730\u5f62";
   setStatus(`\u5df2\u5e94\u7528\u5730\u8c8c\u9884\u8bbe\uff1a${label}`);
   await rebuildTerrain();
-  if (previousScenicPreset !== next.scenicPreset && next.scenicPreset === "grand_canyon") renderer.resetCamera();
+  if (previousScenicPreset !== next.scenicPreset && next.scenicPreset !== "none") renderer.resetCamera();
 }
 
 function updateTerrainPresetStatus() {

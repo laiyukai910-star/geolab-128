@@ -10,7 +10,8 @@ export function buildRiverGeometry(model,params) {
   const columns=quality==="exhaustive"?13:quality==="high"?5:9;
   const hydraulic=(field,id,fallback)=>Number.isFinite(field?.[id])&&field[id]>=0?field[id]:fallback;
   const point=id=>new THREE.Vector3((id%model.n)/(model.n-1)*model.sizeKm-model.sizeKm/2,0,Math.floor(id/model.n)/(model.n-1)*model.sizeKm-model.sizeKm/2);
-  const centerColor=new THREE.Color(0x417e86),edgeColor=new THREE.Color(0x668d88),nodeRows=new Map(),states=new Map(),junctions=new Map();
+  const riverineKarst=params.scenicPreset==="guilin_lijiang";
+  const centerColor=new THREE.Color(riverineKarst?0x4b9eaa:0x417e86),edgeColor=new THREE.Color(riverineKarst?0x8abeb7:0x668d88),nodeRows=new Map(),states=new Map(),junctions=new Map();
   const priority=e=>hydraulic(model.discharge,e.from,0);
   const main=edges=>edges.slice().sort((a,b)=>priority(b)-priority(a)||a.from-b.from||a.to-b.to)[0];
   for(const node of network.nodes.values()){

@@ -236,23 +236,49 @@ export function naturalTerrainColor(model, params, index, weights = null, lithol
   if (model.height[index] <= (Number(params?.seaLevel) || 0)) return [142, 151, 132];
   const geomorphology = prepared || surfaceGeomorphology(model, params, index, { lithologyTable });
   const [rock, vegetation, wet, sealed] = weights || [geomorphology.rock, geomorphology.vegetation, geomorphology.wet, geomorphology.sealed];
-  const canyonReference = params?.scenicPreset === "grand_canyon";
+  const scenic = params?.scenicPreset;
+  const canyonReference = scenic === "grand_canyon";
   const canyonBed = canyonReference ? canyonBedColor(model.height[index]) : null;
-  const soil = canyonBed ? canyonBed.map(channel => channel * 0.92 + 10) : [139, 121, 93];
-  const mineral = canyonBed || [147, 151, 146];
-  const plant = canyonReference ? [83, 105, 65] : [65, 108, 54];
+  let soil = [139, 121, 93];
+  let mineral = [147, 151, 146];
+  let plant = [65, 108, 54];
+  if (canyonBed) {
+    soil = canyonBed.map(channel => channel * 0.92 + 10);
+    mineral = canyonBed;
+    plant = [83, 105, 65];
+  } else if (scenic === "yosemite_valley") {
+    soil = [120, 130, 118];
+    mineral = [179, 183, 177];
+    plant = [52, 91, 60];
+  } else if (scenic === "guilin_lijiang") {
+    soil = [135, 133, 103];
+    mineral = [160, 169, 152];
+    plant = [45, 106, 62];
+  } else if (scenic === "mount_fuji") {
+    const upper = smooth(1600, 3000, model.height[index]);
+    soil = [117 - upper * 27, 111 - upper * 21, 101 - upper * 13];
+    mineral = [135 - upper * 44, 137 - upper * 39, 132 - upper * 31];
+    plant = [54, 91, 61];
+  }
   // Weathered cover and scree are drawn toward the lithology's own colour, so a granite upland and
   // a clay plain stop sharing one regolith tone.
   const lithologyColor = lithologyTable?.[geomorphology.lithologyCode]?.color || lithologyTable?.[0]?.color || null;
   const cover = unit(geomorphology.regolith ?? 0) + unit(geomorphology.scree ?? 0);
-  const regolithTone = lithologyColor && !canyonReference
+  const dedicatedScenic = canyonReference || scenic === "yosemite_valley" ||
+    scenic === "guilin_lijiang" || scenic === "mount_fuji";
+  const regolithTone = lithologyColor && !dedicatedScenic
     ? soil.map((value, channel) => value * 0.72 + lithologyColor[channel] * 0.28)
     : soil;
-  return regolithTone.map((value, channel) => {
+  const surfaceColor = regolithTone.map((value, channel) => {
     const natural = value * (1 - rock - vegetation) * (0.75 + 0.25 * unit(cover))
       + mineral[channel] * rock + plant[channel] * vegetation;
     return (natural * (1 - sealed) + 136 * sealed) * (1 - wet * 0.18);
   });
+  if (scenic === "guilin_lijiang" && model.hydraulics?.channelMask?.[index]) {
+    const streamTone = [50, 116, 129];
+    return surfaceColor.map((value, channel) => value * 0.42 + streamTone[channel] * 0.58);
+  }
+  return surfaceColor;
 }
 
 // Sample the global heightfield so duplicated boundary vertices share normals.
